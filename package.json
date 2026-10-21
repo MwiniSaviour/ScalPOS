@@ -14,7 +14,8 @@
     "backend:start": "cd backend && supabase start",
     "backend:stop": "cd backend && supabase stop",
     "backend:test": "cd backend && supabase test db",
-    "backend:reset": "cd backend && supabase db reset"
+    "backend:reset": "cd backend && supabase db reset",
+    "test": "node --test tests/**/*.test.ts"
   },
   "dependencies": {
     "@capacitor-mlkit/barcode-scanning": "^8.2.1",

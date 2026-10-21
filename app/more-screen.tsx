@@ -4,8 +4,10 @@ import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
 import { clearAllImages } from "@/lib/image-store";
 import { useSettings, usePos } from "@/lib/store";
+import { listConflicts } from "@/lib/sync/outbox";
 import { cn } from "@/lib/ui";
 import {
+  AlertTriangle,
   ChevronRight,
   CircleUserRound,
   Download,
@@ -18,13 +20,24 @@ import {
   Warehouse,
 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 export default function MoreScreen() {
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [conflictCount, setConflictCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listConflicts().then((list) => {
+      if (!cancelled) setConflictCount(Array.isArray(list) ? list.length : 0);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function exportData() {
     const s = usePos.getState();
@@ -109,6 +122,14 @@ export default function MoreScreen() {
             label="Shop details"
             sub="Name, address, phone"
           />
+          {conflictCount > 0 && (
+            <RowLink
+              href="/conflicts"
+              icon={<AlertTriangle className="size-[18px]" />}
+              label={`Sync conflicts (${conflictCount})`}
+              sub="Resolve records changed on multiple devices"
+            />
+          )}
           <RowLink
             href="/settings"
             icon={<Settings className="size-[18px]" />}

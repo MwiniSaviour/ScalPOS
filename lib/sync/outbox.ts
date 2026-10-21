@@ -1,4 +1,4 @@
-import type { Op } from "./types";
+import type { Op, Conflict } from "./types";
 
 const DB_NAME = "nova-pos-outbox-v1";
 const DB_VERSION = 1;
@@ -178,4 +178,76 @@ export async function drain(
     }
   }
   return { applied, failed };
+}
+
+const CONFLICT_DB = "nova-pos-conflicts-v1";
+const CONFLICT_STORE = "conflicts";
+
+function openConflictDb(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    let req: IDBOpenDBRequest;
+    try {
+      req = indexedDB.open(CONFLICT_DB, 1);
+    } catch {
+      resolve(null);
+      return;
+    }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CONFLICT_STORE)) {
+        db.createObjectStore(CONFLICT_STORE, { keyPath: ["table", "id"] });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);
+    req.onblocked = () => resolve(null);
+  });
+}
+
+export async function listConflicts(): Promise<Conflict[]> {
+  const db = await openConflictDb();
+  if (!db) return [];
+  return new Promise<Conflict[]>((resolve) => {
+    try {
+      const tx = db.transaction(CONFLICT_STORE, "readonly");
+      const req = tx.objectStore(CONFLICT_STORE).getAll();
+      req.onsuccess = () => resolve(Array.isArray(req.result) ? (req.result as Conflict[]) : []);
+      req.onerror = () => resolve([]);
+    } catch {
+      resolve([]);
+    }
+  });
+}
+
+export async function addConflict(conflict: Conflict): Promise<void> {
+  const db = await openConflictDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(CONFLICT_STORE, "readwrite");
+      tx.objectStore(CONFLICT_STORE).put(conflict);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
+}
+
+export async function removeConflict(table: string, id: string): Promise<void> {
+  const db = await openConflictDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const tx = db.transaction(CONFLICT_STORE, "readwrite");
+      tx.objectStore(CONFLICT_STORE).delete([table, id]);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+      tx.onabort = () => resolve();
+    } catch {
+      resolve();
+    }
+  });
 }

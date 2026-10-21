@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ReceiptPreview } from "@/components/receipt/receipt-preview";
 import { Segmented } from "@/components/ui/segmented";
 import { useSettings, usePos } from "@/lib/store";
-import { ChevronLeft, ChevronRight, CloudUpload, Lock, Moon, Store, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cloud, CloudUpload, Lock, Moon, Store, Sun } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -72,6 +72,21 @@ export default function SettingsScreen() {
               <span className="block text-[17px] font-semibold text-ink">Backup &amp; recovery</span>
               <span className="block truncate text-[14px] text-ink3">
                 Save a copy to Drive or your device
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
+          </Link>
+          <Link
+            href="/connect"
+            className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <Cloud className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[17px] font-semibold text-ink">Backend</span>
+              <span className="block truncate text-[14px] text-ink3">
+                Connect, sync, invite teammates
               </span>
             </span>
             <ChevronRight className="size-4 shrink-0 text-ink3" />

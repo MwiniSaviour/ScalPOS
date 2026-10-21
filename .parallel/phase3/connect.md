@@ -1,0 +1,1 @@
+Files: app/connect-screen.tsx, app/connect/page.tsx, app/conflicts-screen.tsx, app/conflicts/page.tsx, app/settings-screen.tsx, app/more-screen.tsx. Storage key: nova-pos-sync-v1 (localStorage). Edge functions called: bootstrap-org, invite-member. listConflicts/addConflict/removeConflict added to lib/sync/outbox.ts (conflict IndexedDB store). Blocked: none.
