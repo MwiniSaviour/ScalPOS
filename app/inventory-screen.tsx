@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/emptystate";
 import { SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { fmtMoney, fmtqty } from "@/lib/money";
+import { scanBarcode } from "@/lib/barcode";
 import { hueColor } from "@/lib/ui";
 import { usePos } from "@/lib/store";
 import { ChevronRight, History, PackageOpen, Plus, TriangleAlert } from "lucide-react";
@@ -29,7 +30,9 @@ export default function InventoryScreen() {
       if (sel === "low" && p.stock > p.lowStockAt) return false;
       if (sel !== "all" && sel !== "low" && p.categoryId !== sel) return false;
       if (!q) return true;
-      return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
+      return p.name.toLowerCase().includes(q) ||
+        p.sku.toLowerCase().includes(q) ||
+        p.barcode.toLowerCase().includes(q);
     });
   }, [products, query, sel]);
 
@@ -39,6 +42,13 @@ export default function InventoryScreen() {
   );
 
   if (!hydrated) return null;
+
+  const scanToFind = async () => {
+    const code = await scanBarcode();
+    if (!code) return;
+    setSel("all");
+    setQuery(code);
+  };
 
   return (
     <div className="anim-fade">
@@ -55,7 +65,12 @@ export default function InventoryScreen() {
       />
 
       <section className="px-5 pt-4 pb-40">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search name or SKU" />
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder="Search name or SKU"
+          onOpenScanner={() => void scanToFind()}
+        />
 
         <div className="edge-fade no-scrollbar -mx-4 mt-2.5 overflow-x-auto px-4">
           <div className="flex w-max gap-1.5">

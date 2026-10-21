@@ -9,11 +9,12 @@ import { ScreenHeader } from "@/components/shell/screenheader";
 import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
+import { scanBarcode } from "@/lib/barcode";
 import { deleteImageBlob, IMAGE_PREFIX, processImageFile, saveImageBlob } from "@/lib/image-store";
 import { usePos } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { cn, hueColor, hueSoft } from "@/lib/ui";
-import { Barcode, Camera, Check, ImagePlus, Link2, Package, Trash2 } from "lucide-react";
+import { Barcode, Camera, Check, ImagePlus, Link2, Package, ScanLine, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -55,7 +56,9 @@ export default function ProductEditScreen() {
   const [stock, setStock] = useState(editing ? String(editing.stock) : "");
   const [lowAt, setLowAt] = useState(String(editing?.lowStockAt ?? 5));
   const [sku, setSku] = useState(editing?.sku ?? "");
-  const [barcode, setBarcode] = useState(editing?.barcode ?? "");
+  const [barcode, setBarcode] = useState(
+    editing?.barcode ?? (isNew ? (params.get("barcode") ?? "") : ""),
+  );
   const [unit, setUnit] = useState<Product["unit"]>(editing?.unit ?? "pcs");
   const [touched, setTouched] = useState<{ name?: boolean; price?: boolean }>({});
   const [catOpen, setCatOpen] = useState(false);
@@ -108,6 +111,20 @@ export default function ProductEditScreen() {
     setImageUrl("");
     setLinkValue("");
     setLinkOpen(false);
+  };
+
+  const scanBarcodeField = async () => {
+    const code = await scanBarcode();
+    if (!code) return;
+    const owner = usePos
+      .getState()
+      .products.find((p) => p.id !== editId && p.barcode.toLowerCase() === code.toLowerCase());
+    if (owner) {
+      usePos.getState().toast(`That barcode is already on ${owner.name}`, "warn");
+      return;
+    }
+    setBarcode(code);
+    usePos.getState().toast(`Barcode set: ${code}`, "ok");
   };
 
   const save = () => {
@@ -354,13 +371,22 @@ export default function ProductEditScreen() {
               value={barcode}
               onChange={(e) => setBarcode(e.target.value)}
               trailing={
-                <IconButton
-                  label="Generate barcode"
-                  className="size-8 text-ink2 hover:bg-surface3"
-                  onClick={() => setBarcode(`GD${String(Date.now()).slice(-7)}`)}
-                >
-                  <span className="text-[12px] font-semibold">Gen</span>
-                </IconButton>
+                <span className="flex items-center gap-0.5">
+                  <IconButton
+                    label="Scan barcode"
+                    className="size-8 text-ink2 hover:bg-surface3"
+                    onClick={() => void scanBarcodeField()}
+                  >
+                    <ScanLine className="size-[17px]" />
+                  </IconButton>
+                  <IconButton
+                    label="Generate barcode"
+                    className="size-8 text-ink2 hover:bg-surface3"
+                    onClick={() => setBarcode(`GD${String(Date.now()).slice(-7)}`)}
+                  >
+                    <span className="text-[12px] font-semibold">Gen</span>
+                  </IconButton>
+                </span>
               }
             />
           </div>

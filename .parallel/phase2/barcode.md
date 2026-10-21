@@ -1,0 +1,8 @@
+# Barcode scanner — phase2 report
+
+Files: `lib/barcode.ts` (new), `components/ui/barcode-scanner.tsx` (new), `app/sell-screen.tsx`, `app/inventory-screen.tsx`, `app/product-edit-screen.tsx`. `lib/types.ts` untouched — `barcode: string` already existed on Product (surprise seed/edit-field already in place).
+APIs (verified against installed d.ts, not memory): MLKit 8.2.1 `BarcodeScanner.scan({formats})` → `barcodes[].rawValue/displayValue`, `isSupported()`, `isGoogleBarcodeScannerModuleAvailable()` (Android module missing → falls back to web overlay), iOS `checkPermissions/requestPermissions`; zxing/browser 0.2.1 `BrowserMultiFormatReader.decodeFromVideoDevice(undefined, video, cb)` + `controls.stop()`, POSSIBLE_FORMATS hints including EAN_13/EAN_8/UPC_A/UPC_E/CODE_39/CODE_128/QR.
+Web fallback: `scanWithWeb()` imperative-renders `<BarcodeScannerOverlay>` via `react-dom/client createRoot` — full-screen video preview, auto-stop on first result, Cancel button, 2-min fail-safe; both libraries + react-dom dynamically imported only on use.
+Wiring: sell SearchBar scan icon → scan → `products.find(barcode===code)` → `tap(hit.id)`; unknown → toast + `/inventory/edit?barcode=<code>` (edit screen prefills barcode). Inventory scan icon sets query to the scanned code (barcode added to filter). Product edit: ScanLine IconButton in Barcode field, duplicate check against other products.
+Verified: `tsc --noEmit` and `eslint app components lib` both pass (exit 0); build not run (not required).
+Blocked: none; not run on device — MLKit path needs a Play-Services-equipped device (Google module + camera).

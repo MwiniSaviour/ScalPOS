@@ -10,6 +10,7 @@ import { Input, SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
+import { scanBarcode } from "@/lib/barcode";
 import { useCartTotals, usePos } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
@@ -85,6 +86,24 @@ export default function SellScreen() {
     if (next) setDiscountDraft(totals.discount > 0 ? trimNum(totals.discount) : "");
   };
 
+  const scan = async () => {
+    const code = await scanBarcode();
+    if (!code) return;
+    const hit = usePos
+      .getState()
+      .products.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
+    if (hit) {
+      if (hit.stock <= 0) {
+        usePos.getState().toast("Out of stock", "error");
+        return;
+      }
+      tap(hit.id);
+    } else {
+      usePos.getState().toast("Barcode not in catalogue — add it in Inventory", "warn");
+      router.push(`/inventory/edit?barcode=${encodeURIComponent(code)}`);
+    }
+  };
+
   const applyDiscount = (v: string) => {
     setDiscountDraft(v);
     usePos.getState().setCartDiscount(parsePrice(v));
@@ -116,7 +135,12 @@ export default function SellScreen() {
       </header>
 
       <div className="px-5 pt-4 pb-32">
-        <SearchBar value={query} onChange={setQuery} placeholder="Search products…" />
+        <SearchBar
+          value={query}
+          onChange={setQuery}
+          placeholder="Search products…"
+          onOpenScanner={() => void scan()}
+        />
 
         <div className="edge-fade no-scrollbar -mx-5 mt-2.5 overflow-x-auto px-5">
           <div className="flex w-max gap-1.5">

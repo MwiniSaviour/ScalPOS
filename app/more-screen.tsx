@@ -7,12 +7,14 @@ import { useSettings, usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
 import {
   ChevronRight,
+  CircleUserRound,
   Download,
   PieChart,
   RefreshCcw,
   Settings,
   Store,
   Users,
+  UsersRound,
   Warehouse,
 } from "lucide-react";
 import Link from "next/link";
@@ -96,6 +98,12 @@ export default function MoreScreen() {
         <h2 className="text-[15px] font-medium text-ink2">Business</h2>
         <Card inset className="mt-2.5">
           <RowLink
+            href="/account"
+            icon={<CircleUserRound className="size-[18px]" />}
+            label="My account"
+            sub="Profile, avatar, role"
+          />
+          <RowLink
             href="/settings/shop"
             icon={<Store className="size-[18px]" />}
             label="Shop details"
@@ -106,6 +114,19 @@ export default function MoreScreen() {
             icon={<Settings className="size-[18px]" />}
             label="Settings"
             sub="Theme, receipts, MoMo"
+          />
+        </Card>
+      </section>
+
+      {/* team */}
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Team</h2>
+        <Card inset className="mt-2.5">
+          <RowLink
+            href="/staff"
+            icon={<UsersRound className="size-[18px]" />}
+            label="Staff &amp; roles"
+            sub="Members and permissions"
           />
         </Card>
       </section>
