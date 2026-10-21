@@ -37,3 +37,6 @@ android/capacitor-cordova-android-plugins/
 # local QA artifacts
 design/qa-results.json
 design/qa-light-results.json
+
+# supabase cli local state (project ref)
+backend/supabase/.temp/
