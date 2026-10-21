@@ -448,7 +448,17 @@ export const usePos = create<PosState>()(
       updateSettings: (patch) => {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
         if (patch.theme) {
-          if (typeof document !== "undefined") document.documentElement.dataset.theme = patch.theme;
+          if (typeof document !== "undefined") {
+            document.documentElement.dataset.theme = patch.theme;
+            document.documentElement.style.colorScheme = patch.theme;
+          }
+          // tiny mirror key so the pre-paint script can pick the theme up
+          // without parsing the whole persisted store
+          try {
+            localStorage.setItem("nova-pos-theme", patch.theme);
+          } catch {
+            /* storage unavailable */
+          }
         }
       },
 

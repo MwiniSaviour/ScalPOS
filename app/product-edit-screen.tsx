@@ -12,7 +12,7 @@ import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { deleteImageBlob, IMAGE_PREFIX, processImageFile, saveImageBlob } from "@/lib/image-store";
 import { usePos } from "@/lib/store";
 import type { Product } from "@/lib/types";
-import { cn } from "@/lib/ui";
+import { cn, hueColor, hueSoft } from "@/lib/ui";
 import { Barcode, Camera, Check, ImagePlus, Link2, Package, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
@@ -253,7 +253,7 @@ export default function ProductEditScreen() {
               <span className="flex items-center gap-2 text-[15px] text-ink">
                 <span
                   className="size-2.5 shrink-0 rounded-full"
-                  style={{ background: categories.find((c) => c.id === catId)?.color }}
+                  style={{ background: hueColor(categories.find((c) => c.id === catId)?.color) }}
                 />
                 {categories.find((c) => c.id === catId)?.name ?? "No category"}
               </span>
@@ -399,9 +399,9 @@ export default function ProductEditScreen() {
             >
               <span
                 className="flex size-9 shrink-0 items-center justify-center rounded-xl"
-                style={{ background: c.color + "22" }}
+                style={{ background: hueSoft(c.color) }}
               >
-                <span className="size-3 rounded-full" style={{ background: c.color }} />
+                <span className="size-3 rounded-full" style={{ background: hueColor(c.color) }} />
               </span>
               <span className="flex-1 text-left text-[14px] font-semibold text-ink">{c.name}</span>
               {catId === c.id && <Check className="size-4 text-accent" />}

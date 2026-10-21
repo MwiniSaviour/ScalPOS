@@ -10,7 +10,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { usePos } from "@/lib/store";
 import { TOKEN_COLORS } from "@/lib/ui";
 import type { Category } from "@/lib/types";
-import { cn } from "@/lib/ui";
+import { cn, hueColor, hueSoft } from "@/lib/ui";
 import { Pencil, Plus, Shapes, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -98,9 +98,9 @@ export default function CategoriesScreen() {
                 <div key={c.id} className="flex items-center gap-3 px-4 py-3">
                   <span
                     className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-                    style={{ background: c.color + "22" }}
+                    style={{ background: hueSoft(c.color) }}
                   >
-                    <span className="size-3.5 rounded-full" style={{ background: c.color }} />
+                    <span className="size-3.5 rounded-full" style={{ background: hueColor(c.color) }} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-semibold text-ink">{c.name}</p>

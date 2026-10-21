@@ -41,6 +41,27 @@ function ChromeGate() {
     document.documentElement.style.colorScheme = theme;
   }, [theme]);
 
+  // the Android status bar sits on top of the app: its icons must follow the
+  // app theme, not the device's night mode
+  useEffect(() => {
+    let cancelled = false;
+    const apply = async () => {
+      try {
+        const { Capacitor, SystemBars, SystemBarsStyle } = await import("@capacitor/core");
+        if (cancelled) return;
+        if (!Capacitor.isNativePlatform()) return;
+        // "Light" = dark icons, for a light background
+        await SystemBars.setStyle({ style: theme === "light" ? SystemBarsStyle.Light : SystemBarsStyle.Dark });
+      } catch {
+        /* not available on this platform */
+      }
+    };
+    void apply();
+    return () => {
+      cancelled = true;
+    };
+  }, [theme]);
+
   if (!hydrated) return null;
   return (
     <>

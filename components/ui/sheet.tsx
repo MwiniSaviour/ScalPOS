@@ -37,7 +37,7 @@ export function Sheet({
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="anim-fade absolute inset-0 bg-black/55" onClick={onClose} />
+      <div className="anim-fade absolute inset-0 bg-[var(--scrim)]" onClick={onClose} />
       <div
         className={cn(
           "anim-sheet absolute inset-x-0 bottom-0 flex flex-col rounded-t-[28px] border-t border-line2 bg-bg2",

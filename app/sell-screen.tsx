@@ -12,7 +12,7 @@ import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { useCartTotals, usePos } from "@/lib/store";
-import { cn } from "@/lib/ui";
+import { cn, hueColor } from "@/lib/ui";
 import {
   BadgePercent,
   ChevronRight,
@@ -123,7 +123,7 @@ export default function SellScreen() {
                 color={c.color}
                 onClick={() => setCatId(c.id)}
               >
-                <span className="size-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                <span className="size-2 shrink-0 rounded-full" style={{ background: hueColor(c.color) }} />
                 {c.name}
               </Chip>
             ))}

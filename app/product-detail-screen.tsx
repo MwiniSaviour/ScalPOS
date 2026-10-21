@@ -15,7 +15,7 @@ import { dateShort, dateTime, timeOf } from "@/lib/format";
 import { fmtMoney, parsePrice } from "@/lib/money";
 import { usePos } from "@/lib/store";
 import type { StockReason } from "@/lib/types";
-import { cn } from "@/lib/ui";
+import { cn, hueColor } from "@/lib/ui";
 import { ArrowDownToLine, ArrowUpFromLine, ArrowUpDown, Package, Pencil, Trash2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -130,7 +130,7 @@ export default function ProductDetailScreen() {
             <div className="min-w-0 flex-1">
               <p className="truncate text-[16px] font-bold text-ink">{product.name}</p>
               <div className="mt-1 flex items-center gap-1.5">
-                <span className="size-2 shrink-0 rounded-full" style={{ background: category?.color ?? "var(--ink3)" }} />
+                <span className="size-2 shrink-0 rounded-full" style={{ background: hueColor(category?.color) }} />
                 <span className="text-[12px] text-ink3">{category?.name ?? "No category"}</span>
               </div>
             </div>

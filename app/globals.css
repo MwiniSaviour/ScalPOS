@@ -62,35 +62,85 @@
   --violet-soft: #8b7cf71f;
   --gold: #f6c453;
   --gold-soft: #f6c4531f;
+
+  /* category hues: light steps, so hue-as-text passes AA on a dark surface */
+  --hue-green: #34d399;
+  --hue-blue: #4c8dff;
+  --hue-violet: #a78bfa;
+  --hue-amber: #f5a524;
+  --hue-rose: #f4586e;
+  --hue-gold: #f6c453;
+  --hue-on-solid: #06281a;
+  --hue-green-soft: #34d39924;
+  --hue-blue-soft: #4c8dff24;
+  --hue-violet-soft: #a78bfa24;
+  --hue-amber-soft: #f5a52424;
+  --hue-rose-soft: #f4586e24;
+  --hue-gold-soft: #f6c45324;
+
+  /* surfaces & chrome that are theme-aware */
+  --scrim: rgb(0 0 0 / 0.55);
+  --selection: rgb(16 185 129 / 0.3);
+  --selection-ink: #f3f7fd;
+  --placeholder: #8b98ae;
+  --chart-bar: #33415a;
+  --chart-track: #1c2637;
   color-scheme: dark;
 }
 
 [data-theme="light"] {
-  --bg: #f3f5f9;
-  --bg2: #eceff5;
+  /* surfaces: the page is one step below the panels that sit on it */
+  --bg: #eef1f6;
+  --bg2: #ffffff;
   --surface: #ffffff;
-  --surface2: #f5f7fa;
-  --surface3: #e8ecf2;
-  --line: #e3e8ef;
-  --line2: #d5dbe5;
-  --ink: #10192b;
-  --ink2: #516078;
-  --ink3: #7c8aa1;
-  --ink4: #aab5c5;
-  --accent: #059669;
-  --accent2: #047857;
+  --surface2: #f4f7fb;
+  --surface3: #e8edf4;
+  /* two border tiers: --line divides inside a panel, --line2 edges a control */
+  --line: #e2e7ef;
+  --line2: #c6cedb;
+  /* inks */
+  --ink: #0f172a;
+  --ink2: #475569;
+  --ink3: #5b6b82;
+  --ink4: #7c8aa0;
+  /* accent: white ink on this green is 5.5:1 */
+  --accent: #047857;
+  --accent2: #065f46;
   --accentink: #ffffff;
-  --accentsoft: #05966914;
-  --info: #2563eb;
-  --info-soft: #2563eb14;
-  --warn: #d97706;
-  --warn-soft: #d9770614;
-  --danger: #e11d48;
-  --danger-soft: #e11d4814;
-  --violet: #7c3aed;
-  --violet-soft: #7c3aed14;
-  --gold: #b45309;
-  --gold-soft: #b4530914;
+  --accentsoft: #04785714;
+  --info: #1d4ed8;
+  --info-soft: #1d4ed814;
+  --warn: #9a3412;
+  --warn-soft: #9a341214;
+  --danger: #be123c;
+  --danger-soft: #be123c14;
+  --violet: #6d28d9;
+  --violet-soft: #6d28d914;
+  --gold: #8a5a00;
+  --gold-soft: #8a5a0014;
+
+  /* category hues: a darker step than the dark theme, so hue-as-text passes AA */
+  --hue-green: #047857;
+  --hue-blue: #1d4ed8;
+  --hue-violet: #6d28d9;
+  --hue-amber: #9a3412;
+  --hue-rose: #be123c;
+  --hue-gold: #8a5a00;
+  --hue-on-solid: #ffffff;
+  --hue-green-soft: #0478571f;
+  --hue-blue-soft: #1d4ed81f;
+  --hue-violet-soft: #6d28d91f;
+  --hue-amber-soft: #9a34121f;
+  --hue-rose-soft: #be123c1f;
+  --hue-gold-soft: #8a5a001f;
+
+  /* surfaces & chrome that are theme-aware */
+  --scrim: rgb(15 23 42 / 0.34);
+  --selection: rgb(4 120 87 / 0.2);
+  --selection-ink: #0f172a;
+  --placeholder: #5b6b82;
+  --chart-bar: #c3cddc;
+  --chart-track: #e7ecf3;
   color-scheme: light;
 }
 
@@ -117,7 +167,8 @@ body {
 }
 
 ::selection {
-  background: rgb(16 185 129 / 0.3);
+  background: var(--selection);
+  color: var(--selection-ink);
 }
 
 input,
@@ -130,7 +181,7 @@ button {
 
 input::placeholder,
 textarea::placeholder {
-  color: var(--ink3);
+  color: var(--placeholder);
 }
 
 /* --------------------------------- utilities -------------------------------- */

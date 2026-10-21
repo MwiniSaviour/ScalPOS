@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/emptystate";
 import { SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { fmtMoney, fmtqty } from "@/lib/money";
+import { hueColor } from "@/lib/ui";
 import { usePos } from "@/lib/store";
 import { ChevronRight, History, PackageOpen, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
@@ -72,7 +73,7 @@ export default function InventoryScreen() {
                 active={sel === c.id}
                 onClick={() => setSel(sel === c.id ? "all" : c.id)}
               >
-                <span className="size-2 shrink-0 rounded-full" style={{ background: c.color }} />
+                <span className="size-2 shrink-0 rounded-full" style={{ background: hueColor(c.color) }} />
                 {c.name}
               </Chip>
             ))}
@@ -119,7 +120,7 @@ export default function InventoryScreen() {
                     <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink3">
                       <span
                         className="size-2 shrink-0 rounded-full"
-                        style={{ background: c?.color ?? "var(--ink3)" }}
+                        style={{ background: hueColor(c?.color) }}
                       />
                       <span className="truncate">{c?.name ?? "No category"}</span>
                       <span className="tabnum shrink-0">

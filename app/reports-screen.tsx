@@ -170,11 +170,11 @@ export default function ReportsScreen() {
             {chart.map((b, i) => (
               <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
                 <div className="relative mx-auto h-full w-full max-w-7">
-                  <div className="absolute inset-0 rounded-[3px] bg-line2/50" />
+                  <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
                   <div
                     className={cn(
                       "absolute inset-x-0 bottom-0 rounded-t-[4px]",
-                      b.today ? "bg-accent" : "bg-line2",
+                      b.today ? "bg-accent" : "bg-[var(--chart-bar)]",
                     )}
                     style={{ height: b.sum > 0 ? `${(b.sum / maxBars) * 100}%` : 0 }}
                   />
@@ -198,7 +198,7 @@ export default function ReportsScreen() {
           <div className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">Payment mix</div>
           {mix.total > 0 ? (
             <>
-              <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-line2">
+              <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-[var(--chart-track)]">
                 {mix.rows.map((r) =>
                   r.pct > 0 ? (
                     <span
@@ -249,7 +249,7 @@ export default function ReportsScreen() {
                 <ProductArt imageUrl={r.imageUrl} name={r.name} className="size-10 shrink-0 rounded-xl" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14px] font-semibold text-ink">{r.name}</span>
-                  <span className="mt-1 block h-1 overflow-hidden rounded-full bg-line2">
+                  <span className="mt-1 block h-1 overflow-hidden rounded-full bg-[var(--chart-track)]">
                     <span
                       className="block h-full rounded-full bg-accent"
                       style={{ width: `${top.max > 0 ? Math.max(6, (r.revenue / top.max) * 100) : 0}%` }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/ui";
+import { cn, hueColor, hueSoft } from "@/lib/ui";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
 export function Chip({
@@ -11,19 +11,23 @@ export function Chip({
   ...rest
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   active?: boolean;
-  color?: string; // optional brand tint when active
+  color?: string; // optional category colour when active
   children: ReactNode;
 }) {
+  const tint = color ? hueColor(color) : null;
+  const fill = color ? hueSoft(color) : null;
   return (
     <button
       className={cn(
         "press h-11 shrink-0 inline-flex items-center gap-1.5 rounded-full border px-4 text-[13px] font-medium",
         active
-          ? "border-transparent bg-accent/15 text-accent"
-          : "border-line2 bg-surface text-ink2 hover:text-ink hover:bg-surface2",
+          ? tint
+            ? "border-transparent"
+            : "border-transparent bg-accent/12 text-accent"
+          : "border-line2 bg-surface text-ink2",
         className,
       )}
-      style={active && color ? { background: color + "22", color } : undefined}
+      style={active && tint && fill ? { background: fill, color: tint } : undefined}
       {...rest}
     >
       {children}
