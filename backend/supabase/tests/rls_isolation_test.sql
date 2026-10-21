@@ -43,7 +43,7 @@ insert into public.products (org_id, name, price, stock) values
   ('aaaaaaaa-0000-0000-0000-000000000001', 'Kivo', 2.00, 10),
   ('aaaaaaaa-0000-0000-0000-000000000002', 'OtherShopProduct', 99.00, 1);
 
-select plan(10);
+select plan(12);
 
 -- ---------- owner of org A: sees only org A ----------
 set local role authenticated;
