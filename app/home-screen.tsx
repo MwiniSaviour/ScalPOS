@@ -1,8 +1,7 @@
 "use client";
 
-import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, CircleUserRound } from "lucide-react";
 import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { paidOf, usePos } from "@/lib/store";
@@ -46,8 +45,11 @@ export default function HomeScreen() {
           <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">{settings.shopName}</h1>
           <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
         </div>
-        <Link href="/more" aria-label="Business and settings" className="press mt-0.5 shrink-0 rounded-full">
-          <Avatar name={settings.shopName} size={40} />
+        {/* account — switches to the uploaded profile photo once accounts/roles land */}
+        <Link href="/more" aria-label="My account" className="press mt-0.5 shrink-0">
+          <span className="flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2">
+            <CircleUserRound className="size-[23px]" />
+          </span>
         </Link>
       </header>
 
