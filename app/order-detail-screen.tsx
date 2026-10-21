@@ -91,7 +91,7 @@ export default function OrderDetailScreen() {
     return (
       <div className="anim-fade">
         <ScreenHeader title="Order" onBack />
-        <section className="px-4 pt-2">
+        <section className="px-5 pt-4">
           <EmptyState
             icon={<ReceiptIcon className="size-7" />}
             title="Order not found"
@@ -121,10 +121,10 @@ export default function OrderDetailScreen() {
       />
 
       {due > 0 && order.status !== "refunded" && (
-        <section className="px-4 pt-3 pb-1">
-          <div className="flex items-center justify-between gap-3 rounded-2xl bg-warn/10 p-3.5 text-warn">
+        <section className="px-5 pt-3">
+          <div className="flex items-center justify-between gap-3 rounded-2xl bg-warn/10 px-4 py-3.5 text-warn">
             <span>
-              <span className="block text-[12px] font-semibold uppercase tracking-[.07em]">Balance due</span>
+              <span className="block text-[15px] font-medium">Balance due</span>
               <span className="tabnum block text-[20px]/7 font-bold">{fmtMoney(due)}</span>
             </span>
             <Button variant="secondary" size="sm" onClick={() => setPayOpen(true)}>
@@ -134,34 +134,34 @@ export default function OrderDetailScreen() {
         </section>
       )}
 
-      <main className="flex flex-col gap-2.5 px-4 pt-2 pb-32">
+      <main className="flex flex-col gap-3 px-5 pt-3 pb-32">
         <Card inset>
           <CardTitle>{order.items.length} item{order.items.length === 1 ? "" : "s"}</CardTitle>
           {order.items.map((i) => (
             <div key={i.productId} className="flex items-center gap-3 px-4 py-3">
               <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-medium text-ink">
+                <span className="block truncate text-[15px] font-medium text-ink">
                   {i.name} <span className="text-ink3">× {i.qty}</span>
                 </span>
-                <span className="tabnum block text-[12px] text-ink3">@ {fmtMoney(i.price)}</span>
+                <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
               </span>
               <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(i.price * i.qty)}</span>
             </div>
           ))}
           <div className="flex items-center justify-between px-4 py-3">
-            <span className="text-[13px] text-ink3">Subtotal</span>
+            <span className="text-[14px] text-ink3">Subtotal</span>
             <span className="tabnum text-[15px] font-semibold text-ink">{fmtMoney(order.subtotal)}</span>
           </div>
           {order.discount > 0 && (
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-[13px] text-ink3">Discount</span>
+              <span className="text-[14px] text-ink3">Discount</span>
               <span className="tabnum text-[15px] font-semibold text-accent">−{fmtMoney(order.discount)}</span>
             </div>
           )}
           {tax && (
             <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-[13px] text-ink3">{tax.label}</span>
+              <span className="text-[14px] text-ink3">{tax.label}</span>
               <span className="tabnum text-[15px] font-semibold text-ink">{fmtMoney(tax.amount)}</span>
             </div>
           )}
@@ -174,7 +174,7 @@ export default function OrderDetailScreen() {
         <Card inset>
           <CardTitle>Payments</CardTitle>
           {order.payments.length === 0 ? (
-            <div className="px-4 py-3.5 text-[13px] text-ink3">
+            <div className="px-4 py-3.5 text-[14px] text-ink3">
               {payStatus === "paid" ? "No payments on file" : "No payments yet"}
             </div>
           ) : (
@@ -186,8 +186,8 @@ export default function OrderDetailScreen() {
                     {meta.icon}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-medium text-ink">{meta.label}</span>
-                    <span className="block truncate text-[12px] text-ink3">
+                    <span className="block text-[15px] font-medium text-ink">{meta.label}</span>
+                    <span className="block truncate text-[13px] text-ink3">
                       {timeOf(p.t)}
                       {p.ref ? ` · ${p.ref}` : ""}
                     </span>
@@ -202,20 +202,25 @@ export default function OrderDetailScreen() {
         <Card inset>
           <CardTitle>Customer</CardTitle>
           <div className="flex items-center gap-3 px-4 py-3.5">
-            <Avatar name={customer?.name ?? "Walk-in"} size={40} />
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[14px] font-semibold text-ink">
-                {customer?.name ?? "Walk-in"}
+            {customer ? (
+              <>
+                <Avatar name={customer.name} size={40} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-ink">{customer.name}</span>
+                  {customer.phone && <span className="block truncate text-[14px] text-ink3">{customer.phone}</span>}
+                </span>
+              </>
+            ) : (
+              <span className="min-w-0 flex-1">
+                <span className="block text-[15px] font-semibold text-ink">Walk-in</span>
+                <span className="block text-[14px] text-ink3">No customer attached</span>
               </span>
-              {customer?.phone && (
-                <span className="block truncate text-[13px] text-ink3">{customer.phone}</span>
-              )}
-            </span>
+            )}
           </div>
         </Card>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-4 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-5 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3">
         {canRecord ? (
           <div className="grid grid-cols-2 gap-2.5">
             <Button
@@ -274,7 +279,7 @@ export default function OrderDetailScreen() {
             { value: "card", label: "Card" },
           ]}
         />
-        <p className="text-[12px] font-medium uppercase tracking-[.06em] text-ink3">Amount received</p>
+        <p className="text-[15px] font-medium text-ink2">Amount received</p>
         <p className="tabnum my-3 text-center text-[32px]/9 font-extrabold tracking-[-0.02em] text-ink">
           {CURRENCY_SYMBOL}
           {amountStr || "0.00"}

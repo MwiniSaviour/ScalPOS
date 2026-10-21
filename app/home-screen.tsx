@@ -1,34 +1,25 @@
 "use client";
 
 import { Avatar } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { EmptyState } from "@/components/ui/emptystate";
-import { QuickTile } from "@/components/ui/quicktile";
-import { StatusPill } from "@/components/ui/statuspill";
-import { timeAgo, startOfDay, greeting } from "@/lib/format";
+import { ChevronRight } from "lucide-react";
+import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
-import { usePos } from "@/lib/store";
+import { paidOf, usePos } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import {
-  ChevronRight,
-  Receipt,
-  Scan,
-  ShoppingCart,
-  SquarePlus,
-  TriangleAlert,
-  Users,
-  Warehouse,
-} from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useMemo } from "react";
 
+function startOfDay(t: number): number {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
 export default function HomeScreen() {
-  const router = useRouter();
-  const products = usePos((s) => s.products);
   const orders = usePos((s) => s.orders);
+  const products = usePos((s) => s.products);
   const customers = usePos((s) => s.customers);
   const settings = usePos((s) => s.settings);
   const now = useNow();
@@ -37,137 +28,136 @@ export default function HomeScreen() {
   const kpis = useMemo(() => {
     const today = orders.filter((o) => o.createdAt >= dayStart && o.status !== "refunded");
     const sales = today.reduce((s, o) => s + o.total, 0);
+    const collected = today.reduce((s, o) => s + paidOf(o), 0);
     const pending = orders.filter((o) => o.status === "pending").length;
-    const lowStock = products.filter((p) => p.stock > 0 && p.stock <= p.lowStockAt).length;
     const out = products.filter((p) => p.stock <= 0).length;
-    return { sales, txn: today.length, pending, lowStock: lowStock + out, out, customers: customers.length };
-  }, [orders, products, customers, dayStart]);
+    const low = products.filter((p) => p.stock > 0 && p.stock <= p.lowStockAt).length;
+    return { sales, collected, unpaid: Math.max(sales - collected, 0), txn: today.length, pending, lowStock: low + out };
+  }, [orders, products, dayStart]);
 
-  const recent = useMemo(() => orders.slice(0, 4), [orders]);
+  const attention = kpis.pending > 0 || kpis.lowStock > 0;
+  const recent = orders.slice(0, 3);
 
   return (
-    <div className="anim-fade">
-      <header className="safe-t h-2" />
-
-      {/* greeting hero */}
-      <section className="px-4 pt-1 pb-2">
-        <p className="text-[13px] font-medium text-ink3">{greeting(now)}</p>
-        <div className="mt-0.5 flex items-start gap-3">
-          <h1 className="min-w-0 flex-1 text-[24px]/8 font-bold tracking-[-0.025em] break-words text-ink">
-            {settings.shopName}
-          </h1>
-          <Link
-            href="/sell"
-            className="press flex h-11 shrink-0 items-center gap-2 rounded-xl bg-accent px-3.5 font-semibold text-accentink"
-          >
-            <ShoppingCart className="size-[17px]" />
-            <span className="text-[14px]">New sale</span>
-          </Link>
+    <div className="anim-fade px-5 pt-4">
+      {/* header — shop name, date, owner avatar */}
+      <header className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">{settings.shopName}</h1>
+          <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
         </div>
-      </section>
+        <Link href="/more" aria-label="Business and settings" className="press mt-0.5 shrink-0 rounded-full">
+          <Avatar name={settings.shopName} size={40} />
+        </Link>
+      </header>
 
-      {/* today's sales — the one primary figure */}
-      <section className="px-4 pt-2">
-        <Link href="/reports" className="press block">
-          <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Today&apos;s sales</p>
-          <p className="tabnum mt-1 text-[30px]/8 font-extrabold tracking-[-0.03em] text-ink">
+      {/* today's sales */}
+      <Link href="/reports" className="press mt-5 block">
+        <Card>
+          <div className="flex items-center justify-between px-4 pt-3.5">
+            <span className="text-[15px] font-semibold text-ink">Today&rsquo;s sales</span>
+            <span className="text-[14px] text-ink3">
+              {kpis.txn} sale{kpis.txn === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="tabnum px-4 pt-1 pb-4 text-[34px] font-extrabold leading-[44px] tracking-[-0.03em] text-ink">
             {fmtMoney(kpis.sales)}
           </p>
-          <p className="mt-1 text-[12px] text-ink3">
-            {kpis.txn} transaction{kpis.txn === 1 ? "" : "s"}
-          </p>
-        </Link>
-      </section>
+          <div className="grid grid-cols-2 border-t border-line">
+            <div className="border-r border-line px-4 py-3">
+              <p className="text-[14px] text-ink2">Collected</p>
+              <p className="tabnum text-[16px] font-medium text-ink">{fmtMoney(kpis.collected)}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[14px] text-ink2">Unpaid</p>
+              <p className={cn("tabnum text-[16px] font-medium", kpis.unpaid > 0 ? "text-warn" : "text-ink")}>
+                {fmtMoney(kpis.unpaid)}
+              </p>
+            </div>
+          </div>
+        </Card>
+      </Link>
 
-      {/* secondary figures — one divided block, no per-cell cards */}
-      <section className="px-4 pt-4">
-        <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-line2 bg-surface">
-          <StatCell
-            label="Pending"
-            value={kpis.pending}
-            href="/orders?filter=pending"
-            alert={kpis.pending > 0}
-            className="border-r border-b border-line"
-          />
-          <StatCell
-            label="Low stock"
-            value={kpis.lowStock}
-            href="/inventory?filter=low"
-            alert={kpis.lowStock > 0}
-            className="border-b border-line"
-          />
-          <StatCell
-            label="Customers"
-            value={kpis.customers}
-            href="/customers"
-            className="border-r border-line"
-          />
-          <StatCell label="Transactions" value={kpis.txn} href="/reports" />
-        </div>
-      </section>
-
-      {/* quick actions */}
-      <section className="px-4 pt-6">
-        <h2 className="mb-3 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Quick actions</h2>
-        <div className="flex gap-2">
-          <QuickTile icon={<SquarePlus className="size-[22px]" />} label="Add item" onClick={() => router.push("/inventory/edit")} tone="accent" />
-          <QuickTile icon={<Scan className="size-[22px]" />} label="Sell" onClick={() => router.push("/sell")} tone="info" />
-          <QuickTile icon={<Users className="size-[22px]" />} label="Customers" onClick={() => router.push("/customers")} tone="violet" />
-          <QuickTile icon={<Warehouse className="size-[22px]" />} label="Stock" onClick={() => router.push("/stock")} tone="warn" />
-        </div>
-      </section>
+      {/* needs attention */}
+      {attention && (
+        <section className="mt-6">
+          <h2 className="text-[15px] font-medium text-ink2">Needs attention</h2>
+          <Card inset className="mt-2.5">
+            {kpis.pending > 0 && (
+              <Link
+                href="/orders?filter=pending"
+                className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[17px] font-semibold text-ink">Pending orders</span>
+                  <span className="block text-[14px] text-ink3">Waiting to be fulfilled</span>
+                </span>
+                <span className="tabnum text-[17px] font-bold text-ink">{kpis.pending}</span>
+                <ChevronRight className="size-4 shrink-0 text-ink3" />
+              </Link>
+            )}
+            {kpis.lowStock > 0 && (
+              <Link
+                href="/inventory?filter=low"
+                className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[17px] font-semibold text-ink">Low stock</span>
+                  <span className="block text-[14px] text-ink3">Items running low</span>
+                </span>
+                <span className="tabnum text-[17px] font-bold text-ink">{kpis.lowStock}</span>
+                <ChevronRight className="size-4 shrink-0 text-ink3" />
+              </Link>
+            )}
+          </Card>
+        </section>
+      )}
 
       {/* recent orders */}
-      <section className="px-4 pt-6 pb-4">
-        <div className="mb-2.5 flex items-center justify-between">
-          <h2 className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Recent orders</h2>
-          <Link href="/orders" className="press flex items-center gap-0.5 text-[13px] font-semibold text-accent">
-            View all <ChevronRight className="size-4" />
+      <section className="mt-6 pb-6">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-medium text-ink2">Recent orders</h2>
+          <Link href="/orders" className="press whitespace-nowrap text-[15px] font-medium text-accent">
+            View all
           </Link>
         </div>
         {recent.length === 0 ? (
-          <EmptyState
-            icon={<Receipt className="size-7" />}
-            title="No orders yet"
-            hint="Start a sale from the Sell tab and it will appear here."
-            action={<Button onClick={() => router.push("/sell")}>Start selling</Button>}
-          />
+          <Card className="mt-2.5 px-4 py-6 text-center">
+            <p className="text-[14px] text-ink3">
+              No orders yet — tap <span className="font-semibold text-ink">New sale</span> to start.
+            </p>
+          </Card>
         ) : (
-          <Card inset>
+          <Card inset className="mt-2.5">
             {recent.map((o) => {
               const c = customers.find((x) => x.id === o.customerId);
-              const refunded = o.status === "refunded";
-              const pay = refunded
-                ? "refunded"
-                : o.payStatus === "partial"
-                  ? "partial"
-                  : o.payStatus === "unpaid"
-                    ? "unpaid"
-                    : "paid";
-              const settled = pay === "paid";
+              const first = o.items[0];
               const qty = o.items.reduce((s, i) => s + i.qty, 0);
-              const itemSummary = `${qty} item${qty === 1 ? "" : "s"}${o.items.length ? ` · ${o.items[0]?.name ?? ""}` : ""}${o.items.length > 1 ? `, +${o.items.length - 1} more` : ""}`;
+              const summary =
+                o.items.length === 1 ? `${first?.name ?? "Item"} × ${first?.qty ?? 1}` : `${qty} item${qty === 1 ? "" : "s"}`;
+              const unpaid = o.payStatus === "unpaid" || o.payStatus === "partial";
               return (
                 <Link
                   key={o.id}
                   href={`/orders/detail?id=${o.id}`}
-                  className="press flex items-start gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                  className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
                 >
-                  <Avatar name={c?.name ?? "Walk-in customer"} size={36} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-semibold leading-snug break-words text-ink">
+                    <span className="block text-[17px] font-semibold leading-tight text-ink">
                       {c?.name ?? "Walk-in"}
                     </span>
-                    <span className="mt-0.5 block truncate text-[12px] text-ink3">
-                      {`${timeAgo(o.createdAt, now)} · ${itemSummary}`}
+                    <span className="mt-1 block truncate text-[14px] text-ink3">
+                      {`${timeAgo(o.createdAt, now)} · ${summary}`}
                     </span>
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(o.total)}</span>
-                    {settled ? (
-                      <span className="text-[11px] font-medium text-ink3">Paid</span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span className="tabnum text-[17px] font-bold text-ink">{fmtMoney(o.total)}</span>
+                    {unpaid ? (
+                      <span className="flex items-center gap-1.5 text-[14px] font-medium text-warn">
+                        <span className="size-1.5 rounded-full bg-warn" /> Unpaid
+                      </span>
                     ) : (
-                      <StatusPill status={pay} />
+                      <span className="text-[14px] text-ink3">Paid</span>
                     )}
                   </span>
                 </Link>
@@ -176,56 +166,6 @@ export default function HomeScreen() {
           </Card>
         )}
       </section>
-
-      {kpis.lowStock > 0 && (
-        <section className="px-4 pb-4">
-          <Link
-            href="/inventory?filter=low"
-            className="press flex items-center gap-2.5 border-t border-line pt-3"
-          >
-            <TriangleAlert className="size-4 shrink-0 text-warn" />
-            <span className="min-w-0 flex-1 text-[12px] font-medium text-ink2">
-              {kpis.lowStock} item{kpis.lowStock === 1 ? "" : "s"} running low — check stock
-            </span>
-            <ChevronRight className="size-4 shrink-0 text-ink3" />
-          </Link>
-        </section>
-      )}
     </div>
-  );
-}
-
-/** One figure inside the divided block: value first, label second. */
-function StatCell({
-  label,
-  value,
-  href,
-  alert,
-  className,
-}: {
-  label: string;
-  value: number;
-  href: string;
-  alert?: boolean;
-  className?: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={cn(
-        "press flex flex-col items-start gap-0.5 px-3.5 py-3 hover:bg-surface2/50",
-        className,
-      )}
-    >
-      <span className="tabnum text-[18px]/6 font-bold text-ink">{value}</span>
-      <span
-        className={cn(
-          "text-[11px] font-semibold uppercase tracking-[.06em]",
-          alert ? "text-warn" : "text-ink3",
-        )}
-      >
-        {label}
-      </span>
-    </Link>
   );
 }

@@ -1,11 +1,10 @@
 "use client";
 
-import { Card, CardTitle } from "@/components/ui/card";
-import { QuickTile } from "@/components/ui/quicktile";
-import { clearAllImages } from "@/lib/image-store";
+import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
-import { ScreenHeader } from "@/components/shell/screenheader";
+import { clearAllImages } from "@/lib/image-store";
 import { useSettings, usePos } from "@/lib/store";
+import { cn } from "@/lib/ui";
 import {
   ChevronRight,
   Download,
@@ -17,12 +16,10 @@ import {
   Warehouse,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
 export default function MoreScreen() {
-  const router = useRouter();
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
   const [demoOpen, setDemoOpen] = useState(false);
@@ -56,32 +53,67 @@ export default function MoreScreen() {
   }
 
   return (
-    <div className="anim-fade">
-      <ScreenHeader title="More" subtitle={settings.shopName} />
+    <div className="anim-fade px-5 pt-4">
+      <header>
+        <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] text-ink">More</h1>
+        <p className="mt-0.5 text-[15px] text-ink3">{settings.shopName}</p>
+      </header>
 
-      {/* quick tiles */}
-      <section className="px-4 pb-5">
-        <div className="flex gap-2">
-          <QuickTile icon={<PieChart className="size-[22px]" />} label="Reports" onClick={() => router.push("/reports")} tone="accent" />
-          <QuickTile icon={<Warehouse className="size-[22px]" />} label="Stock" onClick={() => router.push("/stock")} tone="warn" />
-          <QuickTile icon={<Users className="size-[22px]" />} label="Customers" onClick={() => router.push("/customers")} tone="violet" />
-          <QuickTile icon={<Store className="size-[22px]" />} label="Categories" onClick={() => router.push("/categories")} tone="info" />
-        </div>
+      {/* browse — nav-adjacent shortcuts */}
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Browse</h2>
+        <Card inset className="mt-2.5">
+          <RowLink
+            href="/reports"
+            tone="accent"
+            icon={<PieChart className="size-[18px]" />}
+            label="Reports"
+            sub="Sales, payments and top products"
+          />
+          <RowLink
+            href="/stock"
+            icon={<Warehouse className="size-[18px]" />}
+            label="Stock"
+            sub="Stock levels and movements"
+          />
+          <RowLink
+            href="/customers"
+            icon={<Users className="size-[18px]" />}
+            label="Customers"
+            sub="Credit and contact details"
+          />
+          <RowLink
+            href="/categories"
+            icon={<Store className="size-[18px]" />}
+            label="Categories"
+            sub="Group your products"
+          />
+        </Card>
       </section>
 
       {/* business */}
-      <section className="px-4 pb-4">
-        <Card inset>
-          <CardTitle>Business</CardTitle>
-          <RowLink href="/settings/shop" icon={<Store className="size-[18px]" />} label="Shop details" sub="Name, address, phone" />
-          <RowLink href="/settings" icon={<Settings className="size-[18px]" />} label="Settings" sub="Theme, receipts, MoMo" />
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <Card inset className="mt-2.5">
+          <RowLink
+            href="/settings/shop"
+            icon={<Store className="size-[18px]" />}
+            label="Shop details"
+            sub="Name, address, phone"
+          />
+          <RowLink
+            href="/settings"
+            icon={<Settings className="size-[18px]" />}
+            label="Settings"
+            sub="Theme, receipts, MoMo"
+          />
         </Card>
       </section>
 
       {/* data */}
-      <section className="px-4 pb-4">
-        <Card inset>
-          <CardTitle>Data</CardTitle>
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Data</h2>
+        <Card inset className="mt-2.5">
           <RowAction
             icon={<Download className="size-[18px]" />}
             label="Export data"
@@ -98,10 +130,10 @@ export default function MoreScreen() {
       </section>
 
       {/* about */}
-      <section className="px-4 pb-36">
-        <p className="text-[12px] font-medium text-ink2">Nova POS 1.0.0</p>
-        <p className="mt-1 text-[12px] leading-5 text-ink3">
-          Built for Ghanaian retail — cedi money, MoMo payments and credit tracking, all stored on this device.
+      <section className="mt-6 pb-6">
+        <p className="text-[14px] leading-6 text-ink3">
+          <span className="font-semibold text-ink">Nova POS 1.0.0</span> — built for Ghanaian
+          retail: cedi money, MoMo payments and credit tracking, all stored on this device.
         </p>
       </section>
 
@@ -122,29 +154,34 @@ export default function MoreScreen() {
   );
 }
 
-
-
 function RowLink({
   href,
   icon,
   label,
   sub,
+  tone = "neutral",
 }: {
   href: string;
   icon: ReactNode;
   label: string;
   sub?: string;
+  tone?: "neutral" | "accent";
 }) {
   return (
-    <Link href={href} className="press flex min-h-[52px] items-center gap-3 px-4 py-3 hover:bg-surface2/50">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink2">
+    <Link href={href} className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-full",
+          tone === "accent" ? "bg-accentsoft text-accent" : "bg-surface2 text-ink2",
+        )}
+      >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold text-ink">{label}</span>
-        {sub && <span className="block text-[12px] leading-4 text-ink3 line-clamp-2">{sub}</span>}
+        <span className="block truncate text-[17px] font-semibold text-ink">{label}</span>
+        {sub && <span className="block truncate text-[14px] text-ink3">{sub}</span>}
       </span>
-      <ChevronRight className="size-4 shrink-0 text-ink4" />
+      <ChevronRight className="size-4 shrink-0 text-ink3" />
     </Link>
   );
 }
@@ -161,13 +198,16 @@ function RowAction({
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className="press flex min-h-[52px] w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface2/50">
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink2">
+    <button
+      onClick={onClick}
+      className="press flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface2/50"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold text-ink">{label}</span>
-        {sub && <span className="block text-[12px] leading-4 text-ink3 line-clamp-2">{sub}</span>}
+        <span className="block truncate text-[17px] font-semibold text-ink">{label}</span>
+        {sub && <span className="block truncate text-[14px] text-ink3">{sub}</span>}
       </span>
     </button>
   );

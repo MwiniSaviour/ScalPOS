@@ -1,23 +1,25 @@
 "use client";
 
+import { IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
-import { ScreenHeader } from "@/components/shell/screenheader";
 import { ProductArt } from "@/components/ui/productart";
 import { Segmented } from "@/components/ui/segmented";
-import { addDays, pctDelta, startOfDay } from "@/lib/format";
+import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
 import { dueOf, usePos } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import { ArrowDownRight, ArrowUpRight, Banknote, CreditCard, Smartphone, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, Smartphone, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
 type Period = "today" | "7d" | "30d";
 const PERIOD_DAYS: Record<Period, number> = { today: 1, "7d": 7, "30d": 30 };
 
 export default function ReportsScreen() {
+  const router = useRouter();
   const orders = usePos((s) => s.orders);
   const products = usePos((s) => s.products);
   const now = useNow();
@@ -120,10 +122,19 @@ export default function ReportsScreen() {
   const maxBars = Math.max(...chart.map((b) => b.sum), 1);
 
   return (
-    <div className="anim-fade">
-      <ScreenHeader title="Reports" onBack />
+    <div className="anim-fade px-5 pt-4">
+      <header className="flex items-center gap-1">
+        <IconButton label="Back" onClick={() => router.back()} className="-ml-2 shrink-0 text-ink">
+          <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
+        </IconButton>
+        <h1 className="min-w-0 flex-1 truncate text-[26px]/7 font-bold tracking-[-0.02em] text-ink">
+          Reports
+        </h1>
+      </header>
+      <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
 
-      <section className="px-4">
+      {/* period filter */}
+      <div className="mt-5">
         <Segmented
           value={period}
           onChange={setPeriod}
@@ -133,28 +144,28 @@ export default function ReportsScreen() {
             { value: "30d", label: "30 days" },
           ]}
         />
-      </section>
+      </div>
 
       {/* hero */}
-      <section className="px-4 pt-3">
+      <section className="mt-6">
         <Card className="p-4">
-          <div className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+          <div className="text-[15px] font-medium text-ink2">
             Sales · {period === "today" ? "Today" : `Last ${periodInfo.days} days`}
           </div>
           <div className="mt-1 flex items-end justify-between gap-2">
             <span className="tabnum text-[30px]/8 font-extrabold tracking-[-0.03em] text-ink">
               {fmtMoney(hero.sales)}
             </span>
-            <span className="pb-2 text-[12px] text-ink3">{hero.txns} transactions</span>
+            <span className="pb-2 text-[14px] text-ink3">{hero.txns} transactions</span>
           </div>
           {!delta.flat && hero.prev > 0 && (
             <div
               className={cn(
-                "mt-0.5 flex items-center gap-1 text-[12px] font-semibold",
+                "mt-0.5 flex items-center gap-1 text-[14px] font-semibold",
                 delta.up ? "text-accent" : "text-danger",
               )}
             >
-              {delta.up ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
+              {delta.up ? <ArrowUpRight className="size-4" /> : <ArrowDownRight className="size-4" />}
               {delta.text}
               <span className="font-normal text-ink3">vs {fmtMoney(hero.prev)} before</span>
             </div>
@@ -163,10 +174,10 @@ export default function ReportsScreen() {
       </section>
 
       {/* bar chart */}
-      <section className="px-4 pt-4">
+      <section className="mt-6">
         <Card className="p-4">
-          <div className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Daily sales</div>
-          <div className="mt-3 flex h-28 items-end gap-1 border-b border-line2 pb-px">
+          <div className="text-[15px] font-medium text-ink2">Daily sales</div>
+          <div className="mt-3 flex h-28 items-end gap-1 border-b border-line pb-px">
             {chart.map((b, i) => (
               <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
                 <div className="relative mx-auto h-full w-full max-w-7">
@@ -182,7 +193,7 @@ export default function ReportsScreen() {
               </div>
             ))}
           </div>
-          <div className="mt-1.5 flex gap-1 text-center text-[11px] text-ink3">
+          <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
             {chart.map((b, i) => (
               <span key={i} className="min-w-0 flex-1 truncate">
                 {b.label}
@@ -193,9 +204,9 @@ export default function ReportsScreen() {
       </section>
 
       {/* payment mix */}
-      <section className="px-4 pt-4">
+      <section className="mt-6">
         <Card className="p-4">
-          <div className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">Payment mix</div>
+          <div className="text-[15px] font-medium text-ink2">Payment mix</div>
           {mix.total > 0 ? (
             <>
               <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-[var(--chart-track)]">
@@ -211,7 +222,7 @@ export default function ReportsScreen() {
               </div>
               <div className="mt-3 space-y-2">
                 {mix.rows.map((r) => (
-                  <div key={r.key} className="flex items-center gap-2.5 text-[13px]">
+                  <div key={r.key} className="flex items-center gap-2.5 text-[14px]">
                     <span className={cn("size-2.5 shrink-0 rounded-[4px]", mixBg[r.key])} />
                     <MixIcon method={r.key} />
                     <span className="min-w-0 flex-1 text-ink2">{r.label}</span>
@@ -222,17 +233,17 @@ export default function ReportsScreen() {
               </div>
             </>
           ) : (
-            <p className="mt-3 text-[13px] text-ink3">No payments collected in this period.</p>
+            <p className="mt-3 text-[14px] text-ink3">No payments collected in this period.</p>
           )}
         </Card>
       </section>
 
       {/* top products */}
-      <section className="px-4 pt-4">
+      <section className="mt-6">
         <Card inset>
-          <div className="flex items-center justify-between border-b border-line px-4 pb-2 pt-3.5">
-            <h3 className="text-[13px] font-semibold uppercase tracking-[.07em] text-ink3">Top products</h3>
-            <span className="text-[12px] text-ink3">by revenue</span>
+          <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
+            <h3 className="text-[15px] font-medium text-ink2">Top products</h3>
+            <span className="text-[14px] text-ink3">by revenue</span>
           </div>
           {top.rows.length === 0 ? (
             <EmptyState
@@ -243,12 +254,14 @@ export default function ReportsScreen() {
           ) : (
             top.rows.map((r, i) => (
               <div key={r.name} className="flex items-center gap-3 px-4 py-3">
-                <span className="tabnum w-6 shrink-0 text-center text-[13px] font-bold text-ink3">
+                <span className="tabnum w-6 shrink-0 text-center text-[14px] font-bold text-ink3">
                   {i + 1}
                 </span>
                 <ProductArt imageUrl={r.imageUrl} name={r.name} className="size-10 shrink-0 rounded-xl" />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-ink">{r.name}</span>
+                  <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
+                    {r.name}
+                  </span>
                   <span className="mt-1 block h-1 overflow-hidden rounded-full bg-[var(--chart-track)]">
                     <span
                       className="block h-full rounded-full bg-accent"
@@ -257,8 +270,8 @@ export default function ReportsScreen() {
                   </span>
                 </span>
                 <span className="flex shrink-0 flex-col items-end">
-                  <span className="tabnum text-[14px] font-bold text-ink">{fmtMoney(r.revenue)}</span>
-                  <span className="tabnum text-[11px] text-ink3">{r.qty} sold</span>
+                  <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(r.revenue)}</span>
+                  <span className="tabnum text-[14px] text-ink3">{r.qty} sold</span>
                 </span>
               </div>
             ))
@@ -268,28 +281,26 @@ export default function ReportsScreen() {
 
       {/* low stock */}
       {lowStock.length > 0 && (
-        <section className="px-4 pt-4 pb-4">
+        <section className="mt-6 pb-6">
           <Card inset>
-            <div className="flex items-center gap-2 border-b border-line px-4 pb-2 pt-3.5">
+            <div className="flex items-center gap-2 px-4 pb-1 pt-3.5">
               <TriangleAlert className="size-4 text-warn" />
-              <h3 className="text-[13px] font-semibold uppercase tracking-[.07em] text-ink3">
-                Low stock · {lowStock.length}
-              </h3>
+              <h3 className="text-[15px] font-medium text-ink2">Low stock · {lowStock.length}</h3>
             </div>
             {lowStock.map((p) => (
               <Link
                 key={p.id}
                 href={`/inventory/detail?id=${p.id}`}
-                className="press flex items-center gap-3 px-4 py-2.5 hover:bg-surface2/50"
+                className="press flex items-center gap-3 px-4 py-3 hover:bg-surface2/50"
               >
-                <ProductArt imageUrl={p.imageUrl} name={p.name} className="size-9 shrink-0 rounded-xl" />
-                <span className="min-w-0 flex-1 truncate text-[14px] font-medium text-ink">{p.name}</span>
+                <ProductArt imageUrl={p.imageUrl} name={p.name} className="size-10 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-ink">{p.name}</span>
                 {p.stock <= 0 ? (
-                  <span className="shrink-0 rounded-full bg-ink2/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[.04em] text-ink2">
+                  <span className="shrink-0 rounded-full bg-ink2/10 px-2.5 py-1 text-[12px] font-semibold text-ink2">
                     Out
                   </span>
                 ) : (
-                  <span className="tabnum shrink-0 rounded-full bg-warn/10 px-2.5 py-1 text-[11px] font-bold text-warn">
+                  <span className="tabnum shrink-0 rounded-full bg-warn/10 px-2.5 py-1 text-[12px] font-bold text-warn">
                     {p.stock} left
                   </span>
                 )}

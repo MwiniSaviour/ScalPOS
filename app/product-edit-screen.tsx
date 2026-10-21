@@ -74,7 +74,7 @@ export default function ProductEditScreen() {
     return (
       <div className="anim-fade">
         <ScreenHeader title="Product" onBack />
-        <section className="px-4 pt-2">
+        <section className="px-5 pt-4">
           <EmptyState
             icon={<Package className="size-7" />}
             title="Product not found"
@@ -152,9 +152,9 @@ export default function ProductEditScreen() {
     <div className="anim-fade">
       <ScreenHeader title={isNew ? "New product" : "Edit product"} onBack={() => router.back()} />
 
-      <section className="px-4 pt-2 pb-28">
+      <section className="px-5 pt-4 pb-28">
         <Card className="p-4">
-          <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Photo</p>
+          <p className="text-[15px] font-medium text-ink2">Photo</p>
           <div className="mt-3 flex items-center gap-3.5">
             <ProductArt imageUrl={imageUrl} name={name} className="size-20 shrink-0 rounded-xl" />
             <div className="min-w-0 flex-1">
@@ -234,7 +234,7 @@ export default function ProductEditScreen() {
         </Card>
 
         <Card className="mt-2.5 p-4">
-          <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Basics</p>
+          <p className="text-[15px] font-medium text-ink2">Basics</p>
           <div className="mt-2.5">
             <Input
               label="Name"
@@ -265,7 +265,7 @@ export default function ProductEditScreen() {
         </Card>
 
         <Card className="mt-2.5 p-4">
-          <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Pricing · ₵</p>
+          <p className="text-[15px] font-medium text-ink2">Pricing · ₵</p>
           <div className="mt-2.5 grid grid-cols-2 gap-2.5">
             <Input
               label="Cost price"
@@ -318,7 +318,7 @@ export default function ProductEditScreen() {
         </Card>
 
         <Card className="mt-2.5 p-4">
-          <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">Stock</p>
+          <p className="text-[15px] font-medium text-ink2">Stock</p>
           <div className="mt-2.5 grid grid-cols-2 gap-2.5">
             <Input
               label={editing ? "Stock on hand" : "Opening stock"}
@@ -343,7 +343,7 @@ export default function ProductEditScreen() {
         </Card>
 
         <Card className="mt-2.5 p-4">
-          <p className="flex items-center gap-1.5 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+          <p className="flex items-center gap-1.5 text-[15px] font-medium text-ink2">
             <Barcode className="size-4" /> Barcode &amp; SKU
           </p>
           <div className="mt-2.5">
@@ -359,7 +359,7 @@ export default function ProductEditScreen() {
                   className="size-8 text-ink2 hover:bg-surface3"
                   onClick={() => setBarcode(`GD${String(Date.now()).slice(-7)}`)}
                 >
-                  <span className="text-[11px] font-bold uppercase tracking-[.04em]">Gen</span>
+                  <span className="text-[12px] font-semibold">Gen</span>
                 </IconButton>
               }
             />

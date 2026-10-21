@@ -57,7 +57,7 @@ export default function CustomerDetailScreen() {
     return (
       <div className="anim-fade">
         <ScreenHeader title="Customer" onBack />
-        <section className="px-4">
+        <section className="px-5 pt-4">
           <EmptyState
             icon={<Users className="size-7" />}
             title="Customer not found"
@@ -126,21 +126,21 @@ export default function CustomerDetailScreen() {
       />
 
       {/* profile */}
-      <section className="px-4 pt-1 pb-3">
+      <section className="px-5 pt-4">
         <Card className="p-4">
           <div className="flex items-center gap-3.5">
             <Avatar name={customer.name} size={56} />
             <div className="min-w-0">
               <div className="text-[17px] font-bold break-words text-ink">{customer.name}</div>
-              <div className="tabnum text-[13px] text-ink2">{customer.phone || "No phone"}</div>
+              <div className="mt-0.5 text-[14px] text-ink3">{customer.phone || "No phone"}</div>
             </div>
           </div>
-          <div className="mt-3.5 space-y-1.5 border-t border-line pt-3.5 text-[13px]">
-            <div className="flex gap-2">
+          <div className="mt-3.5 space-y-1.5 border-t border-line pt-3.5 text-[14px]">
+            <div className="flex gap-3">
               <span className="w-16 shrink-0 text-ink3">Address</span>
               <span className="min-w-0 flex-1 text-ink2">{customer.address || "—"}</span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <span className="w-16 shrink-0 text-ink3">Note</span>
               <span className="min-w-0 flex-1 text-ink2">{customer.note || "—"}</span>
             </div>
@@ -149,7 +149,7 @@ export default function CustomerDetailScreen() {
       </section>
 
       {/* KPIs — one divided block, no per-cell cards */}
-      <section className="px-4">
+      <section className="mt-5 px-5">
         <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-line2 bg-surface">
           <StatCell label="Orders" value={String(stats.count)} className="border-r border-line" />
           <StatCell label="Spent" value={fmtMoney(stats.spent)} className="border-r border-line" />
@@ -158,39 +158,39 @@ export default function CustomerDetailScreen() {
       </section>
 
       {/* purchase history */}
-      <section className="px-4 pt-5 pb-28">
-        <h2 className="mb-2.5 text-[13px] font-semibold uppercase tracking-[.08em] text-ink3">
-          Purchase history
-        </h2>
+      <section className="mt-6 px-5 pb-28">
+        <h2 className="text-[15px] font-medium text-ink2">Purchase history</h2>
         {custOrders.length === 0 ? (
-          <EmptyState
-            icon={<Receipt className="size-7" />}
-            title="No purchases yet"
-            hint="Orders linked to this customer will show up here."
-            action={<Button onClick={() => router.push("/sell")}>Start a sale</Button>}
-          />
+          <Card className="mt-2.5">
+            <EmptyState
+              icon={<Receipt className="size-7" />}
+              title="No purchases yet"
+              hint="Orders linked to this customer will show up here."
+              action={<Button onClick={() => router.push("/sell")}>Start a sale</Button>}
+            />
+          </Card>
         ) : (
-          <Card inset>
+          <Card inset className="mt-2.5">
             {custOrders.map((o) => {
               const due = dueOf(o);
               const pay = payStatusOf(o);
               return (
                 <div key={o.id} className="flex items-center gap-3 px-4 py-3.5">
                   <Link href={`/orders/detail?id=${o.id}`} className="press flex min-w-0 flex-1 items-center gap-3">
-                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet/10 text-violet">
                       <Receipt className="size-[17px]" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold text-ink">
+                      <span className="block truncate text-[15px] font-semibold text-ink">
                         #{o.id.slice(-4)}
                       </span>
-                      <span className="block text-[12px] text-ink3">{timeAgo(o.createdAt, now)}</span>
+                      <span className="mt-0.5 block truncate text-[14px] text-ink3">{timeAgo(o.createdAt, now)}</span>
                     </span>
                   </Link>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(o.total)}</span>
                     {pay === "paid" ? (
-                      <span className="text-[11px] font-medium text-ink3">Paid</span>
+                      <span className="text-[14px] text-ink3">Paid</span>
                     ) : (
                       <StatusPill status={pay} />
                     )}
@@ -244,7 +244,7 @@ export default function CustomerDetailScreen() {
         {payTarget && (
           <div className="pb-3">
             <div className="flex items-baseline justify-between">
-              <span className="text-[12px] font-medium uppercase tracking-[.06em] text-ink3">Amount</span>
+              <span className="text-[13px] font-medium text-ink2">Amount</span>
               <span className="text-[12px] text-ink3">
                 Due <span className="tabnum font-semibold text-ink2">{fmtMoney(payTarget.due)}</span>
               </span>
@@ -292,15 +292,8 @@ function StatCell({
 }) {
   return (
     <div className={cn("flex flex-col items-start gap-0.5 px-3.5 py-3", className)}>
-      <span className={cn("tabnum text-[16px]/6 font-bold", alert ? "text-danger" : "text-ink")}>{value}</span>
-      <span
-        className={cn(
-          "text-[11px] font-semibold uppercase tracking-[.06em]",
-          alert ? "text-danger" : "text-ink3",
-        )}
-      >
-        {label}
-      </span>
+      <span className={cn("tabnum text-[16px]/6 font-bold", alert ? "text-warn" : "text-ink")}>{value}</span>
+      <span className={cn("text-[12px] text-ink3", alert && "text-warn font-medium")}>{label}</span>
     </div>
   );
 }

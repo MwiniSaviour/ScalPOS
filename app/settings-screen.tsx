@@ -1,13 +1,12 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ReceiptPreview } from "@/components/receipt/receipt-preview";
-import { ScreenHeader } from "@/components/shell/screenheader";
 import { Segmented } from "@/components/ui/segmented";
 import { useSettings, usePos } from "@/lib/store";
-import { ChevronRight, Lock, Moon, Percent, Smartphone, Store, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, Lock, Moon, Store, Sun } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -24,68 +23,75 @@ export default function SettingsScreen() {
   const toast = usePos((s) => s.toast);
 
   return (
-    <div className="anim-fade">
-      <ScreenHeader title="Settings" onBack />
+    <div className="anim-fade px-5 pt-4">
+      <header className="flex items-center gap-1">
+        <IconButton label="Back" onClick={() => router.back()} className="-ml-2 shrink-0 text-ink">
+          <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
+        </IconButton>
+        <h1 className="min-w-0 flex-1 truncate text-[26px]/7 font-bold tracking-[-0.02em] text-ink">
+          Settings
+        </h1>
+      </header>
+      <p className="mt-0.5 text-[15px] text-ink3">{settings.shopName}</p>
 
       {/* appearance */}
-      <section className="px-4 pb-4">
-        <Card inset>
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Appearance</h2>
+        <Card className="mt-2.5 px-4 py-3.5">
           <ThemeRows theme={settings.theme} onChange={(theme) => updateSettings({ theme })} />
         </Card>
       </section>
 
       {/* business */}
-      <section className="px-4 pb-4">
-        <Card inset>
-          <Link href="/settings/shop" className="press flex min-h-[52px] items-center gap-3 px-4 py-3 hover:bg-surface2/50">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink2">
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <Card inset className="mt-2.5">
+          <Link
+            href="/settings/shop"
+            className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
               <Store className="size-[18px]" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[14px] font-semibold text-ink">Shop details</span>
-              <span className="block truncate text-[12px] text-ink3">
+              <span className="block text-[17px] font-semibold text-ink">Shop details</span>
+              <span className="block truncate text-[14px] text-ink3">
                 {settings.shopName} · {settings.phone || "No phone"}
               </span>
             </span>
-            <ChevronRight className="size-4 shrink-0 text-ink4" />
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
           </Link>
         </Card>
       </section>
 
       {/* receipt — read-only echo, edited in Shop details */}
-      <section className="px-4 pb-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between gap-3 pb-3">
-            <div className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">Receipt</div>
-            <Link
-              href="/settings/shop"
-              className="press inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 text-[13px] font-semibold text-accent hover:bg-surface2"
-            >
-              Edit
-              <ChevronRight className="size-4" />
-            </Link>
-          </div>
+      <section className="mt-6">
+        <div className="flex items-baseline justify-between gap-2">
+          <h2 className="text-[15px] font-medium text-ink2">Receipt</h2>
+          <Link
+            href="/settings/shop"
+            className="press whitespace-nowrap text-[15px] font-medium text-accent"
+          >
+            Edit
+          </Link>
+        </div>
+        <Card className="mt-2.5 p-4">
           <ReceiptPreview
             shopName={settings.shopName}
             address={settings.address}
             phone={settings.phone}
             footer={settings.receiptFooter}
           />
-          <p className="mt-2.5 text-[12px] leading-5 text-ink3">
+          <p className="mt-2.5 text-[14px] leading-5 text-ink3">
             Shop name, contact details and the receipt footer are edited under Shop details.
           </p>
         </Card>
       </section>
 
       {/* payments */}
-      <section className="px-4 pb-4">
-        <Card className="p-4">
-          <div className="flex items-center gap-2.5 pb-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-accent/10 text-accent">
-              <Smartphone className="size-[18px]" />
-            </span>
-            <div className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">MoMo payments</div>
-          </div>
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">MoMo payments</h2>
+        <Card className="mt-2.5 p-4">
           <Input
             label="Merchant MoMo number"
             value={settings.momoNumber}
@@ -94,7 +100,7 @@ export default function SettingsScreen() {
             inputMode="tel"
           />
           <div className="mt-3">
-            <div className="mb-1.5 text-[13px] font-medium text-ink2">Network</div>
+            <div className="mb-1.5 text-[14px] font-medium text-ink2">Network</div>
             <Segmented
               value={NETWORKS.find((n) => settings.momoNetwork.startsWith(n)) ?? "MTN"}
               onChange={(network) => updateSettings({ momoNetwork: network })}
@@ -105,29 +111,34 @@ export default function SettingsScreen() {
               ]}
             />
           </div>
-          <p className="mt-2.5 text-[12px] leading-5 text-ink3">
-            Customers can transfer to this number with *170# — you&apos;ll get an SMS to confirm before serving.
+          <p className="mt-2.5 text-[14px] leading-5 text-ink3">
+            Customers can transfer to this number with *170# — you&apos;ll get an SMS to confirm
+            before serving.
           </p>
         </Card>
       </section>
 
       {/* tax */}
-      <section className="px-4 pb-4">
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Tax</h2>
         <TaxCard />
       </section>
 
       {/* currency */}
-      <section className="px-4 pb-28">
-        <Card inset>
-          <div className="flex min-h-[52px] items-center gap-3 px-4 py-3">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-gold/10 text-gold">
+      <section className="mt-6 pb-32">
+        <h2 className="text-[15px] font-medium text-ink2">Currency</h2>
+        <Card inset className="mt-2.5">
+          <div className="flex items-center gap-3 px-4 py-3.5">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
               <Lock className="size-[18px]" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[14px] font-semibold text-ink">Currency</span>
-              <span className="block text-[12px] text-ink3">GHS — Ghana Cedi ₵ built in, not changeable</span>
+              <span className="block text-[17px] font-semibold text-ink">Currency</span>
+              <span className="block text-[14px] text-ink3">
+                GHS — Ghana Cedi ₵ built in, not changeable
+              </span>
             </span>
-            <Lock className="size-4 shrink-0 text-ink4" />
+            <Lock className="size-4 shrink-0 text-ink3" />
           </div>
         </Card>
       </section>
@@ -155,16 +166,14 @@ export default function SettingsScreen() {
 
 function ThemeRows({ theme, onChange }: { theme: "dark" | "light"; onChange: (t: "dark" | "light") => void }) {
   return (
-    <div className="px-4 py-3.5">
-      <div className="flex min-h-[44px] items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-ink2/10 text-ink2">
-            {theme === "dark" ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
-          </span>
-          <div>
-            <div className="text-[14px] font-semibold text-ink">Appearance</div>
-            <div className="text-[12px] text-ink3">Applies instantly across the app</div>
-          </div>
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+          {theme === "dark" ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[17px] font-semibold text-ink">Appearance</div>
+          <div className="text-[14px] text-ink3">Applies instantly across the app</div>
         </div>
       </div>
       <Segmented
@@ -215,13 +224,7 @@ function TaxCard() {
   };
 
   return (
-    <Card className="p-4">
-      <div className="flex items-center gap-2.5 pb-3">
-        <span className="flex size-9 items-center justify-center rounded-xl bg-gold/10 text-gold">
-          <Percent className="size-[18px]" />
-        </span>
-        <div className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">Tax</div>
-      </div>
+    <Card className="mt-2.5 p-4">
       <Segmented
         value={taxOn ? "on" : "off"}
         onChange={(v) => setOn(v === "on")}
@@ -248,7 +251,7 @@ function TaxCard() {
                 : "0% means no tax is charged."
             }
           />
-          <div className="mb-1.5 mt-3 text-[13px] font-medium text-ink2">Tax applies</div>
+          <div className="mb-1.5 mt-3 text-[14px] font-medium text-ink2">Tax applies</div>
           <Segmented
             value={settings.taxInclusive ? "incl" : "excl"}
             onChange={(v) => updateSettings({ taxInclusive: v === "incl" })}
@@ -257,7 +260,7 @@ function TaxCard() {
               { value: "incl", label: "Already in price" },
             ]}
           />
-          <p className="mt-2.5 text-[12px] leading-5 text-ink3">
+          <p className="mt-2.5 text-[14px] leading-5 text-ink3">
             {settings.taxInclusive
               ? "Prices already include tax — it is printed on the receipt but never added again."
               : "Tax is added on top of the subtotal after discount and is charged at checkout."}
@@ -265,7 +268,7 @@ function TaxCard() {
         </>
       )}
       {!taxOn && (
-        <p className="mt-2.5 text-[12px] leading-5 text-ink3">
+        <p className="mt-2.5 text-[14px] leading-5 text-ink3">
           No tax is charged. Totals are exactly the subtotal after discount.
         </p>
       )}

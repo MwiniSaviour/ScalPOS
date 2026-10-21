@@ -1,6 +1,5 @@
 "use client";
 
-import { ScreenHeader } from "@/components/shell/screenheader";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -15,6 +14,7 @@ import { useCartTotals, usePos } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
   BadgePercent,
+  ChevronLeft,
   ChevronRight,
   CircleCheck,
   Minus,
@@ -97,21 +97,28 @@ export default function SellScreen() {
 
   return (
     <div className="anim-fade">
-      <ScreenHeader
-        largeTitle
-        title="New sale"
-        onBack={() => (window.history.length > 1 ? router.back() : router.push("/"))}
-        right={
+      <header className="sticky top-0 z-40 border-b border-line2 bg-bg">
+        <div className="safe-t" />
+        <div className="flex h-14 items-center gap-2 px-2">
+          <IconButton
+            label="Back"
+            onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+          >
+            <ChevronLeft className="size-[22px] text-ink" strokeWidth={2.2} />
+          </IconButton>
+          <h1 className="min-w-0 flex-1 truncate text-[26px] font-bold tracking-[-0.02em] text-ink">
+            Sell
+          </h1>
           <IconButton label="Customers" onClick={() => setCustOpen(true)}>
             <Users className="size-[19px]" />
           </IconButton>
-        }
-      />
+        </div>
+      </header>
 
-      <div className="px-4 pt-1 pb-32">
+      <div className="px-5 pt-4 pb-32">
         <SearchBar value={query} onChange={setQuery} placeholder="Search products…" />
 
-        <div className="edge-fade no-scrollbar -mx-4 mt-2.5 overflow-x-auto px-4">
+        <div className="edge-fade no-scrollbar -mx-5 mt-2.5 overflow-x-auto px-5">
           <div className="flex w-max gap-1.5">
             <Chip active={catId === null} onClick={() => setCatId(null)}>
               All
@@ -130,7 +137,7 @@ export default function SellScreen() {
           </div>
         </div>
 
-        <div className="mt-3">
+        <div className="mt-4">
           {products.length === 0 ? (
             <EmptyState
               icon={<PackageOpen className="size-7" />}
@@ -171,7 +178,7 @@ export default function SellScreen() {
               <span className="tabnum min-w-0 truncate text-[17px] font-bold text-ink">
                 {fmtMoney(totals.total)}
               </span>
-              <span className="shrink-0 text-[12px] text-ink3">
+              <span className="shrink-0 text-[14px] text-ink3">
                 {totals.count} item{totals.count === 1 ? "" : "s"}
               </span>
             </button>
@@ -203,39 +210,37 @@ export default function SellScreen() {
       >
         <Card inset>
           {totals.lines.map((l) => (
-            <div key={l.productId} className="flex items-center gap-3 px-4 py-3">
+            <div key={l.productId} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
               <ProductArt
                 imageUrl={l.product.imageUrl}
                 name={l.product.name}
                 className="size-10 shrink-0 rounded-xl"
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[14px] font-semibold text-ink">
+                <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
                   {l.product.name}
                 </span>
-                <span className="mt-1 flex items-center gap-1.5">
-                  <StepBtn
-                    label="Decrease quantity"
-                    onClick={() => setCartQty(l.productId, l.qty - 1)}
-                  >
-                    <Minus className="size-3.5" />
-                  </StepBtn>
-                  <span className="tabnum w-6 text-center text-[14px] font-semibold text-ink">
-                    {l.qty}
-                  </span>
-                  <StepBtn
-                    label="Increase quantity"
-                    disabled={l.qty >= l.product.stock}
-                    onClick={() => addToCart(l.productId, 1)}
-                  >
-                    <Plus className="size-3.5" />
-                  </StepBtn>
+                <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
+                  {fmtMoney(l.product.price)} each
                 </span>
               </span>
-              <span className="flex flex-col items-end gap-1.5">
-                <span className="tabnum text-[15px] font-bold text-ink">
-                  {fmtMoney(l.product.price * l.qty)}
+              <span className="flex items-center gap-1.5">
+                <StepBtn
+                  label="Decrease quantity"
+                  onClick={() => setCartQty(l.productId, l.qty - 1)}
+                >
+                  <Minus className="size-3.5" />
+                </StepBtn>
+                <span className="tabnum w-6 text-center text-[15px] font-bold text-ink">
+                  {l.qty}
                 </span>
+                <StepBtn
+                  label="Increase quantity"
+                  disabled={l.qty >= l.product.stock}
+                  onClick={() => addToCart(l.productId, 1)}
+                >
+                  <Plus className="size-3.5" />
+                </StepBtn>
                 <IconButton
                   label="Remove line"
                   onClick={() => setCartQty(l.productId, 0)}
@@ -248,12 +253,12 @@ export default function SellScreen() {
         </Card>
 
         <Card inset className="mt-2.5">
-          <div className="px-4 py-3">
+          <div className="px-4 py-3.5">
             <button onClick={openDiscount} className="press flex w-full items-center gap-3">
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accentsoft text-accent">
                 <BadgePercent className="size-[18px]" />
               </span>
-              <span className="flex-1 text-left text-[14px] font-semibold text-ink">
+              <span className="min-w-0 flex-1 text-left text-[17px] font-semibold text-ink">
                 {totals.discount > 0 ? "Discount" : "Add discount"}
               </span>
               {totals.discount > 0 && (
@@ -294,20 +299,20 @@ export default function SellScreen() {
               </div>
             )}
           </div>
-          <div className="px-4 py-3">
+          <div className="px-4 py-3.5">
             <button onClick={() => setCustOpen(true)} className="press flex w-full items-center gap-3">
               {activeCustomer ? (
                 <Avatar name={activeCustomer.name} size={36} />
               ) : (
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-violet/10 text-violet">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet/10 text-violet">
                   <Users className="size-[18px]" />
                 </span>
               )}
               <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-[14px] font-semibold text-ink">
+                <span className="block truncate text-[17px] font-semibold text-ink">
                   {activeCustomer ? activeCustomer.name : "Attach customer"}
                 </span>
-                <span className="block truncate text-[12px] text-ink3">
+                <span className="block truncate text-[14px] text-ink3">
                   {activeCustomer ? activeCustomer.phone || "Walk-in" : "Walk-in — no customer"}
                 </span>
               </span>
@@ -316,7 +321,7 @@ export default function SellScreen() {
           </div>
         </Card>
 
-        <div className="mt-3 space-y-1.5 px-1 pb-2 text-[13px]">
+        <div className="mt-3 space-y-1.5 px-1 pb-2 text-[15px]">
           <div className="flex justify-between text-ink2">
             <span>Subtotal</span>
             <span className="tabnum">{fmtMoney(totals.subtotal)}</span>
@@ -350,14 +355,14 @@ export default function SellScreen() {
         <Card inset className="mt-3">
           <button
             onClick={() => pick(null)}
-            className="press flex w-full items-center gap-3 px-4 py-3 hover:bg-surface2/50"
+            className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
           >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink3">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
               <Users className="size-[18px]" />
             </span>
             <span className="min-w-0 flex-1 text-left">
-              <span className="block text-[14px] font-semibold text-ink">Walk-in</span>
-              <span className="block text-[12px] text-ink3">No customer attached</span>
+              <span className="block text-[17px] font-semibold text-ink">Walk-in</span>
+              <span className="block text-[14px] text-ink3">No customer attached</span>
             </span>
             {cartCustomerId === null && <CircleCheck className="size-5 shrink-0 text-accent" />}
           </button>
@@ -365,18 +370,18 @@ export default function SellScreen() {
             <button
               key={c.id}
               onClick={() => pick(c.id)}
-              className="press flex w-full items-center gap-3 px-4 py-3 hover:bg-surface2/50"
+              className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
             >
               <Avatar name={c.name} size={36} />
               <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-[14px] font-semibold text-ink">{c.name}</span>
-                <span className="block text-[12px] text-ink3">{c.phone || "No phone"}</span>
+                <span className="block truncate text-[17px] font-semibold text-ink">{c.name}</span>
+                <span className="block truncate text-[14px] text-ink3">{c.phone || "No phone"}</span>
               </span>
               {cartCustomerId === c.id && <CircleCheck className="size-5 shrink-0 text-accent" />}
             </button>
           ))}
           {custFiltered.length === 0 && (
-            <p className="px-4 py-6 text-center text-[13px] text-ink3">No customer matches.</p>
+            <p className="px-4 py-6 text-center text-[14px] text-ink3">No customer matches.</p>
           )}
         </Card>
       </Sheet>
@@ -416,7 +421,7 @@ function ProductTile({
       disabled={out}
       className={cn(
         "press flex items-start gap-2.5 rounded-2xl border p-2.5 text-left",
-        flash ? "border-accent bg-accent/12" : "border-line bg-surface",
+        flash ? "border-accent bg-accent/10" : "border-line bg-surface hover:bg-surface2/50",
       )}
     >
       <ProductArt
@@ -425,15 +430,15 @@ function ProductTile({
         className={cn("size-12 shrink-0 rounded-xl", out && "opacity-50")}
       />
       <span className="min-w-0 flex-1">
-        <span className="block min-h-[32px] line-clamp-2 text-[13px] font-semibold leading-tight text-ink">
+        <span className="block min-h-[32px] line-clamp-2 text-[14px] font-semibold leading-tight text-ink">
           {p.name}
         </span>
         <span className="tabnum mt-1 block text-[15px] font-bold text-ink">{fmtMoney(p.price)}</span>
         <span className="mt-1 flex h-[16px] items-center">
           {out ? (
-            <span className="text-[11px] font-medium text-ink3">Out of stock</span>
+            <span className="text-[12px] font-medium text-ink3">Out of stock</span>
           ) : low ? (
-            <span className="text-[11px] font-medium text-warn">{p.stock} left</span>
+            <span className="text-[12px] font-medium text-warn">{p.stock} left</span>
           ) : null}
         </span>
       </span>

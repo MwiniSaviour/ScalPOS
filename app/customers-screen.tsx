@@ -4,9 +4,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
-import { Input, TextArea } from "@/components/ui/input";
-import { ScreenHeader } from "@/components/shell/screenheader";
-import { SearchBar } from "@/components/ui/input";
+import { Input, SearchBar, TextArea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { dueOf, usePos } from "@/lib/store";
 import { fmtMoneyCompact } from "@/lib/money";
@@ -40,51 +38,57 @@ export default function CustomersScreen() {
   }, [customers, query]);
 
   return (
-    <div className="anim-fade">
-      <ScreenHeader title="Customers" subtitle={`${customers.length} saved`} />
+    <div className="anim-fade px-5 pt-4">
+      {/* header — page title, count */}
+      <header>
+        <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] text-ink">Customers</h1>
+        <p className="mt-0.5 text-[15px] text-ink3">{customers.length} saved</p>
+      </header>
 
-      <section className="px-4 pb-2">
+      <section className="mt-4">
         <SearchBar value={query} onChange={setQuery} placeholder="Search name or phone" />
       </section>
 
       {filtered.length === 0 ? (
-        <section className="px-4 pb-28">
-          <EmptyState
-            icon={<Users className="size-7" />}
-            title={query ? "No matches" : "No customers yet"}
-            hint={
-              query
-                ? "Try another name or phone number."
-                : "Save regulars here so credit sales and dues stay tracked."
-            }
-            action={<Button onClick={() => setAddOpen(true)} icon={<Plus className="size-4" />}>Add customer</Button>}
-          />
+        <section className="mt-6 pb-28">
+          <Card>
+            <EmptyState
+              icon={<Users className="size-7" />}
+              title={query ? "No matches" : "No customers yet"}
+              hint={
+                query
+                  ? "Try another name or phone number."
+                  : "Save regulars here so credit sales and dues stay tracked."
+              }
+              action={<Button onClick={() => setAddOpen(true)} icon={<Plus className="size-4" />}>Add customer</Button>}
+            />
+          </Card>
         </section>
       ) : (
-        <Card inset className="mx-4 mb-28">
+        <Card inset className="mt-6 mb-28">
           {filtered.map((c) => {
             const due = dueByCustomer.get(c.id) ?? 0;
             return (
               <Link
                 key={c.id}
                 href={`/customers/detail?id=${c.id}`}
-                className="press flex min-h-[64px] items-center gap-3 px-4 py-3 hover:bg-surface2/50"
+                className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
               >
-                <Avatar name={c.name} size={40} />
+                <Avatar name={c.name} size={36} />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold leading-snug break-words text-ink">
+                  <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
                     {c.name}
                   </span>
-                  <span className="tabnum block truncate text-[12px] text-ink3">{c.phone || "No phone"}</span>
+                  <span className="mt-1 block truncate text-[14px] text-ink3">{c.phone || "No phone"}</span>
                 </span>
                 {due > 0 ? (
-                  <span className="tabnum shrink-0 rounded-full bg-danger/10 px-2.5 py-1 text-[12px] font-bold text-danger">
+                  <span className="tabnum shrink-0 text-[14px] font-bold text-warn">
                     {fmtMoneyCompact(due)} due
                   </span>
                 ) : (
-                  <span className="shrink-0 text-[12px] font-medium text-ink3">Clear</span>
+                  <span className="tabnum shrink-0 text-[14px] font-bold text-ink3">Clear</span>
                 )}
-                <ChevronRight className="size-4 shrink-0 text-ink4" />
+                <ChevronRight className="size-4 shrink-0 text-ink3" />
               </Link>
             );
           })}
@@ -92,12 +96,12 @@ export default function CustomersScreen() {
       )}
 
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] z-40 mx-auto flex max-w-[440px] justify-end px-4"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] z-40 mx-auto flex max-w-[440px] justify-end px-5"
       >
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add customer"
-          className="press pointer-events-auto flex size-14 items-center justify-center rounded-2xl border border-line2 bg-accent text-accentink"
+          className="press pointer-events-auto flex size-14 items-center justify-center rounded-2xl bg-violet text-accentink"
         >
           <Plus className="size-6" />
         </button>

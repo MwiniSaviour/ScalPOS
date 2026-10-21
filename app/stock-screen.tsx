@@ -75,7 +75,7 @@ export default function StockScreen() {
     <div className="anim-fade">
       <ScreenHeader title="Stock history" subtitle={`${list.length} movement${list.length === 1 ? "" : "s"}`} onBack />
 
-      <div className="px-4 pt-2 pb-2">
+      <div className="px-5 pt-4 pb-2">
         <SearchBar value={query} onChange={setQuery} placeholder="Search product…" />
       </div>
 
@@ -95,7 +95,7 @@ export default function StockScreen() {
       </div>
 
       {list.length === 0 ? (
-        <section className="px-4 pb-28">
+        <section className="px-5 pt-2.5 pb-28">
           {all.length === 0 ? (
             <EmptyState
               icon={<PackageOpen className="size-7" />}
@@ -126,7 +126,7 @@ export default function StockScreen() {
           )}
         </section>
       ) : (
-        <section className="px-4 pb-28">
+        <section className="px-5 pt-2.5 pb-28">
           <Card inset>
             {list.map((m) => {
               const p = resolve(m.productId);
@@ -138,15 +138,15 @@ export default function StockScreen() {
               /* one time signal per row: relative for the last week, the date beyond it */
               const absolute = gap >= 1 && gap < 7 ? dateShort(m.t) : null;
               return (
-                <div key={m.id} className="flex items-start gap-3 px-4 py-3.5">
+                <div key={m.id} className="flex items-start gap-3 px-4 py-3.5 hover:bg-surface2/50">
                   <ProductArt
                     imageUrl={p?.imageUrl}
                     name={p?.name}
                     className="size-10 shrink-0 rounded-xl"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-bold text-ink">{p?.name ?? "Deleted product"}</span>
-                    <span className="block truncate text-[12px] text-ink3">
+                    <span className="block truncate text-[17px] font-semibold leading-tight text-ink">{p?.name ?? "Deleted product"}</span>
+                    <span className="mt-1 block truncate text-[14px] text-ink3">
                       {`SKU ${p?.sku ?? "—"} · ${REASON_LABELS[m.reason]}${m.ref ? ` · ${shortRef(m.ref)}` : ""}`}
                     </span>
                   </span>
@@ -156,7 +156,7 @@ export default function StockScreen() {
                         className={cn(
                           "tabnum inline-flex h-6 shrink-0 items-center rounded-full px-2.5 text-[12px] font-bold",
                           isIn
-                            ? "bg-accent/10 text-accent"
+                            ? "bg-warn/10 text-warn"
                             : isOut
                               ? "bg-danger/10 text-danger"
                               : "bg-ink2/10 text-ink2",
@@ -165,11 +165,11 @@ export default function StockScreen() {
                         {isIn ? `+${m.qty}` : isOut ? `−${Math.abs(m.qty)}` : "0"}
                       </span>
                       {order && (
-                        <span className="tabnum text-[13px] font-semibold text-ink2">{fmtMoney(order.total)}</span>
+                        <span className="tabnum text-[14px] font-bold text-ink">{fmtMoney(order.total)}</span>
                       )}
                     </span>
-                    <span className="text-[12px] text-ink3">{timeAgo(m.t, now)}</span>
-                    {absolute && <span className="text-[12px] text-ink3">{absolute}</span>}
+                    <span className="text-[14px] text-ink3">{timeAgo(m.t, now)}</span>
+                    {absolute && <span className="text-[14px] text-ink3">{absolute}</span>}
                   </span>
                 </div>
               );

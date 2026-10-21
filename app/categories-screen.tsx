@@ -10,7 +10,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { usePos } from "@/lib/store";
 import { TOKEN_COLORS } from "@/lib/ui";
 import type { Category } from "@/lib/types";
-import { cn, hueColor, hueSoft } from "@/lib/ui";
+import { cn, hueColor } from "@/lib/ui";
 import { Pencil, Plus, Shapes, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -80,7 +80,7 @@ export default function CategoriesScreen() {
         }
       />
 
-      <section className="px-4 pt-2 pb-24">
+      <section className="px-5 pt-4 pb-24">
         {categories.length === 0 ? (
           <Card>
             <EmptyState
@@ -95,16 +95,13 @@ export default function CategoriesScreen() {
             {categories.map((c) => {
               const n = counts.get(c.id) ?? 0;
               return (
-                <div key={c.id} className="flex items-center gap-3 px-4 py-3">
-                  <span
-                    className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-                    style={{ background: hueSoft(c.color) }}
-                  >
-                    <span className="size-3.5 rounded-full" style={{ background: hueColor(c.color) }} />
+                <div key={c.id} className="flex items-center gap-3 px-4 py-3.5">
+                  <span className="flex size-10 shrink-0 items-center justify-center">
+                    <span className="size-4 rounded" style={{ background: hueColor(c.color) }} />
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-ink">{c.name}</p>
-                    <span className="mt-0.5 block text-[12px] text-ink3">
+                    <p className="truncate text-[17px] font-semibold leading-tight text-ink">{c.name}</p>
+                    <span className="mt-1 block text-[14px] text-ink3">
                       {n} product{n === 1 ? "" : "s"}
                     </span>
                   </div>
@@ -148,7 +145,7 @@ export default function CategoriesScreen() {
                 onClick={() => setColor(hex)}
                 className={cn(
                   "press size-10 rounded-full",
-                  color === hex ? "ring-2 ring-accent" : "ring-1 ring-line2",
+                  color === hex ? "ring-2 ring-info" : "ring-1 ring-line2",
                 )}
                 style={{ background: hex }}
               />

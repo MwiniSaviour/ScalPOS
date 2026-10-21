@@ -54,7 +54,7 @@ export default function InventoryScreen() {
         }
       />
 
-      <section className="px-4 pt-2 pb-40">
+      <section className="px-5 pt-4 pb-40">
         <SearchBar value={query} onChange={setQuery} placeholder="Search name or SKU" />
 
         <div className="edge-fade no-scrollbar -mx-4 mt-2.5 overflow-x-auto px-4">
@@ -108,7 +108,7 @@ export default function InventoryScreen() {
                 <Link
                   key={p.id}
                   href={`/inventory/detail?id=${p.id}`}
-                  className="press flex items-center gap-3 px-4 py-3 hover:bg-surface2/50"
+                  className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
                 >
                   <ProductArt
                     imageUrl={p.imageUrl}
@@ -116,8 +116,8 @@ export default function InventoryScreen() {
                     className="size-10 shrink-0 rounded-xl"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[14px] font-semibold text-ink">{p.name}</span>
-                    <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ink3">
+                    <span className="block truncate text-[17px] font-semibold leading-tight text-ink">{p.name}</span>
+                    <span className="mt-1 flex items-center gap-1.5 text-[14px] text-ink3">
                       <span
                         className="size-2 shrink-0 rounded-full"
                         style={{ background: hueColor(c?.color) }}
@@ -129,15 +129,11 @@ export default function InventoryScreen() {
                     </span>
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-0.5">
-                    <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(p.price)}</span>
+                    <span className="tabnum text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
                     {out ? (
-                      <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-ink3">
-                        Out
-                      </span>
+                      <span className="text-[14px] font-medium text-warn">Out</span>
                     ) : low ? (
-                      <span className="text-[11px] font-semibold uppercase tracking-[.06em] text-warn">
-                        Low
-                      </span>
+                      <span className="text-[14px] font-medium text-warn">Low</span>
                     ) : null}
                   </span>
                   <ChevronRight className="size-[17px] shrink-0 text-ink3" />

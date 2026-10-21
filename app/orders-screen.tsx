@@ -5,10 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/emptystate";
 import { SearchBar } from "@/components/ui/input";
-import { StatusPill } from "@/components/ui/statuspill";
-import { Avatar } from "@/components/ui/avatar";
 
-import { ScreenHeader } from "@/components/shell/screenheader";
 import { Receipt } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -17,6 +14,7 @@ import { timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { useNow } from "@/lib/now";
 import { usePos } from "@/lib/store";
+import { cn } from "@/lib/ui";
 
 type Filter = "all" | "pending" | "completed" | "refunded" | "unpaid";
 
@@ -64,14 +62,19 @@ export default function OrdersScreen() {
   }, [orders, customers, filter, query]);
 
   return (
-    <div className="anim-fade">
-      <ScreenHeader title="Orders" subtitle={`${list.length} order${list.length === 1 ? "" : "s"}`} />
+    <div className="anim-fade px-5 pt-4">
+      <header>
+        <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">Orders</h1>
+        <p className="mt-0.5 text-[15px] text-ink3">
+          {list.length} order{list.length === 1 ? "" : "s"}
+        </p>
+      </header>
 
-      <div className="px-4 pt-1 pb-2">
+      <div className="mt-4">
         <SearchBar value={query} onChange={setQuery} placeholder="Order # or customer…" />
       </div>
 
-      <div className="edge-fade no-scrollbar -mx-4 overflow-x-auto px-4 pb-1.5">
+      <div className="edge-fade no-scrollbar -mx-5 mt-2 overflow-x-auto px-5">
         <div className="flex w-max gap-1.5">
           {FILTERS.map((f) => (
             <Chip key={f.value} active={filter === f.value} onClick={() => setFilter(f.value)}>
@@ -82,7 +85,7 @@ export default function OrdersScreen() {
       </div>
 
       {list.length === 0 ? (
-        <section className="px-4 pb-28">
+        <section className="mt-8 pb-6">
           {orders.length === 0 && !query.trim() && filter === "all" ? (
             <EmptyState
               icon={<Receipt className="size-7" />}
@@ -110,41 +113,45 @@ export default function OrdersScreen() {
           )}
         </section>
       ) : (
-        <section className="px-4 pb-28">
+        <section className="mt-3 pb-6">
           <Card inset>
             {list.map((o) => {
               const c = customers.find((x) => x.id === o.customerId);
               const refunded = o.status === "refunded";
-              const pay = refunded
-                ? "refunded"
-                : o.payStatus === "partial"
-                  ? "partial"
-                  : o.payStatus === "unpaid"
-                    ? "unpaid"
-                    : "paid";
-              const settled = pay === "paid";
+              const unpaid = !refunded && (o.payStatus === "unpaid" || o.payStatus === "partial");
               const qty = o.items.reduce((s, i) => s + i.qty, 0);
               return (
                 <Link
                   key={o.id}
                   href={`/orders/detail?id=${o.id}`}
-                  className="press flex items-start gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                  className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
                 >
-                  <Avatar name={c?.name ?? "Walk-in customer"} size={36} />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[14px] font-semibold leading-snug break-words text-ink">
+                    <span className="block text-[17px] font-semibold leading-tight text-ink">
                       {c?.name ?? "Walk-in"}
                     </span>
-                    <span className="mt-0.5 block truncate text-[12px] text-ink3">
+                    <span className="mt-1 block truncate text-[14px] text-ink3">
                       {`${timeAgo(o.createdAt, now)} · ${qty} item${qty === 1 ? "" : "s"} · #${o.id.slice(-4)}`}
                     </span>
                   </span>
-                  <span className="flex shrink-0 flex-col items-end gap-1">
-                    <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(o.total)}</span>
-                    {settled ? (
-                      <span className="text-[11px] font-medium text-ink3">Paid</span>
+                  <span className="flex shrink-0 flex-col items-end gap-0.5">
+                    <span
+                      className={cn(
+                        "tabnum text-[17px] font-bold",
+                        refunded ? "text-ink3" : unpaid ? "text-warn" : "text-ink",
+                      )}
+                    >
+                      {fmtMoney(o.total)}
+                    </span>
+                    {refunded ? (
+                      <span className="text-[14px] text-ink3">Refunded</span>
+                    ) : unpaid ? (
+                      <span className="flex items-center gap-1.5 text-[14px] font-medium text-warn">
+                        <span className="size-1.5 rounded-full bg-warn" />
+                        {o.payStatus === "partial" ? "Partial" : "Unpaid"}
+                      </span>
                     ) : (
-                      <StatusPill status={pay} />
+                      <span className="text-[14px] text-ink3">Paid</span>
                     )}
                   </span>
                 </Link>

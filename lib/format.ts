@@ -23,6 +23,10 @@ export function timeAgo(t: number, now = Date.now()): string {
   return dateShort(t);
 }
 
+export function dateLong(t: number): string {
+  return new Date(t).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+}
+
 export function dateShort(t: number): string {
   const d = new Date(t);
   return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });

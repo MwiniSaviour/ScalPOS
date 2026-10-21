@@ -1,6 +1,5 @@
 "use client";
 
-import { ScreenHeader } from "@/components/shell/screenheader";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
@@ -16,6 +15,7 @@ import { cn } from "@/lib/ui";
 import { useNow } from "@/lib/now";
 import {
   Banknote,
+  ChevronLeft,
   CircleCheck,
   CreditCard,
   Plus,
@@ -37,10 +37,10 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   credit: "Credit",
 };
 const METHOD_TINT: Record<PaymentMethod, string> = {
-  cash: "bg-gold/15 text-gold",
-  momo: "bg-info/15 text-info",
-  card: "bg-violet/15 text-violet",
-  credit: "bg-warn/15 text-warn",
+  cash: "bg-gold/10 text-gold",
+  momo: "bg-info/10 text-info",
+  card: "bg-violet/10 text-violet",
+  credit: "bg-warn/10 text-warn",
 };
 
 function MethodIcon({ method }: { method: PaymentMethod }) {
@@ -86,8 +86,18 @@ export default function PayScreen() {
   if (totals.count === 0) {
     return (
       <div className="anim-fade">
-        <ScreenHeader title="Payment" onBack={() => router.push("/sell")} />
-        <section className="px-4 pt-2">
+        <header className="border-b border-line2 bg-bg">
+          <div className="safe-t" />
+          <div className="flex h-14 items-center gap-2 px-2">
+            <IconButton label="Back" onClick={() => router.push("/sell")}>
+              <ChevronLeft className="size-[22px] text-ink" strokeWidth={2.2} />
+            </IconButton>
+            <h1 className="min-w-0 flex-1 truncate text-[26px] font-bold tracking-[-0.02em] text-ink">
+              Payment
+            </h1>
+          </div>
+        </header>
+        <section className="px-5 pt-4">
           <EmptyState
             icon={<Receipt className="size-7" />}
             title="Nothing to pay"
@@ -162,16 +172,24 @@ export default function PayScreen() {
 
   return (
     <div className="anim-fade pb-40">
-      <ScreenHeader title="Payment" onBack={() => router.push("/sell")} />
+      <header className="sticky top-0 z-40 border-b border-line2 bg-bg">
+        <div className="safe-t" />
+        <div className="flex h-14 items-center gap-2 px-2">
+          <IconButton label="Back" onClick={() => router.push("/sell")}>
+            <ChevronLeft className="size-[22px] text-ink" strokeWidth={2.2} />
+          </IconButton>
+          <h1 className="min-w-0 flex-1 truncate text-[26px] font-bold tracking-[-0.02em] text-ink">
+            Payment
+          </h1>
+        </div>
+      </header>
 
-      <section className="px-4 pt-2 text-center">
-        <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
-          Amount due
-        </p>
-        <p className="tabnum text-[34px]/10 font-extrabold tracking-[-0.03em] text-ink">
+      <section className="px-5 pt-6 text-center">
+        <p className="text-[15px] font-medium text-ink2">Amount due</p>
+        <p className="tabnum mt-0.5 text-[34px]/10 font-extrabold tracking-[-0.03em] text-ink">
           {fmtMoney(totals.total)}
         </p>
-        <p className="text-[13px] text-ink3">
+        <p className="mt-1 text-[14px] text-ink3">
           {totals.count} item{totals.count === 1 ? "" : "s"}
           {totals.discount > 0 ? ` · discount −${fmtMoney(totals.discount)}` : ""}
           {totals.tax > 0
@@ -180,7 +198,7 @@ export default function PayScreen() {
         </p>
       </section>
 
-      <section className="px-4 pt-4">
+      <section className="px-5 pt-5">
         <Segmented<PayMethod>
           value={method}
           onChange={setMethod}
@@ -193,14 +211,12 @@ export default function PayScreen() {
       </section>
 
       {method === "cash" && (
-        <section className="px-4 pt-3">
+        <section className="px-5 pt-4">
           <Card className="p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
-              Amount tendered
-            </p>
+            <p className="text-[15px] font-medium text-ink2">Amount tendered</p>
             <p
               className={cn(
-                "tabnum text-[28px]/9 font-extrabold tracking-[-0.02em]",
+                "tabnum mt-1 text-[28px]/9 font-extrabold tracking-[-0.02em]",
                 tenderedNum > 0 ? "text-ink" : "text-ink4",
               )}
             >
@@ -219,30 +235,28 @@ export default function PayScreen() {
               </div>
             </div>
             {changeDue > 0 && (
-              <span className="tabnum mt-3 inline-flex items-center rounded-full bg-accent px-3 py-1 text-[12px] font-semibold text-accentink">
+              <span className="tabnum mt-3 inline-flex items-center rounded-full bg-accent/10 px-3 py-1 text-[13px] font-semibold text-accent">
                 Change due {fmtMoney(changeDue)}
               </span>
             )}
           </Card>
-          <NumberPad className="mt-3" onDigit={onDigit} onDelete={backspace} />
+          <NumberPad className="mt-4" onDigit={onDigit} onDelete={backspace} />
         </section>
       )}
 
       {method === "momo" && (
-        <section className="px-4 pt-3">
+        <section className="px-5 pt-4">
           <Card className="p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
-              MoMo number
-            </p>
+            <p className="text-[15px] font-medium text-ink2">MoMo number</p>
             <div className="mt-1 flex items-center gap-3">
               <p className="tabnum text-[24px]/8 font-extrabold tracking-[-0.02em] text-ink">
                 {settings.momoNumber}
               </p>
-              <span className="rounded-full bg-info/10 px-2.5 py-1 text-[12px] font-semibold text-info">
+              <span className="rounded-full bg-info/10 px-2.5 py-1 text-[13px] font-semibold text-info">
                 {settings.momoNetwork}
               </span>
             </div>
-            <p className="mt-3 text-[13px] leading-5 text-ink3">
+            <p className="mt-3 text-[14px] leading-6 text-ink3">
               Customer dials *170# or sends money to this number.
             </p>
             <Input
@@ -258,11 +272,9 @@ export default function PayScreen() {
       )}
 
       {method === "card" && (
-        <section className="px-4 pt-3">
+        <section className="px-5 pt-4">
           <Card className="p-4">
-            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
-              Card terminal
-            </p>
+            <p className="text-[15px] font-medium text-ink2">Card terminal</p>
             <p className="mt-1 text-[14px] leading-6 text-ink2">
               {fmtMoney(remaining)} will be recorded as a card payment when you complete the
               sale.
@@ -279,50 +291,49 @@ export default function PayScreen() {
         </section>
       )}
 
-      <section className="px-4 pt-5">
-        <p className="mb-2 text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
-          Split payments
-        </p>
+      <section className="px-5 pt-6">
+        <p className="mb-2 text-[15px] font-medium text-ink2">Split payments</p>
         {entered.length > 0 && (
           <Card inset>
             {entered.map((r) => (
-              <div key={r.key} className="flex items-center gap-3 px-4 py-3">
+              <div key={r.key} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
                 <span
                   className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                    "flex size-9 shrink-0 items-center justify-center rounded-full",
                     METHOD_TINT[r.method],
                   )}
                 >
                   <MethodIcon method={r.method} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-semibold text-ink">
+                  <span className="block text-[17px] font-semibold text-ink">
                     {METHOD_LABEL[r.method]}
                   </span>
                   {r.ref && (
-                    <span className="block truncate text-[12px] text-ink3">{r.ref}</span>
+                    <span className="block truncate text-[14px] text-ink3">{r.ref}</span>
                   )}
                 </span>
-                  <span className="tabnum text-[15px] font-bold text-ink">
-                    {fmtMoney(r.amount)}
-                  </span>
-                  <IconButton
-                    label="Remove split"
-                    className="size-8"
-                    onClick={() =>
-                      setEntered((rows) => rows.filter((x) => x.key !== r.key))
-                    }
-                  >
-                    <X className="size-4" />
-                  </IconButton>
+                <span className="tabnum shrink-0 text-[17px] font-bold text-ink">
+                  {fmtMoney(r.amount)}
+                </span>
+                <IconButton
+                  label="Remove split"
+                  onClick={() =>
+                    setEntered((rows) => rows.filter((x) => x.key !== r.key))
+                  }
+                >
+                  <X className="size-4" />
+                </IconButton>
               </div>
             ))}
           </Card>
         )}
-        <div className="mt-2 flex items-center justify-between px-1">
-          <span className="text-[13px] text-ink3">Remaining due</span>
-          <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(remaining)}</span>
-        </div>
+        {remaining > 0 && (
+          <div className="mt-2.5 flex items-center justify-between px-1">
+            <span className="text-[14px] text-ink3">Remaining due</span>
+            <span className="tabnum text-[15px] font-bold text-warn">{fmtMoney(remaining)}</span>
+          </div>
+        )}
         <Button
           variant="soft"
           block
@@ -338,7 +349,7 @@ export default function PayScreen() {
       <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-2">
         <div className="mx-auto max-w-[440px] px-4">
           {credit > 0 && (
-            <p className="mb-1.5 text-center text-[12px] font-medium text-warn">
+            <p className="mb-1.5 text-center text-[13px] font-medium text-warn">
               Leaves {fmtMoney(credit)} on credit
             </p>
           )}
@@ -374,76 +385,76 @@ function SuccessView({
         <span className="anim-pop flex size-16 items-center justify-center rounded-full bg-accent text-accentink">
           <CircleCheck className="size-9" />
         </span>
-        <p className="mt-5 text-[12px] font-semibold uppercase tracking-[.08em] text-accent">
+        <p className="mt-5 text-[15px] font-medium text-accent">
           {credit > 0 ? "Sale recorded" : "Sale complete"}
         </p>
         <p className="mt-1 font-mono text-[13px] text-ink2">{o.id}</p>
         <p className="tabnum mt-2 text-[34px]/10 font-extrabold tracking-[-0.03em] text-ink">
           {fmtMoney(paid)}
         </p>
-        <p className="text-[13px] text-ink3">
+        <p className="mt-1 text-[14px] text-ink3">
           {items} item{items === 1 ? "" : "s"} paid
         </p>
       </div>
 
-      <div className="px-4 pt-6">
+      <div className="px-5 pt-6">
         <Card inset>
           {o.payments.length === 0 && (
-            <p className="px-4 py-3 text-center text-[13px] text-ink3">
+            <p className="px-4 py-3.5 text-center text-[14px] text-ink3">
               No payment recorded — full amount on credit.
             </p>
           )}
           {o.payments.map((p) => (
-            <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+            <div key={p.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
               <span
                 className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                  "flex size-9 shrink-0 items-center justify-center rounded-full",
                   METHOD_TINT[p.method],
                 )}
               >
                 <MethodIcon method={p.method} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-[14px] font-semibold text-ink">
+                <span className="block text-[17px] font-semibold text-ink">
                   {METHOD_LABEL[p.method]}
                 </span>
-                {p.ref && <span className="block truncate text-[12px] text-ink3">{p.ref}</span>}
+                {p.ref && <span className="block truncate text-[14px] text-ink3">{p.ref}</span>}
               </span>
-              <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(p.amount)}</span>
+              <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(p.amount)}</span>
             </div>
           ))}
           {o.discount > 0 && (
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-[14px] font-medium text-ink2">Discount</span>
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <span className="text-[14px] text-ink2">Discount</span>
               <span className="tabnum text-[15px] font-bold text-accent">
                 −{fmtMoney(o.discount)}
               </span>
             </div>
           )}
           {tax && (
-            <div className="flex items-center justify-between px-4 py-3">
-              <span className="text-[14px] font-medium text-ink2">{tax.label}</span>
+            <div className="flex items-center justify-between px-4 py-3.5">
+              <span className="text-[14px] text-ink2">{tax.label}</span>
               <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(tax.amount)}</span>
             </div>
           )}
           {done.change > 0 && (
-            <div className="flex items-center justify-between bg-accent/10 px-4 py-3">
-              <span className="text-[14px] font-semibold text-accent">Change due</span>
+            <div className="flex items-center justify-between bg-accent/10 px-4 py-3.5">
+              <span className="text-[14px] font-medium text-accent">Change due</span>
               <span className="tabnum text-[15px] font-bold text-accent">
                 {fmtMoney(done.change)}
               </span>
             </div>
           )}
           {credit > 0 && (
-            <div className="flex items-center justify-between bg-warn/10 px-4 py-3">
-              <span className="text-[14px] font-semibold text-warn">Balance on credit</span>
+            <div className="flex items-center justify-between bg-warn/10 px-4 py-3.5">
+              <span className="text-[14px] font-medium text-warn">Balance on credit</span>
               <span className="tabnum text-[15px] font-bold text-warn">{fmtMoney(credit)}</span>
             </div>
           )}
         </Card>
       </div>
 
-      <div className="grid gap-2.5 px-4 pt-6 pb-10">
+      <div className="grid gap-2.5 px-5 pt-6 pb-10">
         <Button
           variant="secondary"
           block

@@ -1,19 +1,17 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Inbox, LayoutGrid, MoreHorizontal, Receipt, ShoppingCart, type LucideIcon } from "lucide-react";
+import { House, MoreHorizontal, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useCartTotals } from "@/lib/store";
 import { cn } from "@/lib/ui";
-
-/** bottom tab chrome exists only on the 4 tab destinations */
-const TAB_ROUTES = ["/", "/orders", "/inventory", "/more"];
+/** bottom tab chrome exists only on the tab destinations */
+const TAB_ROUTES = ["/", "/orders", "/inventory", "/customers", "/more"];
 
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Home", icon: LayoutGrid },
-  { href: "/orders", label: "Orders", icon: Receipt },
-  { href: "/sell", label: "Sell", icon: ShoppingCart },
-  { href: "/inventory", label: "Inventory", icon: Inbox },
+  { href: "/", label: "Home", icon: House },
+  { href: "/orders", label: "Orders", icon: ReceiptText },
+  { href: "/inventory", label: "Inventory", icon: Package },
+  { href: "/customers", label: "Customers", icon: Users },
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
@@ -24,16 +22,23 @@ function normalize(p: string): string {
 
 export function TabBar() {
   const pathname = usePathname();
-  const cartTotals = useCartTotals();
 
   // drill-in & flow screens own their chrome — no tab bar
   if (!TAB_ROUTES.includes(normalize(pathname))) return null;
 
-  const cartCount = cartTotals.count;
-
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-bg pb-[max(env(safe-area-inset-bottom,0px),8px)]">
-      <div className="mx-auto flex h-16 max-w-[420px] items-stretch">
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface pb-[max(env(safe-area-inset-bottom,0px),8px)] shadow-[0_-4px_16px_rgb(15_23_42/0.06)]">
+      <div className="mx-auto max-w-[420px] px-4 pt-3 pb-1.5">
+        <Link
+          href="/sell"
+          aria-label="Start a new sale"
+          className="press flex h-[52px] items-center justify-center gap-2 rounded-xl bg-accent text-accentink"
+        >
+          <Plus className="size-[19px]" />
+          <span className="text-[16px] font-semibold">New sale</span>
+        </Link>
+      </div>
+      <div className="mx-auto flex h-14 max-w-[420px] items-stretch">
         {tabs.map((t) => {
           const active = normalize(pathname) === t.href;
           const { icon: Icon } = t;
@@ -47,15 +52,8 @@ export function TabBar() {
                 active ? "text-accent" : "text-ink3",
               )}
             >
-              <span className="relative flex size-[21px] items-center justify-center">
-                <Icon className="size-[21px]" />
-                {t.href === "/sell" && cartCount > 0 && (
-                  <span className="absolute -right-2 -top-1.5 min-w-[18px] rounded-full bg-accent px-1 text-[10px] font-bold leading-[18px] text-accentink">
-                    {cartCount > 99 ? "99+" : cartCount}
-                  </span>
-                )}
-              </span>
-              <span className={cn("text-[10.5px] font-medium", active && "font-semibold")}>{t.label}</span>
+              <Icon className="size-[21px]" />
+              <span className={cn("text-[11px] font-medium", active && "font-semibold")}>{t.label}</span>
             </Link>
           );
         })}
@@ -63,3 +61,5 @@ export function TabBar() {
     </nav>
   );
 }
+
+export const willHaveTabBar = (p: string): boolean => TAB_ROUTES.includes(normalize(p));

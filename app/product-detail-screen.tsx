@@ -66,7 +66,7 @@ export default function ProductDetailScreen() {
     return (
       <div className="anim-fade">
         <ScreenHeader title="Product" onBack className="border-b border-line" />
-        <section className="px-4 pt-2">
+        <section className="px-5 pt-4">
           <EmptyState
             icon={<Package className="size-7" />}
             title="Product not found"
@@ -119,7 +119,7 @@ export default function ProductDetailScreen() {
         }
       />
 
-      <section className="px-4 pt-2 pb-24">
+        <section className="px-5 pt-4 pb-24">
         <Card className="p-0 pb-4">
           <ProductArt
             imageUrl={product.imageUrl}
@@ -128,10 +128,10 @@ export default function ProductDetailScreen() {
           />
           <div className="flex items-center gap-3 px-4 pt-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[16px] font-bold text-ink">{product.name}</p>
+              <p className="truncate text-[17px] font-bold text-ink">{product.name}</p>
               <div className="mt-1 flex items-center gap-1.5">
                 <span className="size-2 shrink-0 rounded-full" style={{ background: hueColor(category?.color) }} />
-                <span className="text-[12px] text-ink3">{category?.name ?? "No category"}</span>
+                <span className="text-[14px] text-ink3">{category?.name ?? "No category"}</span>
               </div>
             </div>
           </div>
@@ -146,20 +146,20 @@ export default function ProductDetailScreen() {
         </Card>
 
         <Card className="mt-2.5 p-4">
-          <div className="grid grid-cols-3 gap-3">
+          <div className="mt-3 grid grid-cols-3 gap-2">
             <div className="min-w-0">
-              <p className="text-[12px] uppercase tracking-[.06em] text-ink3">Cost</p>
-              <p className="tabnum mt-1 truncate text-[17px] font-bold text-ink2">{fmtMoney(product.cost)}</p>
+              <p className="text-[14px] text-ink2">Cost</p>
+              <p className="tabnum mt-0.5 truncate text-[16px] font-semibold text-ink2">{fmtMoney(product.cost)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[12px] uppercase tracking-[.06em] text-ink3">Selling</p>
-              <p className="tabnum mt-1 truncate text-[17px] font-bold text-ink">{fmtMoney(product.price)}</p>
+              <p className="text-[14px] text-ink2">Selling</p>
+              <p className="tabnum mt-0.5 truncate text-[16px] font-bold text-ink">{fmtMoney(product.price)}</p>
             </div>
             <div className="min-w-0">
-              <p className="text-[12px] uppercase tracking-[.06em] text-ink3">Margin</p>
+              <p className="text-[14px] text-ink2">Margin</p>
               <p
                 className={cn(
-                  "tabnum mt-1 truncate text-[17px] font-bold",
+                  "tabnum mt-0.5 truncate text-[16px] font-bold",
                   profit > 0 ? "text-accent" : profit < 0 ? "text-danger" : "text-ink3",
                 )}
               >
@@ -167,7 +167,7 @@ export default function ProductDetailScreen() {
               </p>
               <p
                 className={cn(
-                  "tabnum text-[11px] font-semibold",
+                  "tabnum text-[13px] font-semibold",
                   profit > 0 ? "text-accent" : profit < 0 ? "text-danger" : "text-ink3",
                 )}
               >
@@ -181,7 +181,7 @@ export default function ProductDetailScreen() {
         <Card className="mt-2.5 p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[12px] uppercase tracking-[.06em] text-ink3">On hand</p>
+              <p className="text-[14px] text-ink2">On hand</p>
               <p className="mt-1 tabnum text-[30px]/8 font-extrabold tracking-[-0.03em] text-ink">
                 {product.stock}
                 <span className="ml-1.5 text-[14px] font-semibold text-ink3">{product.unit}</span>
@@ -193,7 +193,7 @@ export default function ProductDetailScreen() {
             <div className="flex flex-col items-end gap-2">
               {product.stock <= 0 ? <StatusPill status="out" /> : product.stock <= product.lowStockAt ? <StatusPill status="low" /> : null}
               {product.stock <= product.lowStockAt && (
-                <span className="flex items-center gap-1 text-[11px] font-semibold text-warn">
+                <span className="flex items-center gap-1 text-[13px] font-medium text-warn">
                   <TriangleAlert className="size-3.5" />
                   {product.stock > 0 ? "Running low" : "Out of stock"}
                 </span>
@@ -207,8 +207,8 @@ export default function ProductDetailScreen() {
 
         <Card inset className="mt-2.5">
           <div className="px-4 pt-4 pb-1">
-            <h3 className="text-[15px] font-semibold text-ink">Stock moves</h3>
-            <p className="text-[12px] text-ink3">{moves.length} record{moves.length === 1 ? "" : "s"}</p>
+            <h3 className="text-[15px] font-medium text-ink2">Stock moves</h3>
+            <p className="text-[14px] text-ink3">{moves.length} record{moves.length === 1 ? "" : "s"}</p>
           </div>
           {moves.length === 0 ? (
             <EmptyState
@@ -219,30 +219,30 @@ export default function ProductDetailScreen() {
             />
           ) : (
             moves.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 px-4 py-3.5">
+              <div key={m.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
                 <span
                   className={cn(
                     "flex size-9 shrink-0 items-center justify-center rounded-xl",
-                    m.qty > 0 ? "bg-accent/10 text-accent" : m.qty < 0 ? "text-danger bg-danger/10" : "bg-ink2/10 text-ink2",
+                    m.qty > 0 ? "bg-accentsoft text-accent" : m.qty < 0 ? "bg-danger/10 text-danger" : "bg-ink2/10 text-ink2",
                   )}
                 >
                   {m.qty > 0 ? <ArrowUpFromLine className="size-[17px]" /> : <ArrowDownToLine className="size-[17px]" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-ink">{moveLabel[m.reason]}</p>
-                  <p className="truncate text-[12px] text-ink3">{m.ref || "—"}</p>
+                  <p className="truncate text-[17px] font-semibold leading-tight text-ink">{moveLabel[m.reason]}</p>
+                  <p className="mt-0.5 truncate text-[14px] text-ink3">{m.ref || "—"}</p>
                 </div>
                 <div className="shrink-0 text-right">
                   <p
                     className={cn(
-                      "tabnum text-[14px] font-bold",
+                      "tabnum text-[17px] font-bold",
                       m.qty > 0 ? "text-accent" : m.qty < 0 ? "text-danger" : "text-ink3",
                     )}
                   >
                     {m.qty > 0 ? "+" : ""}
                     {m.qty}
                   </p>
-                  <p className="text-[11px] text-ink3">{timeOf(m.t)} · {dateShort(m.t)}</p>
+                  <p className="text-[14px] text-ink3">{timeOf(m.t)} · {dateShort(m.t)}</p>
                 </div>
               </div>
             ))
@@ -329,8 +329,8 @@ export default function ProductDetailScreen() {
 function DataRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="min-w-0 py-2">
-      <p className="text-[11px] uppercase tracking-[.06em] text-ink3">{label}</p>
-      <p className="mt-0.5 truncate text-[13px] font-semibold text-ink">{value}</p>
+      <p className="text-[14px] text-ink3">{label}</p>
+      <p className="mt-0.5 truncate text-[15px] font-semibold text-ink">{value}</p>
     </div>
   );
 }
