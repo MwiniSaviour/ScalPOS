@@ -1,0 +1,39 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# Next.js
+/.next/
+/out/
+/build/
+
+# generated TypeScript cache
+*.tsbuildinfo
+
+# local environment
+.env*
+!.env.example
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Capacitor synced web payload (build artifact, re-synced from out/)
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.plugins.json
+android/local.properties
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
+
+# local QA artifacts
+design/qa-results.json
+design/qa-light-results.json

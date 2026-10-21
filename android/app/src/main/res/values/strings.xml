@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nova POS</string>
+    <string name="title_activity_main">Nova POS</string>
+    <string name="package_name">gg.novapos.app</string>
+    <string name="custom_url_scheme">gg.novapos.app</string>
+</resources>

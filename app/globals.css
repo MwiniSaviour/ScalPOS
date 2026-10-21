@@ -1,0 +1,232 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-bg: var(--bg);
+  --color-bg2: var(--bg2);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
+  --color-line: var(--line);
+  --color-line2: var(--line2);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-ink4: var(--ink4);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-accentink: var(--accentink);
+  --color-accentsoft: var(--accentsoft);
+  --color-info: var(--info);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-violet: var(--violet);
+  --color-gold: var(--gold);
+
+  --radius-sm: 10px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+
+}
+
+/* ---------------------------------- tokens --------------------------------- */
+
+:root,
+[data-theme="dark"] {
+  --bg: #0a0e17;
+  --bg2: #0e1420;
+  --surface: #121a28;
+  --surface2: #1a2332;
+  --surface3: #243044;
+  --line: #1f2940;
+  --line2: #2a3854;
+  --ink: #f3f7fd;
+  --ink2: #9fadc3;
+  --ink3: #68758d;
+  --ink4: #445064;
+  --accent: #10b981;
+  --accent2: #34d399;
+  --accentink: #06281a;
+  --accentsoft: #10b9811f;
+  --info: #4c8dff;
+  --info-soft: #4c8dff1f;
+  --warn: #f5a524;
+  --warn-soft: #f5a5241f;
+  --danger: #f4586e;
+  --danger-soft: #f4586e1f;
+  --violet: #8b7cf7;
+  --violet-soft: #8b7cf71f;
+  --gold: #f6c453;
+  --gold-soft: #f6c4531f;
+  color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f3f5f9;
+  --bg2: #eceff5;
+  --surface: #ffffff;
+  --surface2: #f5f7fa;
+  --surface3: #e8ecf2;
+  --line: #e3e8ef;
+  --line2: #d5dbe5;
+  --ink: #10192b;
+  --ink2: #516078;
+  --ink3: #7c8aa1;
+  --ink4: #aab5c5;
+  --accent: #059669;
+  --accent2: #047857;
+  --accentink: #ffffff;
+  --accentsoft: #05966914;
+  --info: #2563eb;
+  --info-soft: #2563eb14;
+  --warn: #d97706;
+  --warn-soft: #d9770614;
+  --danger: #e11d48;
+  --danger-soft: #e11d4814;
+  --violet: #7c3aed;
+  --violet-soft: #7c3aed14;
+  --gold: #b45309;
+  --gold-soft: #b4530914;
+  color-scheme: light;
+}
+
+/* ----------------------------------- base ---------------------------------- */
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgb(16 185 129 / 0.3);
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--ink3);
+}
+
+/* --------------------------------- utilities -------------------------------- */
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.tabnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* horizontal chip strips: hint more content beyond the right edge */
+.edge-fade {
+  -webkit-mask-image: linear-gradient(90deg, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, #000 86%, transparent);
+}
+
+.safe-t {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.press {
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.12s,
+    background-color 0.15s,
+    border-color 0.15s,
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.anim-sheet {
+  animation: sheet-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.anim-fade {
+  animation: fade-in 0.18s ease-out both;
+}
+.anim-rise {
+  animation: rise-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-pop {
+  animation: pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.anim-toast {
+  animation: toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

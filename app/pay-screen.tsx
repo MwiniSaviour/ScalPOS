@@ -1,0 +1,472 @@
+"use client";
+
+import { ScreenHeader } from "@/components/shell/screenheader";
+import { Button, IconButton } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { EmptyState } from "@/components/ui/emptystate";
+import { Input } from "@/components/ui/input";
+import { NumberPad } from "@/components/ui/numberpad";
+import { Segmented } from "@/components/ui/segmented";
+import { ReceiptSheet, orderTax } from "@/components/receipt/receipt";
+import { id } from "@/lib/format";
+import { cashierDenominations, fmtMoney, fmtMoneyCompact, parsePrice } from "@/lib/money";
+import { useCartTotals, usePos } from "@/lib/store";
+import { cn } from "@/lib/ui";
+import { useNow } from "@/lib/now";
+import {
+  Banknote,
+  CircleCheck,
+  CreditCard,
+  Plus,
+  Receipt,
+  Smartphone,
+  X,
+} from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import type { Order, Payment, PaymentMethod } from "@/lib/types";
+
+type PayMethod = "cash" | "momo" | "card";
+type Row = { key: string; method: PayMethod; amount: number; ref?: string };
+
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  momo: "MoMo",
+  card: "Card",
+  credit: "Credit",
+};
+const METHOD_TINT: Record<PaymentMethod, string> = {
+  cash: "bg-gold/15 text-gold",
+  momo: "bg-info/15 text-info",
+  card: "bg-violet/15 text-violet",
+  credit: "bg-warn/15 text-warn",
+};
+
+function MethodIcon({ method }: { method: PaymentMethod }) {
+  if (method === "momo") return <Smartphone className="size-[17px]" />;
+  if (method === "card") return <CreditCard className="size-[17px]" />;
+  return <Banknote className="size-[17px]" />;
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function trimNum(n: number): string {
+  return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
+}
+
+export default function PayScreen() {
+  const router = useRouter();
+  const hydrated = usePos((s) => s.hydrated);
+  const settings = usePos((s) => s.settings);
+  const now = useNow();
+  const totals = useCartTotals();
+
+  const [method, setMethod] = useState<PayMethod>("cash");
+  const [tendered, setTendered] = useState("");
+  const [entered, setEntered] = useState<Row[]>([]);
+  const [momoRef, setMomoRef] = useState("");
+  const [cardRef, setCardRef] = useState("");
+  const [done, setDone] = useState<{ order: Order; change: number } | null>(null);
+
+  if (!hydrated) return null;
+
+  if (done) {
+    return (
+      <SuccessView
+        done={done}
+        onNew={() => router.push("/sell")}
+        onHome={() => router.push("/")}
+      />
+    );
+  }
+
+  if (totals.count === 0) {
+    return (
+      <div className="anim-fade">
+        <ScreenHeader title="Payment" onBack={() => router.push("/sell")} />
+        <section className="px-4 pt-2">
+          <EmptyState
+            icon={<Receipt className="size-7" />}
+            title="Nothing to pay"
+            hint="The cart is empty — add items from the register first."
+            action={<Button onClick={() => router.push("/sell")}>Back to register</Button>}
+          />
+        </section>
+      </div>
+    );
+  }
+
+  const enteredSum = entered.reduce((s, r) => s + r.amount, 0);
+  const remaining = Math.max(0, round2(totals.total - enteredSum));
+  const tenderedNum = method === "cash" ? parsePrice(tendered) : 0;
+  const pending =
+    method === "cash" ? round2(Math.min(tenderedNum, remaining)) : remaining;
+  const changeDue =
+    method === "cash" && tenderedNum - remaining > 0.004
+      ? round2(tenderedNum - remaining)
+      : 0;
+  const credit = round2(Math.max(0, remaining - pending));
+
+  const ctaLabel =
+    changeDue > 0
+      ? `Change due ${fmtMoney(changeDue)}`
+      : credit > 0
+        ? "Record & charge"
+        : `Complete sale ${fmtMoney(totals.total)}`;
+
+  const onDigit = (d: string) =>
+    setTendered((t) => {
+      if (d === ".") return t.includes(".") ? t : t === "" ? "0." : t + ".";
+      const next = t + d;
+      const [int, dec] = next.split(".");
+      if (int.startsWith("0") && int.length > 1 && dec === undefined) return t;
+      if (int.replace(/^0+(?=\d)/, "").length > 6) return t;
+      if (dec !== undefined && dec.length > 2) return t;
+      return next;
+    });
+
+  const backspace = () => setTendered((t) => t.slice(0, -1));
+
+  const split = () => {
+    if (pending <= 0) return;
+    const ref =
+      method === "momo" ? momoRef.trim() || undefined : method === "card" ? cardRef.trim() || undefined : undefined;
+    setEntered((rows) => [...rows, { key: id("sp_"), method, amount: pending, ref }]);
+    if (method === "cash") setTendered("");
+  };
+
+  const complete = () => {
+    const payments: Payment[] = entered.map((r) => ({
+      id: id("py_"),
+      method: r.method,
+      amount: r.amount,
+      t: now,
+      ...(r.ref ? { ref: r.ref } : {}),
+    }));
+    if (pending > 0) {
+      const ref = method === "momo" ? momoRef.trim() : method === "card" ? cardRef.trim() : "";
+      payments.push({
+        id: id("py_"),
+        method,
+        amount: pending,
+        t: now,
+        ...(ref !== "" ? { ref } : {}),
+      });
+    }
+    const placed = usePos.getState().placeOrder(payments);
+    if (placed) setDone({ order: placed, change: changeDue });
+  };
+
+  return (
+    <div className="anim-fade pb-40">
+      <ScreenHeader title="Payment" onBack={() => router.push("/sell")} />
+
+      <section className="px-4 pt-2 text-center">
+        <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
+          Amount due
+        </p>
+        <p className="tabnum text-[34px]/10 font-extrabold tracking-[-0.03em] text-ink">
+          {fmtMoney(totals.total)}
+        </p>
+        <p className="text-[13px] text-ink3">
+          {totals.count} item{totals.count === 1 ? "" : "s"}
+          {totals.discount > 0 ? ` · discount −${fmtMoney(totals.discount)}` : ""}
+          {totals.tax > 0
+            ? ` · ${settings.taxInclusive ? "tax incl." : "tax"} ${fmtMoney(totals.tax)}`
+            : ""}
+        </p>
+      </section>
+
+      <section className="px-4 pt-4">
+        <Segmented<PayMethod>
+          value={method}
+          onChange={setMethod}
+          options={[
+            { value: "cash", label: "Cash" },
+            { value: "momo", label: "MoMo" },
+            { value: "card", label: "Card" },
+          ]}
+        />
+      </section>
+
+      {method === "cash" && (
+        <section className="px-4 pt-3">
+          <Card className="p-4">
+            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
+              Amount tendered
+            </p>
+            <p
+              className={cn(
+                "tabnum text-[28px]/9 font-extrabold tracking-[-0.02em]",
+                tenderedNum > 0 ? "text-ink" : "text-ink4",
+              )}
+            >
+              {fmtMoney(tenderedNum)}
+            </p>
+            <div className="no-scrollbar -mx-4 mt-3 overflow-x-auto px-4">
+              <div className="flex w-max gap-1.5">
+                <Chip active onClick={() => setTendered(trimNum(remaining))}>
+                  Exact
+                </Chip>
+                {cashierDenominations().map((d) => (
+                  <Chip key={d} onClick={() => setTendered((t) => trimNum(parsePrice(t) + d))}>
+                    {fmtMoneyCompact(d)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            {changeDue > 0 && (
+              <span className="tabnum mt-3 inline-flex items-center rounded-full bg-accent px-3 py-1 text-[12px] font-semibold text-accentink">
+                Change due {fmtMoney(changeDue)}
+              </span>
+            )}
+          </Card>
+          <NumberPad className="mt-3" onDigit={onDigit} onDelete={backspace} />
+        </section>
+      )}
+
+      {method === "momo" && (
+        <section className="px-4 pt-3">
+          <Card className="p-4">
+            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
+              MoMo number
+            </p>
+            <div className="mt-1 flex items-center gap-3">
+              <p className="tabnum text-[24px]/8 font-extrabold tracking-[-0.02em] text-ink">
+                {settings.momoNumber}
+              </p>
+              <span className="rounded-full bg-info/10 px-2.5 py-1 text-[12px] font-semibold text-info">
+                {settings.momoNetwork}
+              </span>
+            </div>
+            <p className="mt-3 text-[13px] leading-5 text-ink3">
+              Customer dials *170# or sends money to this number.
+            </p>
+            <Input
+              label="Ref"
+              hint="Paste the transaction ID once it lands."
+              placeholder="Optional — e.g. MTN-TX993"
+              value={momoRef}
+              onChange={(e) => setMomoRef(e.target.value)}
+              className="mt-3"
+            />
+          </Card>
+        </section>
+      )}
+
+      {method === "card" && (
+        <section className="px-4 pt-3">
+          <Card className="p-4">
+            <p className="text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
+              Card terminal
+            </p>
+            <p className="mt-1 text-[14px] leading-6 text-ink2">
+              {fmtMoney(remaining)} will be recorded as a card payment when you complete the
+              sale.
+            </p>
+            <Input
+              label="Approval code"
+              hint="Optional — copy it from the terminal slip."
+              placeholder="e.g. APPR-0042"
+              value={cardRef}
+              onChange={(e) => setCardRef(e.target.value)}
+              className="mt-3"
+            />
+          </Card>
+        </section>
+      )}
+
+      <section className="px-4 pt-5">
+        <p className="mb-2 text-[12px] font-semibold uppercase tracking-[.07em] text-ink3">
+          Split payments
+        </p>
+        {entered.length > 0 && (
+          <Card inset>
+            {entered.map((r) => (
+              <div key={r.key} className="flex items-center gap-3 px-4 py-3">
+                <span
+                  className={cn(
+                    "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                    METHOD_TINT[r.method],
+                  )}
+                >
+                  <MethodIcon method={r.method} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-semibold text-ink">
+                    {METHOD_LABEL[r.method]}
+                  </span>
+                  {r.ref && (
+                    <span className="block truncate text-[12px] text-ink3">{r.ref}</span>
+                  )}
+                </span>
+                  <span className="tabnum text-[15px] font-bold text-ink">
+                    {fmtMoney(r.amount)}
+                  </span>
+                  <IconButton
+                    label="Remove split"
+                    className="size-8"
+                    onClick={() =>
+                      setEntered((rows) => rows.filter((x) => x.key !== r.key))
+                    }
+                  >
+                    <X className="size-4" />
+                  </IconButton>
+              </div>
+            ))}
+          </Card>
+        )}
+        <div className="mt-2 flex items-center justify-between px-1">
+          <span className="text-[13px] text-ink3">Remaining due</span>
+          <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(remaining)}</span>
+        </div>
+        <Button
+          variant="soft"
+          block
+          className="mt-2"
+          icon={<Plus className="size-4" />}
+          disabled={pending <= 0}
+          onClick={split}
+        >
+          Split
+        </Button>
+      </section>
+
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-2">
+        <div className="mx-auto max-w-[440px] px-4">
+          {credit > 0 && (
+            <p className="mb-1.5 text-center text-[12px] font-medium text-warn">
+              Leaves {fmtMoney(credit)} on credit
+            </p>
+          )}
+          <Button block size="lg" onClick={complete}>
+            {ctaLabel}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SuccessView({
+  done,
+  onNew,
+  onHome,
+}: {
+  done: { order: Order; change: number };
+  onNew: () => void;
+  onHome: () => void;
+}) {
+  const settings = usePos((s) => s.settings);
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const o = done.order;
+  const paid = o.payments.reduce((s, p) => s + p.amount, 0);
+  const credit = Math.max(0, o.total - paid);
+  const items = o.items.reduce((s, i) => s + i.qty, 0);
+  const tax = orderTax(o);
+
+  return (
+    <div className="anim-fade">
+      <div className="flex flex-col items-center px-6 pt-20 text-center">
+        <span className="anim-pop flex size-16 items-center justify-center rounded-full bg-accent text-accentink">
+          <CircleCheck className="size-9" />
+        </span>
+        <p className="mt-5 text-[12px] font-semibold uppercase tracking-[.08em] text-accent">
+          {credit > 0 ? "Sale recorded" : "Sale complete"}
+        </p>
+        <p className="mt-1 font-mono text-[13px] text-ink2">{o.id}</p>
+        <p className="tabnum mt-2 text-[34px]/10 font-extrabold tracking-[-0.03em] text-ink">
+          {fmtMoney(paid)}
+        </p>
+        <p className="text-[13px] text-ink3">
+          {items} item{items === 1 ? "" : "s"} paid
+        </p>
+      </div>
+
+      <div className="px-4 pt-6">
+        <Card inset>
+          {o.payments.length === 0 && (
+            <p className="px-4 py-3 text-center text-[13px] text-ink3">
+              No payment recorded — full amount on credit.
+            </p>
+          )}
+          {o.payments.map((p) => (
+            <div key={p.id} className="flex items-center gap-3 px-4 py-3">
+              <span
+                className={cn(
+                  "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                  METHOD_TINT[p.method],
+                )}
+              >
+                <MethodIcon method={p.method} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14px] font-semibold text-ink">
+                  {METHOD_LABEL[p.method]}
+                </span>
+                {p.ref && <span className="block truncate text-[12px] text-ink3">{p.ref}</span>}
+              </span>
+              <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(p.amount)}</span>
+            </div>
+          ))}
+          {o.discount > 0 && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[14px] font-medium text-ink2">Discount</span>
+              <span className="tabnum text-[15px] font-bold text-accent">
+                −{fmtMoney(o.discount)}
+              </span>
+            </div>
+          )}
+          {tax && (
+            <div className="flex items-center justify-between px-4 py-3">
+              <span className="text-[14px] font-medium text-ink2">{tax.label}</span>
+              <span className="tabnum text-[15px] font-bold text-ink">{fmtMoney(tax.amount)}</span>
+            </div>
+          )}
+          {done.change > 0 && (
+            <div className="flex items-center justify-between bg-accent/10 px-4 py-3">
+              <span className="text-[14px] font-semibold text-accent">Change due</span>
+              <span className="tabnum text-[15px] font-bold text-accent">
+                {fmtMoney(done.change)}
+              </span>
+            </div>
+          )}
+          {credit > 0 && (
+            <div className="flex items-center justify-between bg-warn/10 px-4 py-3">
+              <span className="text-[14px] font-semibold text-warn">Balance on credit</span>
+              <span className="tabnum text-[15px] font-bold text-warn">{fmtMoney(credit)}</span>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      <div className="grid gap-2.5 px-4 pt-6 pb-10">
+        <Button
+          variant="secondary"
+          block
+          size="lg"
+          icon={<Receipt className="size-4" />}
+          onClick={() => setReceiptOpen(true)}
+        >
+          View receipt
+        </Button>
+        <Button variant="primary" block size="lg" onClick={onNew}>
+          New sale
+        </Button>
+        <Button variant="ghost" block size="lg" onClick={onHome}>
+          Home
+        </Button>
+      </div>
+
+      <ReceiptSheet
+        open={receiptOpen}
+        onClose={() => setReceiptOpen(false)}
+        order={o}
+        settings={settings}
+      />
+    </div>
+  );
+}
