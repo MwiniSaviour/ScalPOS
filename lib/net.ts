@@ -2,11 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-/**
- * Live connectivity. SSR-safe: starts optimistic (true), corrected on mount —
- * native gets @capacitor/network's networkStatusChange, web gets the
- * window online/offline events.
- */
 export function useNet(): { online: boolean } {
   const [online, setOnline] = useState(true);
 
@@ -42,7 +37,6 @@ export function useNet(): { online: boolean } {
           };
         }
       } catch {
-        /* no connectivity source — keep the optimistic default */
       }
     })();
 
@@ -53,4 +47,67 @@ export function useNet(): { online: boolean } {
   }, []);
 
   return { online };
+}
+
+export function useSyncStatus(): {
+  online: boolean;
+  syncing: boolean;
+  pendingCount: number;
+  lastSyncAt: number | null;
+  error: string | null;
+} {
+  const { online } = useNet();
+  const [syncing, setSyncing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const mod = await import("@/lib/sync/outbox");
+        const ops = await mod.peek();
+        if (!cancelled) setPendingCount(Array.isArray(ops) ? ops.length : 0);
+      } catch {
+      }
+    };
+    void refresh();
+    const id = setInterval(() => void refresh(), 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!online) return;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const mod = await import("@/lib/sync/outbox");
+        const ops = await mod.peek();
+        if (!Array.isArray(ops) || ops.length === 0) return;
+        setSyncing(true);
+        setError(null);
+        const res = await mod.drain();
+        if (cancelled) return;
+        setPendingCount(Array.isArray(res.failed) ? res.failed.length : 0);
+        setLastSyncAt(Date.now());
+        if (Array.isArray(res.failed) && res.failed.length > 0) {
+          setError(res.failed[0]?.last_error ?? "sync failed");
+        }
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (!cancelled) setSyncing(false);
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [online]);
+
+  return { online, syncing, pendingCount, lastSyncAt, error };
 }

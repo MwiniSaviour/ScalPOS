@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { TabBar, willHaveTabBar } from "./tabbar";
 import { NetStatus } from "@/components/ui/netstatus";
+import { SyncStatus } from "@/components/ui/syncstatus";
 import { Toaster } from "@/components/ui/toaster";
 import { usePos } from "@/lib/store";
 import { useEffect } from "react";
@@ -60,6 +61,7 @@ function ChromeGate() {
     <>
       <TabBar />
       <NetStatus />
+      <SyncStatus />
       <Toaster />
     </>
   );
