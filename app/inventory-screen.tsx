@@ -163,7 +163,7 @@ export default function InventoryScreen() {
         href="/inventory/edit"
         aria-label="Add product"
         className="press fixed right-4 z-40 flex size-14 items-center justify-center rounded-2xl border border-line2 bg-accent text-accentink"
-        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)" }}
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 142px)" }}
       >
         <Plus className="size-6" />
       </Link>

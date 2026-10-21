@@ -96,12 +96,12 @@ export default function CustomersScreen() {
       )}
 
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+88px)] z-40 mx-auto flex max-w-[440px] justify-end px-5"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+142px)] z-40 mx-auto flex max-w-[440px] justify-end px-5"
       >
         <button
           onClick={() => setAddOpen(true)}
           aria-label="Add customer"
-          className="press pointer-events-auto flex size-14 items-center justify-center rounded-2xl bg-violet text-accentink"
+          className="press pointer-events-auto flex size-14 items-center justify-center rounded-2xl bg-accent text-accentink"
         >
           <Plus className="size-6" />
         </button>

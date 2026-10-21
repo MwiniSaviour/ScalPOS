@@ -1,12 +1,14 @@
 "use client";
 
+import { Avatar } from "@/components/ui/avatar";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/emptystate";
-import { Input } from "@/components/ui/input";
+import { Input, SearchBar } from "@/components/ui/input";
 import { NumberPad } from "@/components/ui/numberpad";
 import { Segmented } from "@/components/ui/segmented";
+import { Sheet } from "@/components/ui/sheet";
 import { ReceiptSheet, orderTax } from "@/components/receipt/receipt";
 import { id } from "@/lib/format";
 import { cashierDenominations, fmtMoney, fmtMoneyCompact, parsePrice } from "@/lib/money";
@@ -16,15 +18,17 @@ import { useNow } from "@/lib/now";
 import {
   Banknote,
   ChevronLeft,
+  ChevronRight,
   CircleCheck,
   CreditCard,
   Plus,
   Receipt,
   Smartphone,
+  User,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Order, Payment, PaymentMethod } from "@/lib/types";
 
 type PayMethod = "cash" | "momo" | "card";
@@ -63,6 +67,9 @@ export default function PayScreen() {
   const settings = usePos((s) => s.settings);
   const now = useNow();
   const totals = useCartTotals();
+  const customers = usePos((s) => s.customers);
+  const cartCustomerId = usePos((s) => s.cartCustomerId);
+  const setCartCustomer = usePos((s) => s.setCartCustomer);
 
   const [method, setMethod] = useState<PayMethod>("cash");
   const [tendered, setTendered] = useState("");
@@ -70,6 +77,15 @@ export default function PayScreen() {
   const [momoRef, setMomoRef] = useState("");
   const [cardRef, setCardRef] = useState("");
   const [done, setDone] = useState<{ order: Order; change: number } | null>(null);
+  const [custOpen, setCustOpen] = useState(false);
+  const [custQuery, setCustQuery] = useState("");
+
+  const custFiltered = useMemo(() => {
+    const q = custQuery.trim().toLowerCase();
+    return customers.filter(
+      (c) => q === "" || c.name.toLowerCase().includes(q) || c.phone.includes(q),
+    );
+  }, [customers, custQuery]);
 
   if (!hydrated) return null;
 
@@ -108,6 +124,13 @@ export default function PayScreen() {
       </div>
     );
   }
+
+  const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
+
+  const pick = (cid: string | null) => {
+    setCartCustomer(cid);
+    setCustOpen(false);
+  };
 
   const enteredSum = entered.reduce((s, r) => s + r.amount, 0);
   const remaining = Math.max(0, round2(totals.total - enteredSum));
@@ -208,6 +231,28 @@ export default function PayScreen() {
             { value: "card", label: "Card" },
           ]}
         />
+      </section>
+
+      <section className="px-5 pt-4">
+        <Card inset>
+          <button
+            onClick={() => setCustOpen(true)}
+            className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet/10 text-violet">
+              <User className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[17px] font-semibold text-ink">
+                {activeCustomer ? activeCustomer.name : "Customer"}
+              </span>
+              <span className="block truncate text-[14px] text-ink3">
+                {activeCustomer ? activeCustomer.phone || "Walk-in" : "Walk-in — tap to add"}
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
+          </button>
+        </Card>
       </section>
 
       {method === "cash" && (
@@ -358,6 +403,47 @@ export default function PayScreen() {
           </Button>
         </div>
       </div>
+
+      <Sheet
+        open={custOpen}
+        onClose={() => setCustOpen(false)}
+        title="Attach customer"
+        height="auto"
+      >
+        <SearchBar value={custQuery} onChange={setCustQuery} placeholder="Search name or phone…" />
+        <Card inset className="mt-3">
+          <button
+            onClick={() => pick(null)}
+            className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <User className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block text-[17px] font-semibold text-ink">Walk-in</span>
+              <span className="block text-[14px] text-ink3">No customer attached</span>
+            </span>
+            {cartCustomerId === null && <CircleCheck className="size-5 shrink-0 text-accent" />}
+          </button>
+          {custFiltered.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => pick(c.id)}
+              className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+            >
+              <Avatar name={c.name} size={36} />
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[17px] font-semibold text-ink">{c.name}</span>
+                <span className="block truncate text-[14px] text-ink3">{c.phone || "No phone"}</span>
+              </span>
+              {cartCustomerId === c.id && <CircleCheck className="size-5 shrink-0 text-accent" />}
+            </button>
+          ))}
+          {custFiltered.length === 0 && (
+            <p className="px-4 py-6 text-center text-[14px] text-ink3">No customer matches.</p>
+          )}
+        </Card>
+      </Sheet>
     </div>
   );
 }

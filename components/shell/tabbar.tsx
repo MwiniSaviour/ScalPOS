@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { House, MoreHorizontal, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucide-react";
+import { House, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/ui";
 /** bottom tab chrome exists only on the tab destinations */
@@ -12,7 +12,6 @@ const tabs: { href: string; label: string; icon: LucideIcon }[] = [
   { href: "/orders", label: "Orders", icon: ReceiptText },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/customers", label: "Customers", icon: Users },
-  { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
 function normalize(p: string): string {

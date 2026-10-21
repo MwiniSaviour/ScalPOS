@@ -22,6 +22,7 @@ import {
   PackageOpen,
   Plus,
   SearchX,
+  User,
   Users,
   X,
 } from "lucide-react";
@@ -325,22 +326,20 @@ export default function SellScreen() {
           </div>
           <div className="px-4 py-3.5">
             <button onClick={() => setCustOpen(true)} className="press flex w-full items-center gap-3">
+              <span className="min-w-0 flex-1 text-left text-[14px] text-ink3">Customer</span>
               {activeCustomer ? (
-                <Avatar name={activeCustomer.name} size={36} />
+                <span className="flex min-w-0 items-center gap-2">
+                  <User className="size-4 shrink-0 text-ink3" />
+                  <span className="truncate text-[17px] font-semibold text-ink">
+                    {activeCustomer.name}
+                  </span>
+                  <ChevronRight className="size-4 shrink-0 text-ink3" />
+                </span>
               ) : (
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-violet/10 text-violet">
-                  <Users className="size-[18px]" />
+                <span className="rounded-full border border-line2 bg-surface px-3.5 py-1.5 text-[14px] font-semibold text-ink2">
+                  Add customer
                 </span>
               )}
-              <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate text-[17px] font-semibold text-ink">
-                  {activeCustomer ? activeCustomer.name : "Attach customer"}
-                </span>
-                <span className="block truncate text-[14px] text-ink3">
-                  {activeCustomer ? activeCustomer.phone || "Walk-in" : "Walk-in — no customer"}
-                </span>
-              </span>
-              <ChevronRight className="size-4 shrink-0 text-ink3" />
             </button>
           </div>
         </Card>
@@ -444,21 +443,21 @@ function ProductTile({
       onClick={onTap}
       disabled={out}
       className={cn(
-        "press flex items-start gap-2.5 rounded-2xl border p-2.5 text-left",
+        "press flex flex-col overflow-hidden rounded-2xl border text-left",
         flash ? "border-accent bg-accent/10" : "border-line bg-surface hover:bg-surface2/50",
       )}
     >
       <ProductArt
         imageUrl={p.imageUrl}
         name={p.name}
-        className={cn("size-12 shrink-0 rounded-xl", out && "opacity-50")}
+        className={cn("aspect-square w-full", out && "opacity-50")}
       />
-      <span className="min-w-0 flex-1">
-        <span className="block min-h-[32px] line-clamp-2 text-[14px] font-semibold leading-tight text-ink">
+      <span className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
+        <span className="line-clamp-2 min-h-[36px] text-[15px] font-semibold leading-tight text-ink">
           {p.name}
         </span>
-        <span className="tabnum mt-1 block text-[15px] font-bold text-ink">{fmtMoney(p.price)}</span>
-        <span className="mt-1 flex h-[16px] items-center">
+        <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
+        <span className="mt-0.5 flex h-[16px] items-center">
           {out ? (
             <span className="text-[12px] font-medium text-ink3">Out of stock</span>
           ) : low ? (
