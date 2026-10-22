@@ -123,6 +123,7 @@ export default function ReportsScreen() {
 
   return (
     <div className="anim-fade px-5 pt-4">
+      <div className="safe-t" />
       <header className="flex items-center gap-1">
         <IconButton label="Back" onClick={() => router.back()} className="-ml-2 shrink-0 text-ink">
           <ChevronLeft className="size-[24px]" strokeWidth={2.2} />

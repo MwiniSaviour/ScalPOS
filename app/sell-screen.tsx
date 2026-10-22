@@ -40,6 +40,7 @@ export default function SellScreen() {
   const addToCart = usePos((s) => s.addToCart);
   const setCartQty = usePos((s) => s.setCartQty);
   const setCartCustomer = usePos((s) => s.setCartCustomer);
+  const cart = usePos((s) => s.cart);
   const totals = useCartTotals();
 
   const [query, setQuery] = useState("");
@@ -70,6 +71,12 @@ export default function SellScreen() {
       (c) => q === "" || c.name.toLowerCase().includes(q) || c.phone.includes(q),
     );
   }, [customers, custQuery]);
+
+  const qtyInCart = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const line of cart) m.set(line.productId, line.qty);
+    return m;
+  }, [cart]);
 
   if (!hydrated) return null;
 
@@ -183,8 +190,10 @@ export default function SellScreen() {
                 <ProductTile
                   key={p.id}
                   p={p}
+                  qty={qtyInCart.get(p.id) ?? 0}
                   flash={flash === p.id}
                   onTap={() => tap(p.id)}
+                  onRemove={() => setCartQty(p.id, (qtyInCart.get(p.id) ?? 1) - 1)}
                 />
               ))}
             </div>
@@ -194,7 +203,7 @@ export default function SellScreen() {
 
       {totals.count > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface">
-          <div className="mx-auto flex max-w-[440px] items-center gap-3 px-4 pb-[max(env(safe-area-inset-bottom,0px),8px)] pt-3">
+          <div className="mx-auto flex max-w-[440px] items-center gap-3 px-4 pb-[max(var(--nova-sab),8px)] pt-3">
             <button
               onClick={() => setCartOpen(true)}
               aria-label={`Open cart, ${totals.count} items, ${fmtMoney(totals.total)}`}
@@ -429,29 +438,59 @@ export default function SellScreen() {
 
 function ProductTile({
   p,
+  qty,
   flash,
   onTap,
+  onRemove,
 }: {
   p: Product;
+  qty: number;
   flash: boolean;
   onTap: () => void;
+  onRemove: () => void;
 }) {
   const out = p.stock <= 0;
   const low = !out && p.stock <= p.lowStockAt;
+  const selected = qty > 0;
   return (
-    <button
-      onClick={onTap}
-      disabled={out}
+    <div
+      role="button"
+      tabIndex={out ? undefined : 0}
+      aria-disabled={out}
+      aria-label={selected ? `${p.name}, ${qty} in cart` : p.name}
+      onClick={() => !out && onTap()}
+      onKeyDown={(e) => {
+        if (!out && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onTap();
+        }
+      }}
       className={cn(
-        "press flex flex-col overflow-hidden rounded-2xl border text-left",
-        flash ? "border-accent bg-accent/10" : "border-line bg-surface hover:bg-surface2/50",
+        "press relative flex flex-col overflow-hidden rounded-2xl border text-left cursor-pointer",
+        selected || flash
+          ? "border-accent bg-accent/10"
+          : "border-line bg-surface hover:bg-surface2/50",
+        out && "cursor-default opacity-50",
       )}
     >
       <ProductArt
         imageUrl={p.imageUrl}
         name={p.name}
-        className={cn("aspect-square w-full", out && "opacity-50")}
+        className="aspect-square w-full"
       />
+      {selected && (
+        <button
+          aria-label={`Remove one ${p.name} from cart`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="press absolute right-1.5 top-1.5 flex h-6 items-center gap-1 rounded-full bg-accent pl-1.5 pr-2 text-accentink shadow-sm"
+        >
+          <X className="size-3.5" strokeWidth={3} />
+          {qty > 1 && <span className="tabnum text-[11px] font-bold">×{qty}</span>}
+        </button>
+      )}
       <span className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
         <span className="line-clamp-2 min-h-[36px] text-[15px] font-semibold leading-tight text-ink">
           {p.name}
@@ -465,7 +504,7 @@ function ProductTile({
           ) : null}
         </span>
       </span>
-    </button>
+    </div>
   );
 }
 

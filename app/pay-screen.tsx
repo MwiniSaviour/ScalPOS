@@ -391,7 +391,7 @@ export default function PayScreen() {
         </Button>
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-2">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line2 bg-surface pb-[calc(var(--nova-sab)+12px)] pt-2">
         <div className="mx-auto max-w-[440px] px-4">
           {credit > 0 && (
             <p className="mb-1.5 text-center text-[13px] font-medium text-warn">

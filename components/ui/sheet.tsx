@@ -58,7 +58,7 @@ export function Sheet({
           <div className="pt-2 pr-14 pb-2 pl-5 text-[17px] font-semibold text-ink">{title}</div>
         )}
         <div className="no-scrollbar flex-1 overflow-y-auto px-5 pb-4">{children}</div>
-        {footer && <div className="border-t border-line/70 bg-surface px-5 py-3.5 pb-[calc(env(safe-area-inset-bottom,0px)+14px)]">{footer}</div>}
+        {footer && <div className="border-t border-line/70 bg-surface px-5 py-3.5 pb-[calc(var(--nova-sab)+14px)]">{footer}</div>}
       </div>
     </div>
   );

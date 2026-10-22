@@ -69,6 +69,7 @@ export default function MoreScreen() {
 
   return (
     <div className="anim-fade px-5 pt-4">
+      <div className="safe-t" />
       <header>
         <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] text-ink">More</h1>
         <p className="mt-0.5 text-[15px] text-ink3">{settings.shopName}</p>

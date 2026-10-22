@@ -104,7 +104,7 @@ export default function ShopSettingsScreen() {
         </Card>
       </section>
 
-      <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[440px] border-t border-line bg-surface px-4 pt-3 pb-[calc(env(safe-area-inset-bottom,0px)+12px)]">
+      <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[440px] border-t border-line bg-surface px-4 pt-3 pb-[calc(var(--nova-sab)+12px)]">
         <div className="grid grid-cols-2 gap-2.5">
           <Button variant="secondary" block onClick={() => router.back()}>
             Cancel

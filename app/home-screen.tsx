@@ -39,6 +39,7 @@ export default function HomeScreen() {
 
   return (
     <div className="anim-fade px-5 pt-4">
+      <div className="safe-t" />
       {/* header — shop name, date, owner avatar */}
       <header className="flex items-start gap-3">
         <div className="min-w-0 flex-1">

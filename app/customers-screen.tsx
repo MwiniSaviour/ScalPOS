@@ -39,6 +39,7 @@ export default function CustomersScreen() {
 
   return (
     <div className="anim-fade px-5 pt-4">
+      <div className="safe-t" />
       {/* header — page title, count */}
       <header>
         <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] text-ink">Customers</h1>
@@ -96,7 +97,7 @@ export default function CustomersScreen() {
       )}
 
       <div
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom,0px)+142px)] z-40 mx-auto flex max-w-[440px] justify-end px-5"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--nova-sab)+142px)] z-40 mx-auto flex max-w-[440px] justify-end px-5"
       >
         <button
           onClick={() => setAddOpen(true)}

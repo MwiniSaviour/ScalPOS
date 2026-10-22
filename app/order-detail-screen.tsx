@@ -220,7 +220,7 @@ export default function OrderDetailScreen() {
         </Card>
       </main>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-5 pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface px-5 pb-[calc(var(--nova-sab)+12px)] pt-3">
         {canRecord ? (
           <div className="grid grid-cols-2 gap-2.5">
             <Button

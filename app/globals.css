@@ -152,7 +152,16 @@
 
 html {
   height: 100%;
+  background: var(--bg);
   overscroll-behavior-y: none;
+}
+
+/* Capacitor injects --safe-area-inset-* on the html element. env() is only
+   reliable when the WebView runs full-bleed, so take whichever source reports
+   an inset. */
+:root {
+  --nova-sat: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --nova-sab: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
 }
 
 body {
@@ -205,7 +214,7 @@ textarea::placeholder {
 }
 
 .safe-t {
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--nova-sat);
 }
 
 .press {

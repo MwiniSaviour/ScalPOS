@@ -8,12 +8,22 @@ import { Toaster } from "@/components/ui/toaster";
 import { usePos } from "@/lib/store";
 import { useEffect } from "react";
 import { cn } from "@/lib/ui";
+import { appChrome } from "@/lib/appchrome";
+
+/** paints the window chrome (decor + bar zones) — no-op when unsupported */
+async function applyBarColor(color: string): Promise<void> {
+  try {
+    await appChrome.setBarBackgroundColor({ color });
+  } catch {
+    /* not available on this platform */
+  }
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const hasTabBar = willHaveTabBar(pathname);
   return (
-    <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[164px]")}>
+    <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+164px)]")}>
       {children}
       <ChromeGate />
     </div>
@@ -33,6 +43,14 @@ function ChromeGate() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
+
+    // bars can be tinted from theme-color metas or the native window decor —
+    // both must follow the in-app theme, not the device's night mode
+    const barColor = theme === "light" ? "#eef1f6" : "#0a0e17";
+    document
+      .querySelectorAll('meta[name="theme-color"]')
+      .forEach((m) => m.setAttribute("content", barColor));
+    void applyBarColor(barColor);
   }, [theme]);
 
   // the Android status bar sits on top of the app: its icons must follow the

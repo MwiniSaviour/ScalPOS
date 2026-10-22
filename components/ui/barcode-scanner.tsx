@@ -128,7 +128,7 @@ export default function BarcodeScannerOverlay({
         )}
       </div>
 
-      <div className="shrink-0 border-t border-line2 bg-bg px-5 pb-[max(env(safe-area-inset-bottom,0px),12px)] pt-3">
+      <div className="shrink-0 border-t border-line2 bg-bg px-5 pb-[max(var(--nova-sab),12px)] pt-3">
         <button
           onClick={() => onResult(null)}
           className="press h-12 w-full rounded-xl border border-line2 bg-surface2 text-[15px] font-semibold text-ink hover:bg-surface3"

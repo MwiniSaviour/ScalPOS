@@ -401,7 +401,7 @@ export default function ProductEditScreen() {
         </Card>
       </section>
 
-      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[calc(env(safe-area-inset-bottom,0px)+12px)] pt-3">
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface pb-[calc(var(--nova-sab)+12px)] pt-3">
         <div className="mx-auto grid max-w-[440px] grid-cols-2 gap-2.5 px-4">
           <Button variant="secondary" size="lg" onClick={() => router.back()}>
             Cancel

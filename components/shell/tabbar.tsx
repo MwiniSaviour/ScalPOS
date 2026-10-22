@@ -26,7 +26,7 @@ export function TabBar() {
   if (!TAB_ROUTES.includes(normalize(pathname))) return null;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 pb-[max(env(safe-area-inset-bottom,0px),8px)]">
+    <nav className="fixed inset-x-0 bottom-0 z-40">
       <div className="mx-auto max-w-[420px] px-4 pb-2">
         <Link
           href="/sell"
@@ -59,6 +59,8 @@ export function TabBar() {
           })}
         </div>
       </div>
+      {/* gesture/button strip: painted so page content never shows through */}
+      <div className="bg-surface" style={{ height: "max(var(--nova-sab), 8px)" }} />
     </nav>
   );
 }
