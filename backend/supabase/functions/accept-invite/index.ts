@@ -115,11 +115,18 @@ Deno.serve(async (req: Request) => {
     );
   }
 
-  const { error: memErr } = await admin.from("memberships").insert({
-    org_id: payload.org_id,
-    user_id: user.id,
-    role: payload.role,
-  });
+  const { error: memErr } = await admin
+    .from("memberships")
+    .upsert(
+      {
+        org_id: payload.org_id,
+        user_id: user.id,
+        role: payload.role,
+        email: user.email ?? null,
+        deleted_at: null,
+      },
+      { onConflict: "org_id,user_id" },
+    );
   if (memErr) {
     return new Response(JSON.stringify({ error: memErr.message }), {
       status: 500,

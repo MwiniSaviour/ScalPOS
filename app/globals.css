@@ -279,14 +279,14 @@ textarea::placeholder {
   animation: sheet-in 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .anim-fade {
-  animation: fade-in 0.18s ease-out both;
+  animation: fade-in 0.18s ease-out backwards;
 }
 .anim-rise {
-  animation: rise-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: rise-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .anim-pop {
-  animation: pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: pop-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }
 .anim-toast {
-  animation: toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: toast-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) backwards;
 }

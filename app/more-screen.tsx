@@ -2,6 +2,11 @@
 
 import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
+import {
+  readConnection,
+  writeConnection,
+  type SyncConnection,
+} from "@/lib/api/bootstrap";
 import { clearAllImages } from "@/lib/image-store";
 import { useSettings, usePos } from "@/lib/store";
 import { listConflicts } from "@/lib/sync/outbox";
@@ -11,6 +16,7 @@ import {
   ChevronRight,
   CircleUserRound,
   Download,
+  LogOut,
   PieChart,
   RefreshCcw,
   RotateCcw,
@@ -28,7 +34,9 @@ export default function MoreScreen() {
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
   const [demoOpen, setDemoOpen] = useState(false);
+  const [signoutOpen, setSignoutOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
+  const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
 
   useEffect(() => {
     let cancelled = false;
@@ -66,6 +74,16 @@ export default function MoreScreen() {
     a.click();
     URL.revokeObjectURL(url);
     toast("Backup saved to your downloads");
+  }
+
+  async function signOut() {
+    writeConnection(null);
+    setConn(null);
+    const mod = await import("@/lib/api/supabase");
+    const sb = mod.getSupabase();
+    if (sb) await sb.auth.signOut();
+    toast("Signed out", "ok");
+    window.location.reload();
   }
 
   return (
@@ -179,6 +197,30 @@ export default function MoreScreen() {
         </Card>
       </section>
 
+      {conn && (
+        <section className="mt-6">
+          <Card inset>
+            <button
+              data-testid="more-signout"
+              onClick={() => setSignoutOpen(true)}
+              className="press flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface2/50"
+            >
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+                <LogOut className="size-[18px]" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[17px] font-semibold text-ink">
+                  Sign out
+                </span>
+                {conn.email && (
+                  <span className="block truncate text-[14px] text-ink3">{conn.email}</span>
+                )}
+              </span>
+            </button>
+          </Card>
+        </section>
+      )}
+
       {/* about */}
       <section className="mt-6 pb-6">
         <p className="text-[14px] leading-6 text-ink3">
@@ -199,6 +241,15 @@ export default function MoreScreen() {
         title="Load demo store?"
         body="This clears everything saved on this device — products, orders, customers and uploaded photos — and reloads the sample store."
         confirmLabel="Load demo"
+      />
+      <Confirm
+        open={signoutOpen}
+        onClose={() => setSignoutOpen(false)}
+        onConfirm={signOut}
+        tone="danger"
+        title="Sign out?"
+        body="This signs you out and disconnects cloud sync. All of your data stays saved on this device."
+        confirmLabel="Sign out"
       />
     </div>
   );

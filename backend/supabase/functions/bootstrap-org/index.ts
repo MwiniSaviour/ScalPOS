@@ -65,6 +65,7 @@ Deno.serve(async (req: Request) => {
     org_id: org.id,
     user_id: user.id,
     role: "owner",
+    ...(user.email ? { email: user.email } : {}),
   });
   if (memErr) {
     return new Response(JSON.stringify({ error: memErr.message }), {
