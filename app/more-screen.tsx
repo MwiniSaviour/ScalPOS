@@ -13,6 +13,7 @@ import {
   Download,
   PieChart,
   RefreshCcw,
+  RotateCcw,
   Settings,
   Store,
   Users,
@@ -103,6 +104,12 @@ export default function MoreScreen() {
             icon={<Store className="size-[18px]" />}
             label="Categories"
             sub="Group your products"
+          />
+          <RowLink
+            href="/onboarding"
+            icon={<RotateCcw className="size-[18px]" />}
+            label="Replay intro"
+            sub="The welcome screens"
           />
         </Card>
       </section>

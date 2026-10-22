@@ -26,12 +26,25 @@ public class AppChromePlugin extends Plugin {
             try {
                 Window window = activity.getWindow();
                 window.getDecorView().setBackgroundColor(Color.parseColor(color));
-                // no white contrast scrim over a themed 3-button nav bar
+            } catch (RuntimeException ignored) {
+                // unparsable color or missing window — leave the decor as is
+            }
+            // status bar follows the web theme too (ignored on API 35+, fine)
+            try {
+                Window window = activity.getWindow();
+                window.setStatusBarColor(Color.parseColor(color));
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    window.setStatusBarContrastEnforced(false);
+                }
+            } catch (RuntimeException ignored) {
+            }
+            // no white contrast scrim over a themed 3-button nav bar
+            try {
+                Window window = activity.getWindow();
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     window.setNavigationBarContrastEnforced(false);
                 }
             } catch (RuntimeException ignored) {
-                // unparsable color or missing window — leave chrome as is
             }
             call.resolve();
         });

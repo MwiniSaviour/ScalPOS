@@ -59,8 +59,12 @@ export function TabBar() {
           })}
         </div>
       </div>
-      {/* gesture/button strip: painted so page content never shows through */}
-      <div className="bg-surface" style={{ height: "max(var(--nova-sab), 8px)" }} />
+      {/* gesture/button strip: painted so page content never shows through,
+          kept just tall enough beneath the labels — no stray dark band */}
+      <div
+        className="bg-surface"
+        style={{ height: "max(calc(var(--nova-sab) - 28px), 8px)" }}
+      />
     </nav>
   );
 }

@@ -3,40 +3,17 @@
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  bootstrapConnection,
+  readConnection,
+  writeConnection,
+  type SyncConnection,
+} from "@/lib/api/bootstrap";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "nova-pos-sync-v1";
-
-interface Connection {
-  org_id: string;
-  user_id: string;
-  access_token: string;
-  email?: string;
-  org_name?: string;
-}
-
-function readConnection(): Connection | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Connection;
-    if (!parsed?.org_id || !parsed?.user_id || !parsed?.access_token) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeConnection(c: Connection | null) {
-  if (typeof window === "undefined") return;
-  if (!c) window.localStorage.removeItem(STORAGE_KEY);
-  else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
-}
 
 function supabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -46,7 +23,7 @@ export default function ConnectScreen() {
   const router = useRouter();
   const { online } = useNet();
   const toast = usePos((s) => s.toast);
-  const [conn, setConn] = useState<Connection | null>(() => readConnection());
+  const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
@@ -111,35 +88,11 @@ export default function ConnectScreen() {
     setError(null);
     setMessage(null);
     try {
-      const url = supabaseUrl();
-      const res = await fetch(`${url}/functions/v1/bootstrap-org`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${sessionToken}`, "Content-Type": "application/json" },
-      });
-      const json = (await res.json().catch(() => ({}))) as { org_id?: string; error?: string };
-      if (!res.ok || !json.org_id) throw new Error(json.error ?? "bootstrap failed");
-
-      let orgName = json.org_id;
-      try {
-        const mod = await import("@/lib/api/supabase");
-        const sb = mod.getSupabase();
-        if (sb) {
-          const { data } = await sb.from("orgs").select("name").eq("id", json.org_id).maybeSingle();
-          if (data && typeof (data as { name?: string }).name === "string") {
-            orgName = (data as { name: string }).name;
-          }
-        }
-      } catch {
-      }
-
-      const c: Connection = {
-        org_id: json.org_id,
-        user_id: sessionUserId,
+      const c = await bootstrapConnection({
         access_token: sessionToken,
+        user_id: sessionUserId,
         email: sessionEmail ?? email.trim() ?? undefined,
-        org_name: orgName,
-      };
-      writeConnection(c);
+      });
       setConn(c);
       setMessage("Connected.");
       toast("Connected to backend", "ok");

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- windowBackground must be fixed at resource level: SystemBars.setStyle()
+       repaints the decorView from the activity theme, and DayNight resolves
+       white whenever the device is in light mode -->
+  <color name="nova_window_bg">#0A0E17</color>
+</resources>

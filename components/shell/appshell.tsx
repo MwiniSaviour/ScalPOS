@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const hasTabBar = willHaveTabBar(pathname);
   return (
-    <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+164px)]")}>
+    <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+136px)]")}>
       {children}
       <ChromeGate />
     </div>
@@ -50,25 +50,27 @@ function ChromeGate() {
     document
       .querySelectorAll('meta[name="theme-color"]')
       .forEach((m) => m.setAttribute("content", barColor));
-    void applyBarColor(barColor);
-  }, [theme]);
 
-  // the Android status bar sits on top of the app: its icons must follow the
-  // app theme, not the device's night mode
-  useEffect(() => {
     let cancelled = false;
     const apply = async () => {
+      const { Capacitor, SystemBars, SystemBarsStyle } = await import("@capacitor/core");
+      if (cancelled) return;
+      if (!Capacitor.isNativePlatform()) return;
       try {
-        const { Capacitor, SystemBars, SystemBarsStyle } = await import("@capacitor/core");
-        if (cancelled) return;
-        if (!Capacitor.isNativePlatform()) return;
         // "Light" = dark icons, for a light background
-        await SystemBars.setStyle({ style: theme === "light" ? SystemBarsStyle.Light : SystemBarsStyle.Dark });
+        await SystemBars.setStyle({
+          style: theme === "light" ? SystemBarsStyle.Light : SystemBarsStyle.Dark,
+        });
       } catch {
-        /* not available on this platform */
+        /* style call is best-effort */
       }
+      if (cancelled) return;
+      // SetStyle() repaints the decorView from the activity theme's
+      // windowBackground (white whenever the device is in light mode) — so this
+      // paint must come AFTER it, ending the window in our color, not cap's.
+      void applyBarColor(barColor).catch(() => {});
     };
-    void apply();
+    void apply().catch(() => {});
     return () => {
       cancelled = true;
     };

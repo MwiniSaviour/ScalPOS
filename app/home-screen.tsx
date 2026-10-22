@@ -6,9 +6,11 @@ import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { paidOf, usePos } from "@/lib/store";
 import { useNow } from "@/lib/now";
+import { hasOnboarded } from "@/lib/first-run";
 import { cn } from "@/lib/ui";
 import Link from "next/link";
-import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo } from "react";
 
 function startOfDay(t: number): number {
   const d = new Date(t);
@@ -23,6 +25,11 @@ export default function HomeScreen() {
   const settings = usePos((s) => s.settings);
   const now = useNow();
   const dayStart = startOfDay(now);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!hasOnboarded()) router.replace("/onboarding");
+  }, [router]);
 
   const kpis = useMemo(() => {
     const today = orders.filter((o) => o.createdAt >= dayStart && o.status !== "refunded");

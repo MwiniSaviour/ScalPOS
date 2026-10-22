@@ -21,6 +21,9 @@ const ROUTES = [
   ["more", "/more/", true],
   ["settings", "/settings/", true],
   ["shop", "/settings/shop/", true],
+  ["onboarding", "/onboarding/", true],
+  ["auth", "/auth/", true],
+  ["auth-code", "/auth/code/?email=qa@shop.test", true],
 ];
 
 (async () => {
@@ -80,6 +83,14 @@ const ROUTES = [
   await send("Log.enable");
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  // first-run flag: home must stay reachable during the route sweep
+  await send("Page.navigate", { url: BASE + "/settings/" });
+  await sleep(1200);
+  await send("Runtime.evaluate", {
+    expression: 'try { localStorage.setItem("nova-pos-onboarded", "1"); } catch (e) {} 1',
+    returnByValue: true,
+  });
 
   for (const [name, route, shot] of ROUTES) {
     await send("Page.navigate", { url: BASE + route });
