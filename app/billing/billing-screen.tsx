@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ScreenHeader } from "@/components/shell/screenheader";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
-import { getSubscription, startSubscription, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
+import { Chip } from "@/components/ui/chip";
+import { getSubscription, startSubscription, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
 import { dateShort } from "@/lib/format";
 import { usePos } from "@/lib/store";
 import { BadgeCheck, Clock, RefreshCw, ShieldAlert } from "lucide-react";
@@ -24,6 +25,8 @@ function useClientValue<T>(read: () => T, serverValue: T): T {
 
 function statusToast(s: SubscriptionState): string {
   if (s.status === "active") return "Payment confirmed";
+  if (s.status === "trialing" && s.expires_at) return `Free trial ends ${dateShort(new Date(s.expires_at).getTime())}`;
+  if (s.status === "trialing") return "Free trial running";
   if (s.status === "pending") return "Still waiting for payment";
   if (s.status === "expired") return "Subscription expired";
   return "No plan yet";
@@ -81,6 +84,7 @@ export default function BillingScreen() {
   const [state, setState] = useState<SubscriptionState | null>(null);
   const [loading, setLoading] = useState(!!conn);
   const [busy, setBusy] = useState<SubPlan | "refresh" | null>(null);
+  const [renewal, setRenewal] = useState<Renewal>("manual");
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -121,7 +125,7 @@ export default function BillingScreen() {
     setBusy(plan);
     setError(null);
     try {
-      await startSubscription(conn, plan);
+      await startSubscription(conn, plan, renewal);
       toast("Opening Paystack checkout…", "ok");
     } catch (e) {
       toast(errorText(e), "error");
@@ -160,7 +164,26 @@ export default function BillingScreen() {
             <span className="block text-[15px] font-semibold text-accent">Active</span>
             <span className="block text-[14px] text-ink3">
               {s.plan === "enterprise" ? "Enterprise" : "Standard"} plan
-              {s.expires_at ? ` · Renews by ${dateShort(new Date(s.expires_at).getTime())}` : ""}
+              {" · "}
+              {s.renewal === "auto" ? "auto-renews yearly" : "renew manually"}
+              {s.expires_at ? ` · till ${dateShort(new Date(s.expires_at).getTime())}` : ""}
+            </span>
+          </span>
+        </div>
+      );
+    }
+    if (s && s.status === "trialing") {
+      return (
+        <div data-testid="billing-status" className="flex w-full items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent/10 text-accent">
+            <Clock className="size-[18px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-accent">Free trial</span>
+            <span className="block text-[14px] text-ink3">
+              Full access till{" "}
+              {s.expires_at ? dateShort(new Date(s.expires_at).getTime()) : "—"} · subscribe to keep cloud
+              sync going
             </span>
           </span>
         </div>
@@ -230,15 +253,32 @@ export default function BillingScreen() {
         {error && <p className="mt-2.5 text-[14px] leading-5 text-danger">{error}</p>}
 
         <section className="mt-6">
-          <h2 className="text-[15px] font-medium text-ink2">Choose a plan</h2>
-          <p className="mt-0.5 text-[14px] text-ink3">Both plans cover a full year. Pay once with Paystack.</p>
+          <h2 className="text-[15px] font-medium text-ink2">Renewal</h2>
+          <div data-testid="renewal-picker" className="mt-1.5 flex items-center gap-2">
+            <Chip active={renewal === "manual"} onClick={() => setRenewal("manual")}>
+              Manual
+            </Chip>
+            <Chip active={renewal === "auto"} onClick={() => setRenewal("auto")}>
+              Auto-renew
+            </Chip>
+          </div>
+          <p className="mt-1 text-[13px] leading-5 text-ink3">
+            {renewal === "manual"
+              ? "Default · we ask you before each yearly payment."
+              : "We charge your saved Paystack or MoMo method each year automatically."}
+          </p>
+          <h2 className="mt-5 text-[15px] font-medium text-ink2">Choose a plan</h2>
+          <p className="mt-0.5 text-[14px] text-ink3">
+            {conn
+              ? "New shops get a 7-day free trial first. Both plans cover a full year, paid with Paystack."
+              : "Both plans cover a full year. Pay once with Paystack."}
+          </p>
           <div className="mt-2.5 grid gap-2.5">
             <PlanCard
               plan="standard"
               title="Standard"
               price="GHS 120/year"
-              bullets={["Single owner", "Unlimited sales", "Offline register"]}
-              busy={busy === "standard"}
+              bullets={["Single owner", "Unlimited sales", "Offline register"]}              busy={busy === "standard"}
               disabled={!conn || busy !== null}
               onSubscribe={() => void subscribe("standard")}
             />
@@ -251,7 +291,6 @@ export default function BillingScreen() {
                 "Real-time sync",
                 "Cloud backup",
                 "Desktop access",
-                "Notifications",
               ]}
               busy={busy === "enterprise"}
               disabled={!conn || busy !== null}

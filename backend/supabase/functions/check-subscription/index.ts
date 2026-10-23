@@ -72,9 +72,18 @@ Deno.serve(async (req: Request) => {
     return json({ plan: null, status: "none" });
   }
 
+  const { data: org } = await admin
+    .from("orgs")
+    .select("created_at")
+    .eq("id", orgId)
+    .maybeSingle();
+  const trialEndMs = org?.created_at
+    ? new Date(org.created_at as string).getTime() + 7 * 24 * 60 * 60 * 1000
+    : NaN;
+
   const { data: sub, error: subErr } = await admin
     .from("subscriptions")
-    .select("id, plan, status, amount, paystack_ref, expires_at, created_at")
+    .select("id, plan, status, amount, renewal, paystack_ref, expires_at, created_at")
     .eq("org_id", orgId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -83,12 +92,18 @@ Deno.serve(async (req: Request) => {
     return json({ error: subErr.message }, 500);
   }
   if (!sub) {
+    if (Number.isFinite(trialEndMs) && Date.now() < trialEndMs) {
+      return json({ org_id: orgId, plan: null, status: "trialing", expires_at: new Date(trialEndMs).toISOString() });
+    }
     return json({ org_id: orgId, plan: null, status: "none", expires_at: null });
   }
 
   const expiresMs = sub.expires_at ? new Date(sub.expires_at as string).getTime() : NaN;
 
   if (sub.status === "active" && Number.isFinite(expiresMs) && expiresMs < Date.now()) {
+    if (Number.isFinite(trialEndMs) && Date.now() < trialEndMs) {
+      return json({ org_id: orgId, plan: null, status: "trialing", expires_at: new Date(trialEndMs).toISOString() });
+    }
     const { error: expireErr } = await admin
       .from("subscriptions")
       .update({ status: "expired" })
@@ -127,11 +142,17 @@ Deno.serve(async (req: Request) => {
         if (updErr) {
           return json({ error: updErr.message }, 500);
         }
-        return json({ org_id: orgId, plan: sub.plan, status: "active", expires_at: expires.toISOString() });
+        return json({ org_id: orgId, plan: sub.plan, status: "active", renewal: sub.renewal ?? "manual", expires_at: expires.toISOString() });
       }
     }
     return json({ org_id: orgId, plan: sub.plan, status: "pending", expires_at: null });
   }
 
-  return json({ org_id: orgId, plan: sub.plan, status: sub.status, expires_at: sub.expires_at });
+  return json({
+    org_id: orgId,
+    plan: sub.plan,
+    status: sub.status,
+    renewal: sub.renewal ?? "manual",
+    expires_at: sub.expires_at,
+  });
 });

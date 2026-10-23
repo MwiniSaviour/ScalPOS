@@ -26,6 +26,7 @@ const ROUTES = [
   ["auth-code", "/auth/code/?email=qa@shop.test", true],
   ["billing", "/billing/", true],
   ["legal", "/legal/", true],
+  ["notifications", "/notifications/", true],
 ];
 
 (async () => {

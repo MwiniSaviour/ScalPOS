@@ -5,6 +5,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { seedData, seededProduct } from "./seed";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
+import { readConnection, type SyncConnection } from "./api/bootstrap";
+import { notifyLocal } from "./notify";
+import { insertLowStockNotification } from "./api/notifications";
 import type {
   Category,
   CartLine,
@@ -41,6 +44,32 @@ export function payStatusOf(o: Order): PayStatusCalc {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+type ProductLike = {
+  id: string;
+  name: string;
+  unit: string;
+  stock: number;
+  lowStockAt: number;
+};
+
+function fireLowStockAlerts(prev: ProductLike[], next: ProductLike[]): void {
+  const crossed = next.filter((p) => {
+    const before = prev.find((q) => q.id === p.id);
+    return before != null && p.stock <= p.lowStockAt && before.stock > before.lowStockAt;
+  });
+  if (crossed.length === 0) return;
+  const conn = readConnection();
+  if (!conn) {
+    for (const c of crossed) {
+      void notifyLocal(`Low stock: ${c.name}`, `Only ${c.stock} ${c.unit} left`, `low:${c.id}`);
+    }
+    return;
+  }
+  for (const c of crossed) {
+    void insertLowStockNotification(conn as SyncConnection, c.name, c.stock, c.unit, c.id);
+  }
 }
 
 /**
@@ -259,6 +288,8 @@ export const usePos = create<PosState>()(
           draftPayments: [],
         });
 
+        fireLowStockAlerts(s.products, products);
+
         if (credit > 0) {
           get().toast(credit === total ? "On credit — collect due later" : "Part-paid — balance due", "warn");
         }
@@ -401,12 +432,14 @@ export const usePos = create<PosState>()(
       adjustStock: (pid, delta, reason, ref) => {
         const s = get();
         const now = Date.now();
+        const products = s.products.map((p) =>
+          p.id === pid ? { ...p, stock: Math.max(0, p.stock + delta), updatedAt: now } : p,
+        );
         set({
-          products: s.products.map((p) =>
-            p.id === pid ? { ...p, stock: Math.max(0, p.stock + delta), updatedAt: now } : p,
-          ),
+          products,
           stockMoves: [{ id: id("mv_"), productId: pid, qty: delta, reason, ref, t: now }, ...s.stockMoves],
         });
+        fireLowStockAlerts(s.products, products);
       },
 
       deleteProduct: (pid) => {

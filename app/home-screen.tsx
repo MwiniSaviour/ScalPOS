@@ -1,7 +1,7 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { ChevronRight, CircleUserRound } from "lucide-react";
+import { Bell, BellDot, ChevronRight, CircleUserRound } from "lucide-react";
 import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { paidOf, usePos } from "@/lib/store";
@@ -10,9 +10,12 @@ import { hasOnboarded } from "@/lib/first-run";
 import { cn } from "@/lib/ui";
 import { useCurrentStaff } from "@/lib/staff";
 import { StaffAvatar } from "./account-screen";
+import NotificationWatcher from "@/components/shell/notification-watcher";
+import { countUnread, listNotifications } from "@/lib/api/notifications";
+import { readConnection } from "@/lib/api/bootstrap";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 function startOfDay(t: number): number {
   const d = new Date(t);
@@ -47,8 +50,28 @@ export default function HomeScreen() {
   const attention = kpis.pending > 0 || kpis.lowStock > 0;
   const recent = orders.slice(0, 3);
 
+  const [notifs, setNotifs] = useState<{ count: number } | null>(null);
+  const refreshNotifs = useCallback(() => {
+    const conn = readConnection();
+    if (!conn) return;
+    listNotifications(conn, 40)
+      .then((rows) => setNotifs({ count: countUnread(rows) }))
+      .catch(() => {
+        /* bell badge is best effort */
+      });
+  }, []);
+  useEffect(() => {
+    refreshNotifs();
+  }, [refreshNotifs]);
+  useEffect(() => {
+    const t = setInterval(refreshNotifs, 60_000);
+    return () => clearInterval(t);
+  }, [refreshNotifs]);
+  const unread = notifs ? notifs.count : 0;
+
   return (
     <div className="anim-fade px-5 pt-4">
+      <NotificationWatcher />
       <div className="safe-t" />
       {/* header — shop name, date, owner avatar */}
       <header className="flex items-start gap-3">
@@ -56,15 +79,30 @@ export default function HomeScreen() {
           <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">{settings.shopName}</h1>
           <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
         </div>
-        <Link href="/more" aria-label="My account" className="press mt-0.5 shrink-0">
-          {me ? (
-            <StaffAvatar staff={me} size={40} />
-          ) : (
-            <span className="flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2">
-              <CircleUserRound className="size-[23px]" />
-            </span>
-          )}
-        </Link>
+        <span className="mt-0.5 flex shrink-0 items-center gap-1.5">
+          <Link
+            href="/notifications"
+            data-testid="notif-bell"
+            aria-label="Notifications"
+            className="press relative flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2"
+          >
+            {unread > 0 ? <BellDot className="size-[21px]" /> : <Bell className="size-[21px]" />}
+            {unread > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-accent text-[10px] font-bold text-white">
+                {unread > 9 ? "9+" : unread}
+              </span>
+            )}
+          </Link>
+          <Link href="/more" aria-label="My account" className="press">
+            {me ? (
+              <StaffAvatar staff={me} size={40} />
+            ) : (
+              <span className="flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2">
+                <CircleUserRound className="size-[23px]" />
+              </span>
+            )}
+          </Link>
+        </span>
       </header>
 
       {/* today's sales */}
