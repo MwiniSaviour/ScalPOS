@@ -8,6 +8,8 @@ import { paidOf, usePos } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { hasOnboarded } from "@/lib/first-run";
 import { cn } from "@/lib/ui";
+import { useCurrentStaff } from "@/lib/staff";
+import { StaffAvatar } from "./account-screen";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
@@ -41,6 +43,7 @@ export default function HomeScreen() {
     return { sales, collected, unpaid: Math.max(sales - collected, 0), txn: today.length, pending, lowStock: low + out };
   }, [orders, products, dayStart]);
 
+  const me = useCurrentStaff();
   const attention = kpis.pending > 0 || kpis.lowStock > 0;
   const recent = orders.slice(0, 3);
 
@@ -53,11 +56,14 @@ export default function HomeScreen() {
           <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">{settings.shopName}</h1>
           <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
         </div>
-        {/* account — switches to the uploaded profile photo once accounts/roles land */}
         <Link href="/more" aria-label="My account" className="press mt-0.5 shrink-0">
-          <span className="flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2">
-            <CircleUserRound className="size-[23px]" />
-          </span>
+          {me ? (
+            <StaffAvatar staff={me} size={40} />
+          ) : (
+            <span className="flex size-10 items-center justify-center rounded-full border border-line2 bg-surface text-ink2">
+              <CircleUserRound className="size-[23px]" />
+            </span>
+          )}
         </Link>
       </header>
 

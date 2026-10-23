@@ -53,7 +53,7 @@ export default function ReportsScreen() {
   const chart = useMemo(() => {
     const days = periodInfo.days;
     const todayStart = startOfDay(now);
-    const bars: { label: string; sum: number; today: boolean }[] = [];
+    const daily: { label: string; sum: number; today: boolean }[] = [];
     for (let i = 0; i < days; i++) {
       const start = addDays(todayStart, i - (days - 1));
       const end = addDays(start, 1);
@@ -67,7 +67,25 @@ export default function ReportsScreen() {
           : days === 7
             ? d.toLocaleDateString("en-GB", { weekday: "narrow" })
             : String(d.getDate()).padStart(2, "0");
-      bars.push({ label, sum, today: i === days - 1 });
+      daily.push({ label, sum, today: i === days - 1 });
+    }
+    if (days <= 14) return daily.map((d) => ({ ...d, label: d.label as string | null }));
+    const bucketCount = 10;
+    const size = Math.ceil(days / bucketCount);
+    const bars: { label: string | null; sum: number; today: boolean }[] = [];
+    for (let b = 0; b < bucketCount; b++) {
+      const from = b * size;
+      const to = Math.min((b + 1) * size, days);
+      let sum = 0;
+      for (let i = from; i < to; i++) sum += daily[i].sum;
+      const showTick = b % 3 === 2 || b === bucketCount - 1;
+      const isToday = b === bucketCount - 1;
+      const last = new Date(addDays(todayStart, to - days));
+      bars.push({
+        label: showTick ? (isToday ? "Today" : last.toLocaleDateString("en-GB", { day: "numeric", month: "short" })) : null,
+        sum,
+        today: isToday,
+      });
     }
     return bars;
   }, [orders, now, periodInfo]);
@@ -197,7 +215,7 @@ export default function ReportsScreen() {
           <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
             {chart.map((b, i) => (
               <span key={i} className="min-w-0 flex-1 truncate">
-                {b.label}
+                {b.label ?? ""}
               </span>
             ))}
           </div>

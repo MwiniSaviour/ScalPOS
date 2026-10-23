@@ -24,6 +24,8 @@ const ROUTES = [
   ["onboarding", "/onboarding/", true],
   ["auth", "/auth/", true],
   ["auth-code", "/auth/code/?email=qa@shop.test", true],
+  ["billing", "/billing/", true],
+  ["legal", "/legal/", true],
 ];
 
 (async () => {

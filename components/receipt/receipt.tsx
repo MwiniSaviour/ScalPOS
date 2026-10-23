@@ -1,14 +1,24 @@
 "use client";
 
+import { Capacitor } from "@capacitor/core";
 import { Button } from "@/components/ui/button";
 import { Sheet } from "@/components/ui/sheet";
+import {
+  clearSavedPrinter,
+  getSavedPrinter,
+  listPaired,
+  printRaw,
+  savePrinter,
+  type PrinterDevice,
+} from "@/lib/bluetooth";
+import { receiptToEscposBytes, type ReceiptPrintData } from "@/lib/escpos-print";
 import { dateShort, timeOf } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { dueOf, paidOf, usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
 import type { Order, PaymentMethod, Settings } from "@/lib/types";
 import { Printer, Share2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cash: "Cash",
@@ -204,6 +214,39 @@ export function Receipt({
   );
 }
 
+export function receiptToPrintData(order: Order, settings: Settings): ReceiptPrintData {
+  const due = dueOf(order);
+  const tax = orderTax(order);
+  return {
+    shopName: settings.shopName,
+    address: settings.address?.trim() ?? "",
+    phone: settings.phone?.trim() ?? "",
+    momo: settings.momoNumber?.trim()
+      ? `MoMo ${settings.momoNumber.trim()}${
+          settings.momoNetwork?.trim() ? ` - ${settings.momoNetwork.trim()}` : ""
+        }`
+      : "",
+    refunded: order.status === "refunded",
+    orderId: order.id,
+    orderDate: `${dateShort(order.createdAt)} - ${timeOf(order.createdAt)}`,
+    items: order.items.map((i) => ({
+      name: i.name,
+      qty: i.qty,
+      amount: fmtMoney(i.price * i.qty),
+    })),
+    subtotal: fmtMoney(order.subtotal),
+    discount: order.discount > 0 ? fmtMoney(order.discount) : null,
+    tax: tax ? { label: tax.label, amount: fmtMoney(tax.amount) } : null,
+    total: fmtMoney(order.total),
+    payments: order.payments.map((p) => ({
+      label: METHOD_LABEL[p.method] ?? p.method,
+      amount: fmtMoney(p.amount),
+    })),
+    balance: due > 0 ? fmtMoney(due) : null,
+    footer: settings.receiptFooter.trim(),
+  };
+}
+
 export function ReceiptSheet({
   open,
   onClose,
@@ -216,6 +259,11 @@ export function ReceiptSheet({
   settings: Settings;
 }) {
   const toast = usePos((s) => s.toast);
+  const [busy, setBusy] = useState(false);
+  const [pickOpen, setPickOpen] = useState(false);
+  const [savedPrinter, setSavedPrinter] = useState<PrinterDevice | null>(null);
+  const [devices, setDevices] = useState<PrinterDevice[] | null>(null);
+  const isNative = Capacitor.isNativePlatform();
 
   useEffect(() => {
     if (!open) return;
@@ -247,18 +295,69 @@ export function ReceiptSheet({
     toast("Copy the receipt text from the screen", "warn");
   };
 
+  const sendToPrinter = async (printer: PrinterDevice) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await printRaw(printer.address, receiptToEscposBytes(receiptToPrintData(order, settings)));
+      toast("Receipt sent to printer", "ok");
+    } catch {
+      toast(`Couldn't reach ${printer.name} — make sure the printer is on/paired`, "error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openPicker = async () => {
+    setPickOpen(true);
+    setDevices(null);
+    try {
+      const list = await listPaired();
+      setDevices(list);
+      if (list.length === 0) toast("No paired Bluetooth printers found", "warn");
+    } catch (error) {
+      setDevices([]);
+      toast(
+        error instanceof Error ? error.message : "Bluetooth is not available",
+        "error",
+      );
+    }
+  };
+
+  const pickPrinter = (device: PrinterDevice) => {
+    savePrinter(device);
+    setSavedPrinter(device);
+    setPickOpen(false);
+    void sendToPrinter(device);
+  };
+
+  const disconnectPrinter = () => {
+    clearSavedPrinter();
+    setSavedPrinter(null);
+  };
+
   const print = () => {
-    if (typeof window === "undefined" || typeof window.print !== "function") {
-      toast("Printing is not available on this device", "warn");
+    if (!isNative) {
+      if (typeof window === "undefined" || typeof window.print !== "function") {
+        toast("Printing is not available on this device", "warn");
+        return;
+      }
+      const previous = document.title;
+      document.title = receiptText(order, settings);
+      try {
+        window.print();
+      } finally {
+        document.title = previous;
+      }
       return;
     }
-    const previous = document.title;
-    document.title = receiptText(order, settings);
-    try {
-      window.print();
-    } finally {
-      document.title = previous;
+    const saved = getSavedPrinter();
+    setSavedPrinter(saved);
+    if (saved) {
+      void sendToPrinter(saved);
+      return;
     }
+    void openPicker();
   };
 
   return (
@@ -270,17 +369,64 @@ export function ReceiptSheet({
         title="Receipt"
         height="tall"
         footer={
-          <div className="grid grid-cols-2 gap-2.5">
-            <Button variant="secondary" icon={<Printer className="size-4" />} onClick={print}>
-              Print
-            </Button>
-            <Button icon={<Share2 className="size-4" />} onClick={share}>
-              Share
-            </Button>
+          <div className="grid gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5">
+              <Button
+                variant="secondary"
+                icon={<Printer className="size-4" />}
+                onClick={print}
+                loading={busy}
+                disabled={busy}
+                data-testid="print-bt"
+              >
+                Print
+              </Button>
+              <Button icon={<Share2 className="size-4" />} onClick={share}>
+                Share
+              </Button>
+            </div>
+            {isNative && savedPrinter && (
+              <button
+                onClick={disconnectPrinter}
+                className="press h-9 w-full rounded-lg text-[13px] font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                Disconnect printer ({savedPrinter.name})
+              </button>
+            )}
           </div>
         }
       >
         <Receipt order={order} settings={settings} className="mb-2" />
+      </Sheet>
+      <Sheet
+        open={pickOpen}
+        onClose={() => setPickOpen(false)}
+        title="Choose printer"
+        height="auto"
+      >
+        {devices === null ? (
+          <p className="pb-4 text-[14px] text-ink2">Looking for paired devices…</p>
+        ) : devices.length === 0 ? (
+          <p className="pb-4 text-[14px] text-ink2">
+            No paired devices. Pair the printer in Android settings first.
+          </p>
+        ) : (
+          <div className="flex flex-col pb-4">
+            {devices.map((d) => (
+              <button
+                key={d.address}
+                data-testid="printer-row"
+                onClick={() => pickPrinter(d)}
+                className="press -mx-1 flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-left hover:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              >
+                <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+                  {d.name}
+                </span>
+                <span className="shrink-0 text-[12px] text-ink3">{d.address}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </Sheet>
       {open && (
         <div className="nova-receipt-print hidden" data-theme="light" aria-hidden="true">

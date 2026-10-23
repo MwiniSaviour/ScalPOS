@@ -1,6 +1,6 @@
 {
   "name": "pos-app",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Nova POS - offline-first mobile point of sale for Ghana retail",
   "scripts": {

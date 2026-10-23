@@ -1,7 +1,9 @@
 package gg.novapos.app;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.view.Window;
 
@@ -48,5 +50,22 @@ public class AppChromePlugin extends Plugin {
             }
             call.resolve();
         });
+    }
+
+    @PluginMethod
+    public void openUrl(PluginCall call) {
+        final String url = call.getString("url", "");
+        if (!url.startsWith("https://") && !url.startsWith("http://")) {
+            call.reject("invalid url");
+            return;
+        }
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getActivity().startActivity(intent);
+            call.resolve();
+        } catch (RuntimeException e) {
+            call.reject(e.getMessage() == null ? "no browser available" : e.getMessage());
+        }
     }
 }

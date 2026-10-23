@@ -13,13 +13,17 @@ import { listConflicts } from "@/lib/sync/outbox";
 import { cn } from "@/lib/ui";
 import {
   AlertTriangle,
+  AppWindow,
   ChevronRight,
   CircleUserRound,
+  CreditCard,
   Download,
+  Gift,
   LogOut,
   PieChart,
   RefreshCcw,
   RotateCcw,
+  ScrollText,
   Settings,
   Store,
   Users,
@@ -84,6 +88,18 @@ export default function MoreScreen() {
     if (sb) await sb.auth.signOut();
     toast("Signed out", "ok");
     window.location.reload();
+  }
+
+  async function shareReferral() {
+    const text = "Nova POS — offline-first point of sale for Ghanaian shops";
+    const url = "https://novapos.app";
+    try {
+      const mod = await import("@capacitor/share");
+      await mod.Share.share({ title: "Nova POS", text, url });
+      toast("Invite shared", "ok");
+    } catch {
+      toast("Sharing is not available here", "warn");
+    }
   }
 
   return (
@@ -162,6 +178,18 @@ export default function MoreScreen() {
             label="Settings"
             sub="Theme, receipts, MoMo"
           />
+          <RowLink
+            href="/billing"
+            icon={<CreditCard className="size-[18px]" />}
+            label="Plans &amp; billing"
+            sub="Choose and manage your plan"
+          />
+          <RowLink
+            href="/legal"
+            icon={<ScrollText className="size-[18px]" />}
+            label="Legal"
+            sub="Terms, privacy &amp; refund policy"
+          />
         </Card>
       </section>
 
@@ -221,12 +249,36 @@ export default function MoreScreen() {
         </section>
       )}
 
-      {/* about */}
-      <section className="mt-6 pb-6">
-        <p className="text-[14px] leading-6 text-ink3">
-          <span className="font-semibold text-ink">Nova POS 1.0.0</span> — built for Ghanaian
-          retail: cedi money, MoMo payments and credit tracking, all stored on this device.
-        </p>
+      {/* grow */}
+      <section className="mt-6">
+        <Card inset>
+          <RowAction
+            tone="accent"
+            icon={<Gift className="size-[18px]" />}
+            label="Refer and earn"
+            sub="GHS 20.00 for each successful conversion"
+            onClick={() => void shareReferral()}
+          />
+          <a
+            href="https://github.com/MwiniSaviour"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <AppWindow className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[17px] font-semibold text-ink">
+                More apps
+              </span>
+              <span className="block truncate text-[14px] text-ink3">
+                Tools from the Nova POS team
+              </span>
+            </span>
+          </a>
+        </Card>
+        <p className="mt-3 pb-6 text-center text-[12px] text-ink3">Version 1.1.0</p>
       </section>
 
       <Confirm
@@ -292,18 +344,25 @@ function RowAction({
   label,
   sub,
   onClick,
+  tone = "neutral",
 }: {
   icon: ReactNode;
   label: string;
   sub?: string;
   onClick: () => void;
+  tone?: "neutral" | "accent";
 }) {
   return (
     <button
       onClick={onClick}
       className="press flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface2/50"
     >
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+      <span
+        className={cn(
+          "flex size-9 shrink-0 items-center justify-center rounded-full",
+          tone === "accent" ? "bg-accentsoft text-accent" : "bg-surface2 text-ink2",
+        )}
+      >
         {icon}
       </span>
       <span className="min-w-0 flex-1">

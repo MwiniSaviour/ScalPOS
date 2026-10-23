@@ -214,7 +214,7 @@ textarea::placeholder {
 }
 
 .safe-t {
-  padding-top: var(--nova-sat);
+  padding-top: min(var(--nova-sat), 64px);
 }
 
 .press {

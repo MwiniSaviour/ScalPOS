@@ -5,6 +5,11 @@ const config: CapacitorConfig = {
   appName: "Nova POS",
   webDir: "out",
   backgroundColor: "#0A0E17",
+  plugins: {
+    SystemBars: {
+      insetsHandling: "native",
+    },
+  },
 };
 
 export default config;
