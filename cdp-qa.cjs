@@ -8,7 +8,8 @@ const OUT = path.join(__dirname, "design", "qa");
 fs.mkdirSync(OUT, { recursive: true });
 
 const ROUTES = [
-  ["home", "/", true],
+  ["landing", "/", true],
+  ["dashboard", "/home/", true],
   ["sell", "/sell/", true],
   ["sell-cart", "/sell/", false], // cart adds happen via clicks below if straightforward
   ["pay-empty", "/pay/", true],
