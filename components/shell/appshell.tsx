@@ -20,19 +20,36 @@ async function applyBarColor(color: string): Promise<void> {
   }
 }
 
+function normalizePath(p: string): string {
+  const stripped = p.replace(/\/+$/, "");
+  return stripped === "" ? "/" : stripped;
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const norm = normalizePath(pathname);
+  const isLanding = norm === "/" || norm === "/landing";
   const hasTabBar = willHaveTabBar(pathname);
+
+  if (isLanding) {
+    return (
+      <div className="min-h-dvh w-full">
+        {children}
+        <ChromeGate isLanding />
+      </div>
+    );
+  }
+
   return (
     <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+136px)]")}>
       <PinGate>{children}</PinGate>
-      <ChromeGate />
+      <ChromeGate isLanding={false} />
     </div>
   );
 }
 
 /** bottom chrome renders only after localStorage hydration → no SSR mismatch */
-function ChromeGate() {
+function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
   const hydrated = usePos((s) => s.hydrated);
   const theme = usePos((s) => s.settings.theme);
   const hydrate = usePos((s) => s.rehydrate);
@@ -78,6 +95,9 @@ function ChromeGate() {
   }, [theme]);
 
   if (!hydrated) return null;
+  if (isLanding) {
+    return <Toaster />;
+  }
   return (
     <>
       <TabBar />

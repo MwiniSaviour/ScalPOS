@@ -145,6 +145,12 @@ export default function MoreScreen() {
             label="Replay intro"
             sub="The welcome screens"
           />
+          <RowLink
+            href="/"
+            icon={<AppWindow className="size-[18px]" />}
+            label="Landing page"
+            sub="Product overview, pricing & ROI calculator"
+          />
         </Card>
       </section>
 

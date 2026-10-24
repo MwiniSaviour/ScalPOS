@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { useNet } from "@/lib/net";
+import { markOnboarded } from "@/lib/first-run";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -71,7 +72,7 @@ export default function AuthScreen() {
         <BrandMark />
         <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
           <p className="text-[14px] text-ink3">Signed in as {signedInEmail}</p>
-          <Button className="mt-3 h-12 rounded-full" size="lg" block onClick={() => router.replace("/")}>
+          <Button className="mt-3 h-12 rounded-full" size="lg" block onClick={() => router.replace("/home")}>
             Continue
           </Button>
         </div>
@@ -134,7 +135,10 @@ export default function AuthScreen() {
         <Button
           variant="secondary"
           block
-          onClick={() => router.push("/shop/create")}
+          onClick={() => {
+            markOnboarded();
+            router.replace("/home");
+          }}
           data-testid="auth-offline"
         >
           Continue on this device

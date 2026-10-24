@@ -94,7 +94,7 @@ export default function PayScreen() {
       <SuccessView
         done={done}
         onNew={() => router.push("/sell")}
-        onHome={() => router.push("/")}
+        onHome={() => router.push("/home")}
       />
     );
   }

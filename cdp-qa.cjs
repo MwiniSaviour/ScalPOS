@@ -37,7 +37,9 @@ const ROUTES = [
       const list = await (await fetch("http://127.0.0.1:9333/json/list")).json();
       tab = list.find((t) => t.type === "page");
       if (tab) break;
-    } catch {}
+    } catch {
+      // retry until chromium remote debugging port is ready
+    }
     await new Promise((r) => setTimeout(r, 500));
   }
   if (!tab) throw new Error("no chromium tab found");
