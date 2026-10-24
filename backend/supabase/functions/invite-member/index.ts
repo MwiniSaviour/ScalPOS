@@ -108,7 +108,7 @@ Deno.serve(async (req: Request) => {
     await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${Deno.env.get("SITE_URL") ?? "http://localhost:3000"}/accept-invite?token=${encodeURIComponent(token)}`,
     });
-  } catch (_e) {
+  } catch {
     // ignore; token still returned
   }
 

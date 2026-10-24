@@ -19,6 +19,12 @@ export default defineConfig([
   ...tseslint.configs.recommended,
   reactHooks.configs.flat.recommended,
   {
+    files: ["**/*.cjs"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+    },
+  },
+  {
     rules: {
       "react/no-unescaped-entities": "off",
       "@typescript-eslint/no-empty-object-type": "error",
