@@ -7,7 +7,6 @@ import {
   writeConnection,
   type SyncConnection,
 } from "@/lib/api/bootstrap";
-import { clearAllImages } from "@/lib/image-store";
 import { useSettings, usePos } from "@/lib/store";
 import { listConflicts } from "@/lib/sync/outbox";
 import { cn } from "@/lib/ui";
@@ -21,8 +20,6 @@ import {
   Gift,
   LogOut,
   PieChart,
-  RefreshCcw,
-  RotateCcw,
   ScrollText,
   Settings,
   Store,
@@ -37,7 +34,6 @@ import type { ReactNode } from "react";
 export default function MoreScreen() {
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
-  const [demoOpen, setDemoOpen] = useState(false);
   const [signoutOpen, setSignoutOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
@@ -139,18 +135,6 @@ export default function MoreScreen() {
             label="Categories"
             sub="Group your products"
           />
-          <RowLink
-            href="/onboarding"
-            icon={<RotateCcw className="size-[18px]" />}
-            label="Replay intro"
-            sub="The welcome screens"
-          />
-          <RowLink
-            href="/"
-            icon={<AppWindow className="size-[18px]" />}
-            label="Landing page"
-            sub="Product overview, pricing & ROI calculator"
-          />
         </Card>
       </section>
 
@@ -222,12 +206,6 @@ export default function MoreScreen() {
             sub="Save a JSON backup to your device"
             onClick={exportData}
           />
-          <RowAction
-            icon={<RefreshCcw className="size-[18px]" />}
-            label="Load demo store"
-            sub="Wipe this register and reload sample data"
-            onClick={() => setDemoOpen(true)}
-          />
         </Card>
       </section>
 
@@ -287,19 +265,6 @@ export default function MoreScreen() {
         <p className="mt-3 pb-6 text-center text-[12px] text-ink3">Version 1.1.0</p>
       </section>
 
-      <Confirm
-        open={demoOpen}
-        onClose={() => setDemoOpen(false)}
-        onConfirm={async () => {
-          await clearAllImages();
-          localStorage.removeItem("nova-pos-v1");
-          location.reload();
-        }}
-        tone="danger"
-        title="Load demo store?"
-        body="This clears everything saved on this device — products, orders, customers and uploaded photos — and reloads the sample store."
-        confirmLabel="Load demo"
-      />
       <Confirm
         open={signoutOpen}
         onClose={() => setSignoutOpen(false)}

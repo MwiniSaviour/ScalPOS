@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { seedData, seededProduct } from "./seed";
+import { defaultSettings } from "./seed";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
@@ -149,7 +149,7 @@ export const usePos = create<PosState>()(
       orders: [],
       customers: [],
       stockMoves: [],
-      settings: seedData().settings,
+      settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
       cartCustomerId: null,
@@ -158,35 +158,24 @@ export const usePos = create<PosState>()(
       toasts: [],
 
       rehydrate: () => {
-        // Seed the demo shop ONLY on a truly fresh install. A real shop whose
-        // catalogue was deliberately emptied must never be overwritten with demo data.
         const persisted =
           typeof window !== "undefined" ? window.localStorage.getItem("nova-pos-v1") : null;
         if (persisted === null) {
-          const d = seedData();
-          set({
-            products: d.products,
-            categories: d.categories,
-            orders: d.orders,
-            customers: d.customers,
-            stockMoves: d.stockMoves,
-            settings: d.settings,
-            hydrated: true,
-          });
-        } else {
           set({ hydrated: true });
-          // a cart left open for hours is not a sale — drop it
-          const s = get();
-          if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
-            set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
-          }
-          // sweep photos no product or order references any more
-          const refs = [
-            ...s.products.map((p) => p.imageUrl),
-            ...s.orders.flatMap((o) => o.items.map((i) => i.imageUrl)),
-          ];
-          void pruneImages(refs);
+          return;
         }
+        set({ hydrated: true });
+        // a cart left open for hours is not a sale — drop it
+        const s = get();
+        if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
+          set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
+        }
+        // sweep photos no product or order references any more
+        const refs = [
+          ...s.products.map((p) => p.imageUrl),
+          ...s.orders.flatMap((o) => o.items.map((i) => i.imageUrl)),
+        ];
+        void pruneImages(refs);
       },
 
       addToCart: (pid, qty = 1) => {
@@ -551,10 +540,6 @@ export function useCartTotals() {
   // taxRate 0 → tax 0 → total is exactly the old subtotal - discount
   const total = tax > 0 && !settings.taxInclusive ? round2(net + tax) : net;
   return { lines, count, subtotal, discount, tax, total };
-}
-
-export function seeded() {
-  return seededProduct;
 }
 
 export function todayRange(now = Date.now()) {

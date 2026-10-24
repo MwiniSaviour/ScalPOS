@@ -307,12 +307,10 @@ export default function ConnectScreen() {
       const mod = await import("@/lib/api/supabase");
       const sb = mod.getSupabase();
       if (!sb) throw new Error("Supabase not configured");
-      const { error: e } = await sb.auth.signInWithOtp({
-        email: trimmed,
-        options: { emailRedirectTo: typeof window !== "undefined" ? window.location.href : undefined },
-      });
+      const { data, error: e } = await sb.auth.signInWithOtp({ email: trimmed });
       if (e) throw new Error(e.message);
-      setMessage("Check your email for the sign-in link.");
+      const userCreated = !data.user;
+      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}${userCreated ? "" : "&new=1"}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
