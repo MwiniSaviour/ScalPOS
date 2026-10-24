@@ -48,7 +48,7 @@ export default function OnboardingScreen() {
 
   function finish() {
     markOnboarded();
-    router.replace("/auth");
+    router.replace("/shop/create");
   }
 
   return (

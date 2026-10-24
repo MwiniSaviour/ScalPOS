@@ -136,6 +136,8 @@ function StaffFormSheet({
   onClose: () => void;
 }) {
   const toast = usePos((s) => s.toast);
+  const me = useCurrentStaff();
+  const isOwner = me?.role === "owner";
   const isSelf = target?.id === currentId;
 
   const [name, setName] = useState(target?.name ?? "");
@@ -164,6 +166,10 @@ function StaffFormSheet({
   };
 
   function save() {
+    if (!isOwner) {
+      toast("Only the owner can add or edit staff", "error");
+      return;
+    }
     if (!nameOk) {
       setNameError("Name is required");
       return;

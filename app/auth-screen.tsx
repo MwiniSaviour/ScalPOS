@@ -4,12 +4,11 @@ import { getSupabase } from "@/lib/api/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
-import { markOnboarded } from "@/lib/first-run";
 import { useNet } from "@/lib/net";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-type Mode = "signin" | "signup";
+type Mode = "signin" | "shop";
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -52,7 +51,7 @@ export default function AuthScreen() {
     try {
       const { error: e } = await sb.auth.signInWithOtp({
         email: trimmed,
-        options: { shouldCreateUser: mode === "signup" },
+        options: { shouldCreateUser: false },
       });
       if (e) {
         setError(e.message);
@@ -92,32 +91,40 @@ export default function AuthScreen() {
           onChange={setMode}
           options={[
             { value: "signin", label: "Sign in" },
-            { value: "signup", label: "Create account" },
+            { value: "shop", label: "Create shop" },
           ]}
         />
-        <Input
-          className="mt-3"
-          label="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@shop.com"
-          inputMode="email"
-        />
-        <Button
-          className="mt-3 h-12 rounded-full"
-          size="lg"
-          block
-          loading={busy}
-          disabled={!online || busy}
-          onClick={send}
-          data-testid="auth-send"
-        >
-          Email me a code
-        </Button>
-        {!online && (
-          <p className="mt-3 rounded-card bg-surface2 px-3 py-2 text-[14px] text-ink3">
-            You're offline — connect to Wi-Fi or data to sign in.
-          </p>
+        {mode === "shop" ? (
+          <Button block size="lg" onClick={() => router.push("/shop/create")}>
+            Create your shop
+          </Button>
+        ) : (
+          <>
+            <Input
+              className="mt-3"
+              label="Email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@shop.com"
+              inputMode="email"
+            />
+            <Button
+              className="mt-3 h-12 rounded-full"
+              size="lg"
+              block
+              loading={busy}
+              disabled={!online || busy}
+              onClick={send}
+              data-testid="auth-send"
+            >
+              Email me a code
+            </Button>
+            {!online && (
+              <p className="mt-3 rounded-card bg-surface2 px-3 py-2 text-[14px] text-ink3">
+                You're offline — connect to Wi-Fi or data to sign in.
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -127,13 +134,10 @@ export default function AuthScreen() {
         <Button
           variant="secondary"
           block
-          onClick={() => {
-            markOnboarded();
-            router.replace("/");
-          }}
+          onClick={() => router.push("/shop/create")}
           data-testid="auth-offline"
         >
-          Continue offline
+          Continue on this device
         </Button>
         <p className="mt-2 text-center text-[13px] text-ink3">
           Sell on this device first — connect a shop account later from Settings.

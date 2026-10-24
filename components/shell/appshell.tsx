@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { usePos } from "@/lib/store";
 import { useEffect } from "react";
 import { cn } from "@/lib/ui";
+import { PinGate } from "@/components/pin-gate";
 import { appChrome } from "@/lib/appchrome";
 
 /** paints the window chrome (decor + bar zones) — no-op when unsupported */
@@ -24,7 +25,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const hasTabBar = willHaveTabBar(pathname);
   return (
     <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+136px)]")}>
-      {children}
+      <PinGate>{children}</PinGate>
       <ChromeGate />
     </div>
   );
