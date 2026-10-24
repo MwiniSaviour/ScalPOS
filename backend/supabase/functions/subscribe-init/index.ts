@@ -112,7 +112,7 @@ Deno.serve(async (req: Request) => {
     return json({ error: "subscription row create failed" }, 500);
   }
 
-  const siteUrl = Deno.env.get("SITE_URL") ?? "https://novapos.app";
+  const siteUrl = Deno.env.get("SITE_URL") ?? "https://pos.scalmint.com";
   const planCode =
     renewal === "auto"
       ? plan === "enterprise"

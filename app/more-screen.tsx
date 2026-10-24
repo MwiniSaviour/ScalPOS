@@ -92,7 +92,7 @@ export default function MoreScreen() {
 
   async function shareReferral() {
     const text = "Nova POS — offline-first point of sale for Ghanaian shops";
-    const url = "https://novapos.app";
+    const url = "https://pos.scalmint.com";
     try {
       const mod = await import("@capacitor/share");
       await mod.Share.share({ title: "Nova POS", text, url });
