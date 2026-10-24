@@ -1,10 +1,10 @@
 import { Suspense } from "react";
-import HomeScreen from "./home-screen";
+import LandingScreen from "@/components/landing/landing-screen";
 
 export default function Page() {
   return (
     <Suspense fallback={null}>
-      <HomeScreen />
+      <LandingScreen />
     </Suspense>
   );
 }

@@ -102,7 +102,7 @@ export default function AuthCodeScreen() {
           });
           markOnboarded();
           usePos.getState().toast("Signed in — shop synced", "ok");
-          router.replace("/");
+          router.replace("/home");
         } catch {
           usePos.getState().toast("Signed in, but setup wasn't complete", "warn");
           router.replace("/connect");

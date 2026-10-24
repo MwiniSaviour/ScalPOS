@@ -129,7 +129,7 @@ export default function SellScreen() {
         <div className="flex h-14 items-center gap-2 px-2">
           <IconButton
             label="Back"
-            onClick={() => (window.history.length > 1 ? router.back() : router.push("/"))}
+            onClick={() => (window.history.length > 1 ? router.back() : router.push("/home"))}
           >
             <ChevronLeft className="size-[22px] text-ink" strokeWidth={2.2} />
           </IconButton>

@@ -5,10 +5,10 @@ import { House, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucid
 import Link from "next/link";
 import { cn } from "@/lib/ui";
 /** bottom tab chrome exists only on the tab destinations */
-const TAB_ROUTES = ["/", "/orders", "/inventory", "/customers", "/more"];
+const TAB_ROUTES = ["/home", "/orders", "/inventory", "/customers", "/more"];
 
 const tabs: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/", label: "Home", icon: House },
+  { href: "/home", label: "Home", icon: House },
   { href: "/orders", label: "Orders", icon: ReceiptText },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/customers", label: "Customers", icon: Users },
