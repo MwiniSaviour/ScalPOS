@@ -11,11 +11,11 @@ function safeEqualHex(a: string, b: string): boolean {
   return diff === 0;
 }
 
-async function hmacSha512Hex(secret: string, payload: string): Promise<string> {
+async function hmacHex(hash: "SHA-256" | "SHA-512", secret: string, payload: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     enc.encode(secret),
-    { name: "HMAC", hash: "SHA-512" },
+    { name: "HMAC", hash },
     false,
     ["sign"],
   );
@@ -23,6 +23,22 @@ async function hmacSha512Hex(secret: string, payload: string): Promise<string> {
   return Array.from(new Uint8Array(sig))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
+}
+
+const HUB_TOLERANCE_MS = 5 * 60 * 1000;
+
+function parseHubSignature(header: string): { t: string; v1: string } | null {
+  let t = "";
+  let v1 = "";
+  for (const part of header.split(",")) {
+    const idx = part.indexOf("=");
+    if (idx === -1) continue;
+    const key = part.slice(0, idx).trim();
+    const value = part.slice(idx + 1).trim();
+    if (key === "t") t = value;
+    else if (key === "v1") v1 = value;
+  }
+  return t && v1 ? { t, v1 } : null;
 }
 
 function json(body: unknown, status = 200): Response {
@@ -63,20 +79,45 @@ Deno.serve(async (req: Request) => {
   }
   const raw = await req.text();
 
-  const secretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
-  if (!secretKey) {
-    return json({ error: "server not configured: PAYSTACK_SECRET_KEY required" }, 500);
-  }
+  const hubHeader = req.headers.get("x-hub-signature") ?? "";
+  if (hubHeader) {
+    const hubSecret = Deno.env.get("HUB_SIGNING_SECRET");
+    if (!hubSecret) {
+      return json({ error: "server not configured: HUB_SIGNING_SECRET required" }, 500);
+    }
+    const sig = parseHubSignature(hubHeader);
+    if (!sig) {
+      return json({ error: "invalid signature" }, 401);
+    }
+    const ts = Number(sig.t);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() - ts) > HUB_TOLERANCE_MS) {
+      return json({ error: "invalid signature" }, 401);
+    }
+    let hubExpected = "";
+    try {
+      hubExpected = await hmacHex("SHA-256", hubSecret, `${sig.t}.${raw}`);
+    } catch {
+      return json({ error: "signature computation failed" }, 500);
+    }
+    if (!hubExpected || !safeEqualHex(sig.v1.toLowerCase(), hubExpected)) {
+      return json({ error: "invalid signature" }, 401);
+    }
+  } else {
+    const secretKey = Deno.env.get("PAYSTACK_SECRET_KEY");
+    if (!secretKey) {
+      return json({ error: "server not configured: PAYSTACK_SECRET_KEY required" }, 500);
+    }
 
-  const signatureHeader = req.headers.get("x-paystack-signature") ?? "";
-  let expected = "";
-  try {
-    expected = await hmacSha512Hex(secretKey, raw);
-  } catch {
-    return json({ error: "signature computation failed" }, 500);
-  }
-  if (!expected || !safeEqualHex(signatureHeader.toLowerCase(), expected)) {
-    return json({ error: "invalid signature" }, 401);
+    const signatureHeader = req.headers.get("x-paystack-signature") ?? "";
+    let expected = "";
+    try {
+      expected = await hmacHex("SHA-512", secretKey, raw);
+    } catch {
+      return json({ error: "signature computation failed" }, 500);
+    }
+    if (!expected || !safeEqualHex(signatureHeader.toLowerCase(), expected)) {
+      return json({ error: "invalid signature" }, 401);
+    }
   }
 
   let parsed: PaystackEvent;
