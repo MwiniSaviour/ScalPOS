@@ -82,7 +82,7 @@ Deno.serve(async (req: Request) => {
   if (!secretKey) {
     return json({ error: "server not configured: PAYSTACK_SECRET_KEY required" }, 500);
   }
-  const publicKey = Deno.env.get("PAYSTACK_PUBLIC_KEY");
+  const publicKey = Deno.env.get("PAYSTACK_PUBLIC_KEY") ?? Deno.env.get("NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY");
   if (!publicKey) {
     return json({ error: "server not configured: PAYSTACK_PUBLIC_KEY required" }, 500);
   }
