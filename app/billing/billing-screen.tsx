@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ScreenHeader } from "@/components/shell/screenheader";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { Chip } from "@/components/ui/chip";
-import { getSubscription, startSubscription, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
+import { getSubscription, startCheckout, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
 import { dateShort } from "@/lib/format";
 import { usePos } from "@/lib/store";
 import { BadgeCheck, Clock, RefreshCw, ShieldAlert } from "lucide-react";
@@ -125,8 +125,9 @@ export default function BillingScreen() {
     setBusy(plan);
     setError(null);
     try {
-      await startSubscription(conn, plan, renewal);
-      toast("Opening Paystack checkout…", "ok");
+      const payload = await startCheckout(conn, plan, renewal);
+      sessionStorage.setItem("nova-pos-checkout-v1", JSON.stringify(payload));
+      router.push(`/paystack/pay?ref=${encodeURIComponent(payload.reference)}`);
     } catch (e) {
       toast(errorText(e), "error");
     } finally {

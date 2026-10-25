@@ -82,6 +82,10 @@ Deno.serve(async (req: Request) => {
   if (!secretKey) {
     return json({ error: "server not configured: PAYSTACK_SECRET_KEY required" }, 500);
   }
+  const publicKey = Deno.env.get("PAYSTACK_PUBLIC_KEY");
+  if (!publicKey) {
+    return json({ error: "server not configured: PAYSTACK_PUBLIC_KEY required" }, 500);
+  }
 
   let subId = "";
   let reference = "";
@@ -150,7 +154,7 @@ Deno.serve(async (req: Request) => {
     message?: string;
     data?: { authorization_url?: string; access_code?: string; reference?: string };
   };
-  if (!payRes.ok || !payJson?.data?.authorization_url) {
+  if (!payRes.ok || !payJson?.data?.access_code) {
     return json(
       { error: payJson?.message ?? `paystack initialization failed (${payRes.status})` },
       502,
@@ -161,5 +165,10 @@ Deno.serve(async (req: Request) => {
     authorization_url: payJson.data.authorization_url,
     access_code: payJson.data.access_code,
     reference: reference,
+    public_key: publicKey,
+    email: user.email,
+    amount: PRICES[plan],
+    currency: "GHS",
+    metadata: payBody.metadata,
   });
 });

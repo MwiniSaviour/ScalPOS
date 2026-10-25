@@ -47,18 +47,35 @@ export async function getSubscription(conn: SyncConnection): Promise<Subscriptio
   };
 }
 
-export async function startSubscription(
+export type CheckoutPayload = {
+  public_key: string;
+  access_code: string;
+  reference: string;
+  email: string;
+  amount: number;
+  currency: string;
+  metadata: Record<string, unknown>;
+};
+
+export async function startCheckout(
   conn: SyncConnection,
   plan: SubPlan,
   renewal: Renewal = "manual",
-): Promise<void> {
+): Promise<CheckoutPayload> {
   const json = await edgePost(conn, "subscribe-init", { plan, renewal });
-  const url = typeof json.authorization_url === "string" ? json.authorization_url : "";
-  if (!url) throw new Error("checkout link missing");
-  try {
-    const mod = await import("@/lib/appchrome");
-    await mod.appChrome.openUrl({ url });
-  } catch {
-    if (typeof window !== "undefined") window.open(url, "_blank");
+  const public_key = typeof json.public_key === "string" ? json.public_key : "";
+  const access_code = typeof json.access_code === "string" ? json.access_code : "";
+  const reference = typeof json.reference === "string" ? json.reference : "";
+  if (!public_key || !access_code || !reference) {
+    throw new Error("checkout session incomplete");
   }
+  return {
+    public_key,
+    access_code,
+    reference,
+    email: typeof json.email === "string" ? json.email : "",
+    amount: typeof json.amount === "number" ? json.amount : 0,
+    currency: typeof json.currency === "string" ? json.currency : "GHS",
+    metadata: json.metadata && typeof json.metadata === "object" ? (json.metadata as Record<string, unknown>) : {},
+  };
 }
