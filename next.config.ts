@@ -4,7 +4,6 @@ const nextConfig: NextConfig = {
   // Capacitor ships static files — export the app as a pure SPA bundle
   output: "export",
   images: { unoptimized: true },
-  trailingSlash: true,
   reactStrictMode: true,
 };
 

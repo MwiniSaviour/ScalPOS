@@ -10,6 +10,7 @@ import {
 import { useSettings, usePos } from "@/lib/store";
 import { listConflicts } from "@/lib/sync/outbox";
 import { cn } from "@/lib/ui";
+import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
@@ -34,6 +35,7 @@ import type { ReactNode } from "react";
 export default function MoreScreen() {
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
+  const { signOut } = useAuth();
   const [signoutOpen, setSignoutOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
@@ -76,12 +78,10 @@ export default function MoreScreen() {
     toast("Backup saved to your downloads");
   }
 
-  async function signOut() {
+  async function handleSignOut() {
     writeConnection(null);
     setConn(null);
-    const mod = await import("@/lib/api/supabase");
-    const sb = mod.getSupabase();
-    if (sb) await sb.auth.signOut();
+    await signOut();
     toast("Signed out", "ok");
     window.location.reload();
   }
@@ -268,7 +268,7 @@ export default function MoreScreen() {
       <Confirm
         open={signoutOpen}
         onClose={() => setSignoutOpen(false)}
-        onConfirm={signOut}
+        onConfirm={handleSignOut}
         tone="danger"
         title="Sign out?"
         body="This signs you out and disconnects cloud sync. All of your data stays saved on this device."

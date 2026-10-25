@@ -1,0 +1,10 @@
+"use client";
+
+import { ClerkProvider } from "@clerk/clerk-react";
+
+const KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
+
+export function ClerkGate({ children }: { children: React.ReactNode }) {
+  if (!KEY) return <>{children}</>;
+  return <ClerkProvider publishableKey={KEY}>{children}</ClerkProvider>;
+}

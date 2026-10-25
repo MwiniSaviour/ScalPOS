@@ -1,6 +1,5 @@
 "use client";
 
-import { getSupabase } from "@/lib/api/supabase";
 import { bootstrapConnection } from "@/lib/api/bootstrap";
 import { Button } from "@/components/ui/button";
 import { markOnboarded } from "@/lib/first-run";
@@ -8,6 +7,7 @@ import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useAuth, useSignIn } from "@clerk/clerk-react";
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
 
@@ -16,6 +16,8 @@ export default function AuthCodeScreen() {
   const sp = useSearchParams();
   const email = sp.get("email") ?? "";
   const { online } = useNet();
+  const { getToken } = useAuth();
+  const { signIn } = useSignIn();
   const [digits, setDigits] = useState<string[]>(EMPTY_DIGITS);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [busy, setBusy] = useState(false);
@@ -54,50 +56,51 @@ export default function AuthCodeScreen() {
   }
 
   async function resend() {
-    const sb = getSupabase();
-    if (!sb) {
-      setError("No account server is configured in this build.");
+    const clerkSignIn = signIn;
+    if (!clerkSignIn) {
+      setCool(30);
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const { error: e } = await sb.auth.signInWithOtp({
-        email,
-        options: { shouldCreateUser: false },
+      const result = await clerkSignIn.create({
+        identifier: email,
+        strategy: "email_code",
       });
-      if (e) throw new Error(e.message);
+      if (result.status === "complete") {
+        router.push("/home");
+      } else {
+        setCool(30);
+      }
+    } catch {
       setCool(30);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }
 
   async function verify() {
-    const sb = getSupabase();
-    if (!sb) {
-      setError("No account server is configured in this build.");
-      return;
-    }
     const code = digits.join("");
     if (!email || code.length < 6) return;
     setBusy(true);
     setError(null);
     try {
-      const { error: ve } = await sb.auth.verifyOtp({ email, token: code, type: "email" });
-      if (ve) {
-        setError(ve.message);
+      const clerkSignIn = signIn;
+      if (!clerkSignIn) {
+        setError("Sign-in state unavailable.");
         return;
       }
-      const { data } = await sb.auth.getSession();
-      const sess = data?.session ?? null;
-      if (sess?.access_token && sess.user) {
+      const result = await clerkSignIn.attemptFirstFactor({
+        strategy: "email_code",
+        code,
+      });
+      if (result.status === "complete") {
+        const token = await getToken({ template: "supabase" });
         try {
           await bootstrapConnection({
-            access_token: sess.access_token,
-            user_id: sess.user.id,
+            access_token: token ?? "",
+            user_id: "",
             email,
           });
           markOnboarded();
@@ -107,9 +110,9 @@ export default function AuthCodeScreen() {
           usePos.getState().toast("Signed in, but setup wasn't complete", "warn");
           router.replace("/connect");
         }
-      } else {
-        setError("Couldn't confirm the code — try again.");
+        return;
       }
+      setError("Couldn't confirm the code — try again.");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

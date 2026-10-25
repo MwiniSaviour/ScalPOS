@@ -1,6 +1,5 @@
 "use client";
 
-import { getSupabase } from "@/lib/api/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
@@ -8,70 +7,64 @@ import { useNet } from "@/lib/net";
 import { markOnboarded } from "@/lib/first-run";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
 
 type Mode = "signin" | "shop";
 
 export default function AuthScreen() {
   const router = useRouter();
   const { online } = useNet();
-  const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  const { isSignedIn } = useAuth();
+  const { isLoaded: signInLoaded, signIn } = useSignIn();
+  const { isLoaded: userLoaded, user: userResource } = useUser();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const mod = await import("@/lib/api/supabase");
-      const sb = mod.getSupabase();
-      if (!sb) return;
-      const { data } = await sb.auth.getSession();
-      if (cancelled) return;
-      const sess = data?.session ?? null;
-      if (sess?.user) setSignedInEmail(sess.user.email ?? null);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (isSignedIn && userLoaded && userResource?.primaryEmailAddress) {
+      router.replace("/home");
+    }
+  }, [isSignedIn, userLoaded, userResource, router]);
 
   async function send() {
-    const sb = getSupabase();
-    if (!sb) {
-      setError("No account server is configured in this build.");
-      return;
-    }
     const trimmed = email.trim();
     if (!trimmed || !trimmed.includes("@")) {
       setError("Enter a valid email address");
       return;
     }
+    if (!signInLoaded || !signIn) return;
     setBusy(true);
     setError(null);
     try {
-      const { error: e } = await sb.auth.signInWithOtp({
-        email: trimmed,
-        options: { shouldCreateUser: false },
+      const result = await signIn.create({
+        identifier: trimmed,
+        strategy: "email_code",
       });
-      if (e) {
-        setError(e.message);
+      if (result.status === "complete") {
+        router.push("/home");
         return;
       }
       router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : "Sign-in failed.");
     } finally {
       setBusy(false);
     }
   }
 
-  if (signedInEmail) {
+  if (isSignedIn) {
     return (
       <div className="anim-fade flex min-h-dvh flex-col px-5 pt-10">
         <BrandMark />
         <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
-          <p className="text-[14px] text-ink3">Signed in as {signedInEmail}</p>
+          <p className="text-[14px] text-ink3">
+            Signed in as{" "}
+            {userLoaded && userResource
+              ? `${userResource.primaryEmailAddress?.emailAddress ?? userResource.emailAddresses?.[0]?.emailAddress ?? "you"}`
+              : "you"}
+          </p>
           <Button className="mt-3 h-12 rounded-full" size="lg" block onClick={() => router.replace("/home")}>
             Continue
           </Button>

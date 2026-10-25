@@ -38,6 +38,8 @@
   "exclude": [
     "node_modules",
     "backend",
-    "tests"
+    "tests",
+    "android",
+    "out"
   ]
 }

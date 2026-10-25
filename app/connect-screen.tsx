@@ -28,6 +28,7 @@ import { usePos } from "@/lib/store";
 import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAuth, useSignIn } from "@clerk/clerk-react";
 
 function supabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -260,6 +261,8 @@ export default function ConnectScreen() {
   const router = useRouter();
   const { online } = useNet();
   const toast = usePos((s) => s.toast);
+  const { isSignedIn, getToken, signOut, userId } = useAuth();
+  const { signIn } = useSignIn();
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
   const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -272,28 +275,22 @@ export default function ConnectScreen() {
   const [rosterVersion, setRosterVersion] = useState(0);
 
   useEffect(() => {
+    if (!isSignedIn || !userId) return;
     let cancelled = false;
     void (async () => {
-      const mod = await import("@/lib/api/supabase");
-      const sb = mod.getSupabase();
-      if (!sb) return;
-      const { data } = await sb.auth.getSession();
+      const token = await getToken({ template: "supabase" });
       if (cancelled) return;
-      const sess = data?.session ?? null;
-      if (sess?.user) {
-        setSessionEmail(sess.user.email ?? null);
-        setSessionToken(sess.access_token);
-        setSessionUserId(sess.user.id);
-      }
+      setSessionUserId(userId);
+      setSessionToken(token ?? null);
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isSignedIn, userId, getToken]);
 
-  const signedIn = !!sessionToken && !!sessionUserId;
+  const signedIn = isSignedIn && !!sessionToken && !!sessionUserId;
 
-  async function signIn() {
+  async function startSignIn() {
     if (!online) return;
     const trimmed = email.trim();
     if (!trimmed) {
@@ -303,16 +300,20 @@ export default function ConnectScreen() {
     setBusy(true);
     setError(null);
     setMessage(null);
+    const clerkSignIn = signIn;
+    if (!clerkSignIn) return;
     try {
-      const mod = await import("@/lib/api/supabase");
-      const sb = mod.getSupabase();
-      if (!sb) throw new Error("Supabase not configured");
-      const { data, error: e } = await sb.auth.signInWithOtp({ email: trimmed });
-      if (e) throw new Error(e.message);
-      const userCreated = !data.user;
-      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}${userCreated ? "" : "&new=1"}`);
+      const result = await clerkSignIn.create({
+        identifier: trimmed,
+        strategy: "email_code",
+      });
+      if (result.status === "complete") {
+        router.push("/connect");
+        return;
+      }
+      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : "Sign-in failed.");
     } finally {
       setBusy(false);
     }
@@ -346,9 +347,7 @@ export default function ConnectScreen() {
     try {
       writeConnection(null);
       setConn(null);
-      const mod = await import("@/lib/api/supabase");
-      const sb = mod.getSupabase();
-      if (sb && online) await sb.auth.signOut();
+      await signOut();
       setSessionEmail(null);
       setSessionToken(null);
       setSessionUserId(null);
@@ -460,7 +459,7 @@ export default function ConnectScreen() {
                 placeholder="you@shop.com"
                 inputMode="email"
               />
-              <Button className="mt-3" block loading={busy} disabled={!online} onClick={signIn} icon={<Mail className="size-[18px]" />}>
+              <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />}>
                 Sign in with email
               </Button>
             </>

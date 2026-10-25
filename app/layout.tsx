@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { AppShell } from "@/components/shell/appshell";
+import { ClerkGate } from "@/components/shell/clerk-gate";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -39,13 +40,15 @@ r.style.colorScheme=t;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-theme="dark" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
-      </head>
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
-    </html>
+    <ClerkGate>
+      <html lang="en" data-theme="dark" suppressHydrationWarning>
+        <head>
+          <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        </head>
+        <body>
+          <AppShell>{children}</AppShell>
+        </body>
+      </html>
+    </ClerkGate>
   );
 }
