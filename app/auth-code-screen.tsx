@@ -1,13 +1,12 @@
 "use client";
 
-import { bootstrapConnection } from "@/lib/api/bootstrap";
 import { Button } from "@/components/ui/button";
 import { markOnboarded } from "@/lib/first-run";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useSignIn } from "@clerk/clerk-react";
+import { useSignIn, useSignUp, useClerk } from "@clerk/clerk-react";
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
 
@@ -15,19 +14,43 @@ export default function AuthCodeScreen() {
   const router = useRouter();
   const sp = useSearchParams();
   const email = sp.get("email") ?? "";
+  const isNew = sp.get("new") === "1";
   const { online } = useNet();
-  const { getToken } = useAuth();
+  const { signUp } = useSignUp();
   const { signIn } = useSignIn();
+  const clerk = useClerk();
   const [digits, setDigits] = useState<string[]>(EMPTY_DIGITS);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cool, setCool] = useState(0);
   const cooling = cool > 0;
+  const emailSentRef = useRef(false);
+
+  function errMessage(e: unknown): string {
+    if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+      const first = (e as { errors: { message?: unknown }[] }).errors[0];
+      if (first && typeof first.message === "string") return first.message;
+    }
+    return e instanceof Error ? e.message : String(e);
+  }
 
   useEffect(() => {
     if (!email) router.replace("/auth");
   }, [email, router]);
+
+  useEffect(() => {
+    if (!isNew || !signUp || !email || emailSentRef.current) return;
+    emailSentRef.current = true;
+    void (async () => {
+      try {
+        await signUp.create({ emailAddress: email });
+        setCool(30);
+      } catch (e) {
+        setError(errMessage(e));
+      }
+    })();
+  }, [isNew, signUp, email]);
 
   useEffect(() => {
     if (!cooling) return;
@@ -56,25 +79,19 @@ export default function AuthCodeScreen() {
   }
 
   async function resend() {
-    const clerkSignIn = signIn;
-    if (!clerkSignIn) {
-      setCool(30);
-      return;
-    }
+    if (!signIn || cooling || busy) return;
     setBusy(true);
     setError(null);
     try {
-      const result = await clerkSignIn.create({
-        identifier: email,
-        strategy: "email_code",
-      });
-      if (result.status === "complete") {
-        router.push("/home");
+      if (isNew) {
+        if (!signUp) throw new Error("Sign-up is still loading. Try again.");
+        await signUp.prepareVerification({ strategy: "email_code" });
       } else {
-        setCool(30);
+        await signIn.create({ identifier: email, strategy: "email_code" });
       }
-    } catch {
       setCool(30);
+    } catch (e) {
+      setError(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -86,35 +103,41 @@ export default function AuthCodeScreen() {
     setBusy(true);
     setError(null);
     try {
-      const clerkSignIn = signIn;
-      if (!clerkSignIn) {
-        setError("Sign-in state unavailable.");
-        return;
-      }
-      const result = await clerkSignIn.attemptFirstFactor({
-        strategy: "email_code",
-        code,
-      });
-      if (result.status === "complete") {
-        const token = await getToken({ template: "supabase" });
-        try {
-          await bootstrapConnection({
-            access_token: token ?? "",
-            user_id: "",
-            email,
-          });
-          markOnboarded();
-          usePos.getState().toast("Signed in — shop synced", "ok");
-          router.replace("/home");
-        } catch {
-          usePos.getState().toast("Signed in, but setup wasn't complete", "warn");
-          router.replace("/connect");
+      if (isNew) {
+        if (!signUp) {
+          setError("Sign-up is still loading. Try again.");
+          return;
         }
-        return;
+        const result = await signUp.attemptEmailAddressVerification({ code });
+        if (result.status !== "complete") {
+          setError("Couldn't confirm the code — try again.");
+          return;
+        }
+        if (result.createdSessionId) {
+          await clerk.setActive({ session: result.createdSessionId });
+        }
+      } else {
+        if (!signIn) {
+          setError("Sign-in state unavailable.");
+          return;
+        }
+        const result = await signIn.attemptFirstFactor({
+          strategy: "email_code",
+          code,
+        });
+        if (result.status !== "complete") {
+          setError("Couldn't confirm the code — try again.");
+          return;
+        }
       }
-      setError("Couldn't confirm the code — try again.");
+      markOnboarded();
+      usePos.getState().toast(
+        isNew ? "Account created — connecting your shop" : "Signed in — connecting your shop",
+        "ok",
+      );
+      router.replace("/connect");
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(errMessage(e));
     } finally {
       setBusy(false);
     }
@@ -125,7 +148,7 @@ export default function AuthCodeScreen() {
       <BrandMark />
       <h1 className="mt-5 text-[26px]/7 font-bold text-ink">Enter your code</h1>
       <p className="mt-1 text-[15px] text-ink3">
-        Sent to {email}. The 6-digit code appears in the sign-in email, alongside the link.
+        {isNew ? "Check your email — enter the 6-digit code to create your account." : `Sent to ${email}. Enter the 6-digit code to sign in.`}
       </p>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface p-4">

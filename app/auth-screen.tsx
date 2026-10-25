@@ -8,8 +8,25 @@ import { markOnboarded } from "@/lib/first-run";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
+import { oauthRedirectTargets } from "@/lib/api/oauth";
 
 type Mode = "signin" | "shop";
+
+function errorCode(e: unknown): string | null {
+  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+    const first = (e as { errors: { code?: unknown }[] }).errors[0];
+    if (first && typeof first.code === "string") return first.code;
+  }
+  return null;
+}
+
+function errMessage(e: unknown): string {
+  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+    const first = (e as { errors: { message?: unknown }[] }).errors[0];
+    if (first && typeof first.message === "string") return first.message;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -48,7 +65,29 @@ export default function AuthScreen() {
       }
       router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed.");
+      if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
+        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1`);
+        return;
+      }
+      setError(errMessage(e) || "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function google() {
+    if (!signInLoaded || !signIn || busy) return;
+    setBusy(true);
+    setError(null);
+    const t = oauthRedirectTargets();
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: t.redirectUrl,
+        redirectUrlComplete: t.redirectUrlComplete,
+      });
+    } catch (e) {
+      setError(errMessage(e) || "Google sign-in failed.");
     } finally {
       setBusy(false);
     }
@@ -111,7 +150,19 @@ export default function AuthScreen() {
               onClick={send}
               data-testid="auth-send"
             >
-              Email me a code
+              Sign in or create account
+            </Button>
+            <Button
+              className="mt-2 h-12 rounded-full"
+              variant="secondary"
+              size="lg"
+              block
+              loading={busy}
+              disabled={!online || busy}
+              onClick={google}
+              data-testid="auth-google"
+            >
+              Continue with Google
             </Button>
             {!online && (
               <p className="mt-3 rounded-card bg-surface2 px-3 py-2 text-[14px] text-ink3">

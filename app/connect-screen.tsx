@@ -27,8 +27,9 @@ import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useAuth, useSignIn } from "@clerk/clerk-react";
+import { useEffect, useRef, useState } from "react";
+import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
+import { oauthRedirectTargets } from "@/lib/api/oauth";
 
 function supabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
@@ -41,7 +42,19 @@ function roleLabel(r: TeamRole): string {
 }
 
 function errMessage(e: unknown): string {
+  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+    const first = (e as { errors: { message?: unknown }[] }).errors[0];
+    if (first && typeof first.message === "string") return first.message;
+  }
   return e instanceof Error ? e.message : String(e);
+}
+
+function errorCode(e: unknown): string | null {
+  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+    const first = (e as { errors: { code?: unknown }[] }).errors[0];
+    if (first && typeof first.code === "string") return first.code;
+  }
+  return null;
 }
 
 function PeopleSection({ conn, refreshKey }: { conn: SyncConnection; refreshKey: number }) {
@@ -263,8 +276,8 @@ export default function ConnectScreen() {
   const toast = usePos((s) => s.toast);
   const { isSignedIn, getToken, signOut, userId } = useAuth();
   const { signIn } = useSignIn();
+  const { user: userResource } = useUser();
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
-  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -273,6 +286,7 @@ export default function ConnectScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [rosterVersion, setRosterVersion] = useState(0);
+  const autoConnectTried = useRef(false);
 
   useEffect(() => {
     if (!isSignedIn || !userId) return;
@@ -289,6 +303,35 @@ export default function ConnectScreen() {
   }, [isSignedIn, userId, getToken]);
 
   const signedIn = isSignedIn && !!sessionToken && !!sessionUserId;
+  const userEmail = userResource?.primaryEmailAddress?.emailAddress ?? null;
+
+  useEffect(() => {
+    if (!signedIn) {
+      autoConnectTried.current = false;
+      return;
+    }
+    if (!conn && online && sessionToken && sessionUserId && !autoConnectTried.current) {
+      autoConnectTried.current = true;
+      void (async () => {
+        setBusy(true);
+        setError(null);
+        setMessage(null);
+        try {
+          const c = await bootstrapConnection({
+            access_token: sessionToken,
+            user_id: sessionUserId,
+          });
+          setConn(c);
+          setMessage("Connected.");
+          usePos.getState().toast("Connected to backend", "ok");
+        } catch (e) {
+          setError(e instanceof Error ? e.message : String(e));
+        } finally {
+          setBusy(false);
+        }
+      })();
+    }
+  }, [signedIn, conn, online, sessionToken, sessionUserId]);
 
   async function startSignIn() {
     if (!online) return;
@@ -297,23 +340,52 @@ export default function ConnectScreen() {
       setError("Enter your email");
       return;
     }
+    if (!signIn) {
+      setError("Sign-in is still loading. Try again.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
-    const clerkSignIn = signIn;
-    if (!clerkSignIn) return;
     try {
-      const result = await clerkSignIn.create({
+      const result = await signIn.create({
         identifier: trimmed,
         strategy: "email_code",
       });
       if (result.status === "complete") {
-        router.push("/connect");
+        setMessage("Signed in — syncing…");
         return;
       }
       router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Sign-in failed.");
+      if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
+        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1`);
+        return;
+      }
+      setError(errMessage(e) || "Sign-in failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startGoogle() {
+    if (!online || busy) return;
+    if (!signIn) {
+      setError("Sign-in is still loading. Try again.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    const t = oauthRedirectTargets();
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy: "oauth_google",
+        redirectUrl: t.redirectUrl,
+        redirectUrlComplete: t.redirectUrlComplete,
+      });
+    } catch (e) {
+      setError(errMessage(e) || "Google sign-in failed.");
     } finally {
       setBusy(false);
     }
@@ -328,7 +400,7 @@ export default function ConnectScreen() {
       const c = await bootstrapConnection({
         access_token: sessionToken,
         user_id: sessionUserId,
-        email: sessionEmail ?? email.trim() ?? undefined,
+        email: userEmail ?? email.trim() ?? undefined,
       });
       setConn(c);
       setMessage("Connected.");
@@ -348,7 +420,6 @@ export default function ConnectScreen() {
       writeConnection(null);
       setConn(null);
       await signOut();
-      setSessionEmail(null);
       setSessionToken(null);
       setSessionUserId(null);
       toast("Disconnected", "ok");
@@ -459,21 +530,28 @@ export default function ConnectScreen() {
                 placeholder="you@shop.com"
                 inputMode="email"
               />
+              <p className="mt-2.5 text-[14px]/5 text-ink3">
+                Use an existing Nova POS email, or a new one — a new account is
+                created automatically.
+              </p>
               <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />}>
-                Sign in with email
+                Sign in or create account
+              </Button>
+              <Button className="mt-2" variant="secondary" block loading={busy} disabled={!online || busy} onClick={startGoogle} data-testid="connect-google">
+                Continue with Google
               </Button>
             </>
           )}
           {signedIn && !connected && (
             <>
-              <p className="text-[14px] text-ink3">Signed in as {sessionEmail}</p>
+              <p className="text-[14px] text-ink3">Signed in as {userEmail ?? email.trim()}</p>
               <Button className="mt-3" block loading={busy} disabled={!online} onClick={connect} icon={<Cloud className="size-[18px]" />}>
                 Connect
               </Button>
             </>
           )}
           {connected && (
-            <p className="text-[14px] text-ink3">Signed in as {conn?.email ?? sessionEmail}</p>
+            <p className="text-[14px] text-ink3">Signed in as {conn?.email ?? userEmail}</p>
           )}
           {message && <p className="mt-2.5 text-[14px] text-ok">{message}</p>}
           {error && <p className="mt-2.5 text-[14px] text-danger">{error}</p>}

@@ -90,6 +90,9 @@ export default function PinScreen() {
           <Button onClick={onAttempt} block>
             Unlock
           </Button>
+          <Button variant="ghost" size="md" block onClick={() => router.replace("/pin/forgot")} data-testid="pin-forgot">
+            Forgot PIN?
+          </Button>
           {error && <p className="text-[14px] text-danger">{error}</p>}
         </div>
       </div>

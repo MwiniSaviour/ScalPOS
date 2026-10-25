@@ -9,7 +9,7 @@ import { isContentLocked, sessionUnlocked } from "@/lib/pin";
  * PIN is set, every content route requires the user to have unlocked the
  * current tab. Setup / auth routes are exempt.
  */
-const EXEMPT = ["/auth", "/auth/code", "/shop/create", "/onboarding", "/pin"];
+const EXEMPT = ["/auth", "/auth/code", "/auth/callback", "/shop/create", "/onboarding", "/pin"];
 
 function normalize(p: string): string {
   const stripped = p.replace(/\/+$/, "");

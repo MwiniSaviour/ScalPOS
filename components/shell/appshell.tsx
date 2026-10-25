@@ -10,6 +10,7 @@ import { Capacitor } from "@capacitor/core";
 import { Smartphone } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 import { cn } from "@/lib/ui";
+import { initDeepLinking } from "@/lib/deep-link";
 import { PinGate } from "@/components/pin-gate";
 import { appChrome } from "@/lib/appchrome";
 
@@ -43,6 +44,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isLanding = norm === "/" || norm === "/landing";
   const hasTabBar = willHaveTabBar(pathname);
   const native = useNativeFlag();
+
+  useEffect(() => {
+    let un: (() => void) | null = null;
+    void initDeepLinking().then((handle) => {
+      un = handle?.unregister ?? null;
+    });
+    return () => {
+      if (un) un();
+    };
+  }, []);
 
   if (isLanding) {
     return (
