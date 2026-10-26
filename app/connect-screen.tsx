@@ -287,6 +287,7 @@ export default function ConnectScreen() {
   const [error, setError] = useState<string | null>(null);
   const [rosterVersion, setRosterVersion] = useState(0);
   const autoConnectTried = useRef(false);
+  const userEmail = userResource?.primaryEmailAddress?.emailAddress ?? null;
 
   useEffect(() => {
     if (!isSignedIn || !userId) return;
@@ -296,14 +297,24 @@ export default function ConnectScreen() {
       if (cancelled) return;
       setSessionUserId(userId);
       setSessionToken(token ?? null);
+      const existing = readConnection();
+      if (token && existing && (existing.access_token !== token || existing.user_id !== userId)) {
+        const next: SyncConnection = {
+          ...existing,
+          access_token: token,
+          user_id: userId,
+          email: existing.email ?? userEmail ?? undefined,
+        };
+        writeConnection(next);
+        setConn(next);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [isSignedIn, userId, getToken]);
+  }, [isSignedIn, userId, getToken, userEmail]);
 
   const signedIn = isSignedIn && !!sessionToken && !!sessionUserId;
-  const userEmail = userResource?.primaryEmailAddress?.emailAddress ?? null;
 
   useEffect(() => {
     if (!signedIn) {
@@ -463,12 +474,22 @@ export default function ConnectScreen() {
         headers: { Authorization: `Bearer ${conn.access_token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ org_id: conn.org_id, email: trimmed, role: "cashier" }),
       });
-      const json = (await res.json().catch(() => ({}))) as { token?: string; error?: string };
+      const json = (await res.json().catch(() => ({}))) as {
+        token?: string;
+        invite_url?: string;
+        emailed?: boolean;
+        error?: string;
+      };
       if (!res.ok) throw new Error(json.error ?? "invite failed");
       setInviteEmail("");
       setRosterVersion((v) => v + 1);
-      setMessage(`Invited ${trimmed}.`);
-      toast(`Invite sent to ${trimmed}`, "ok");
+      if (json.emailed === false && json.invite_url) {
+        setMessage(`Invite link: ${json.invite_url}`);
+        toast("Share the invite link manually", "warn");
+      } else {
+        setMessage(`Invited ${trimmed}.`);
+        toast(`Invite sent to ${trimmed}`, "ok");
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

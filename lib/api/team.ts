@@ -1,5 +1,5 @@
 import type { SyncConnection } from "@/lib/api/bootstrap";
-import { getSupabase } from "@/lib/api/supabase";
+import { createSupabaseClient } from "@/lib/api/supabase";
 
 export type TeamRole = "owner" | "supervisor" | "cashier";
 
@@ -13,7 +13,7 @@ export type TeamMember = {
 };
 
 export async function listMembers(conn: SyncConnection): Promise<TeamMember[]> {
-  const sb = getSupabase();
+  const sb = createSupabaseClient(conn.access_token);
   if (!sb) throw new Error("Supabase not configured");
   const { data, error } = await sb
     .from("memberships")
@@ -25,14 +25,14 @@ export async function listMembers(conn: SyncConnection): Promise<TeamMember[]> {
 }
 
 export async function setRole(conn: SyncConnection, memberId: string, role: TeamRole): Promise<void> {
-  const sb = getSupabase();
+  const sb = createSupabaseClient(conn.access_token);
   if (!sb) throw new Error("Supabase not configured");
   const { error } = await sb.from("memberships").update({ role }).eq("id", memberId);
   if (error) throw new Error(error.message);
 }
 
 export async function layoffMember(conn: SyncConnection, memberId: string): Promise<void> {
-  const sb = getSupabase();
+  const sb = createSupabaseClient(conn.access_token);
   if (!sb) throw new Error("Supabase not configured");
   const { error } = await sb
     .from("memberships")
@@ -42,7 +42,7 @@ export async function layoffMember(conn: SyncConnection, memberId: string): Prom
 }
 
 export async function reinstateMember(conn: SyncConnection, memberId: string): Promise<void> {
-  const sb = getSupabase();
+  const sb = createSupabaseClient(conn.access_token);
   if (!sb) throw new Error("Supabase not configured");
   const { error } = await sb.from("memberships").update({ deleted_at: null }).eq("id", memberId);
   if (error) throw new Error(error.message);

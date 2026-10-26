@@ -44,7 +44,7 @@ export async function bootstrapConnection(o: {
 
   let orgName = json.org_id;
   try {
-    const sb = getSupabase();
+      const sb = getSupabase(o.access_token);
     if (sb) {
       const { data } = await sb.from("orgs").select("name").eq("id", json.org_id).maybeSingle();
       if (data && typeof (data as { name?: string }).name === "string") {

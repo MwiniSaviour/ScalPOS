@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyClerkToken } from "../_shared/clerk.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -44,18 +45,10 @@ Deno.serve(async (req: Request) => {
     return json({ error: "server not configured: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY required" }, 500);
   }
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return json({ error: "missing authorization" }, 401);
-  }
-  const userClient = createClient(supabaseUrl, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: authHeader } },
-  });
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) {
+  const user = await verifyClerkToken(req);
+  if (!user) {
     return json({ error: "invalid session" }, 401);
   }
-  const user = userData.user;
 
   const admin = createClient(supabaseUrl, serviceKey);
   const { data: memberships, error: memErr } = await admin

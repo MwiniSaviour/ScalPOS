@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyClerkToken } from "../_shared/clerk.ts";
 
 const enc = new TextEncoder();
 
@@ -27,13 +28,6 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("method not allowed", { status: 405 });
   }
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "missing authorization" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
   const body = await req.json().catch(() => ({}));
   const token = body?.token as string | undefined;
   if (!token) {
@@ -43,19 +37,13 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const userClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) {
+  const user = await verifyClerkToken(req);
+  if (!user) {
     return new Response(JSON.stringify({ error: "invalid session" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
-  const user = userData.user;
 
   const parts = token.split(".");
   if (parts.length !== 2) {

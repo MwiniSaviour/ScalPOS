@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyClerkToken } from "../_shared/clerk.ts";
 
 const PRICES: Record<string, number> = {
   standard: 12000,
@@ -29,30 +30,21 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json({ error: "method not allowed" }, 405);
   }
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return json({ error: "missing authorization" }, 401);
+  const user = await verifyClerkToken(req);
+  if (!user) {
+    return json({ error: "invalid session" }, 401);
   }
+  const email = user.email;
+  if (!email) {
+    return json({ error: "account has no email to bill" }, 400);
+  }
+
   const body = await req.json().catch(() => ({}));
   const plan = typeof body?.plan === "string" ? body.plan : "";
   if (!PRICES[plan]) {
     return json({ error: "plan must be standard or enterprise" }, 400);
   }
   const renewal = body?.renewal === "auto" ? "auto" : "manual";
-
-  const userClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) {
-    return json({ error: "invalid session" }, 401);
-  }
-  const user = userData.user;
-  if (!user.email) {
-    return json({ error: "account has no email to bill" }, 400);
-  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -124,7 +116,7 @@ Deno.serve(async (req: Request) => {
         : Deno.env.get("PAYSTACK_PLAN_STANDARD")
       : undefined;
   const payBody: Record<string, unknown> = {
-    email: user.email,
+    email: email,
     currency: "GHS",
     channels: ["mobile_money", "card", "bank_transfer"],
     reference,
@@ -166,7 +158,7 @@ Deno.serve(async (req: Request) => {
     access_code: payJson.data.access_code,
     reference: reference,
     public_key: publicKey,
-    email: user.email,
+    email: email,
     amount: PRICES[plan],
     currency: "GHS",
     metadata: payBody.metadata,

@@ -140,7 +140,8 @@ async function remove(opId: string): Promise<void> {
 
 async function defaultApply(op: Op): Promise<void> {
   const mod = await import("@/lib/api/supabase");
-  const sb = mod.getSupabase();
+  const { readConnection } = await import("@/lib/api/bootstrap");
+  const sb = mod.getSupabase(readConnection()?.access_token);
   if (!sb) throw new Error("supabase not configured");
   if (op.kind === "delete") {
     const { error } = await sb

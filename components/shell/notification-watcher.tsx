@@ -24,7 +24,7 @@ export default function NotificationWatcher() {
   useEffect(() => {
     const conn = readConnection() as SyncConnection | null;
     if (!conn) return;
-    const sb = getSupabase();
+    const sb = getSupabase(conn.access_token);
     if (!sb) return;
 
     const role = staff?.role ?? "cashier";

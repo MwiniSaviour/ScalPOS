@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifyClerkToken } from "../_shared/clerk.ts";
 
 const enc = new TextEncoder();
 
@@ -28,13 +29,6 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("method not allowed", { status: 405 });
   }
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader) {
-    return new Response(JSON.stringify({ error: "missing authorization" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
   const body = await req.json().catch(() => ({}));
   const orgId = body?.org_id as string | undefined;
   const email = body?.email as string | undefined;
@@ -52,13 +46,8 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const userClient = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_ANON_KEY")!,
-    { global: { headers: { Authorization: authHeader } } },
-  );
-  const { data: userData, error: userErr } = await userClient.auth.getUser();
-  if (userErr || !userData?.user) {
+  const user = await verifyClerkToken(req);
+  if (!user) {
     return new Response(JSON.stringify({ error: "invalid session" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -75,7 +64,7 @@ Deno.serve(async (req: Request) => {
     .from("memberships")
     .select("role")
     .eq("org_id", orgId)
-    .eq("user_id", userData.user.id)
+    .eq("user_id", user.id)
     .is("deleted_at", null)
     .limit(1);
   if (!callerMem || callerMem.length === 0 || !["owner", "supervisor"].includes(callerMem[0].role)) {
@@ -103,17 +92,41 @@ Deno.serve(async (req: Request) => {
   const sig = await hmacSign(Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, data);
   const token = `${data}.${sig}`;
 
-  // best-effort send invite email
-  try {
-    await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${Deno.env.get("SITE_URL") ?? "http://localhost:3000"}/accept-invite?token=${encodeURIComponent(token)}`,
-    });
-  } catch {
-    // ignore; token still returned
+  const siteUrl = Deno.env.get("SITE_URL") ?? "https://pos.scalmint.com";
+  const inviteUrl = `${siteUrl}/accept-invite?token=${encodeURIComponent(token)}`;
+
+  // Send a Clerk-native invitation when configured. The redirect carries the
+  // signed org/role token so the invitee joins the correct shop after sign-up.
+  let emailed = false;
+  const clerkKey = Deno.env.get("CLERK_SECRET_KEY");
+  if (clerkKey) {
+    try {
+      const res = await fetch("https://api.clerk.com/v1/invitations", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${clerkKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email_address: payload.email,
+          redirect_url: inviteUrl,
+          notify: true,
+          ignore_existing: true,
+          expires_in_days: 7,
+        }),
+      });
+      emailed = res.ok;
+      if (!res.ok) console.warn("clerk invite failed", res.status, await res.text());
+    } catch (e) {
+      console.warn("clerk invite error", e instanceof Error ? e.message : String(e));
+    }
   }
 
-  return new Response(JSON.stringify({ token, org_id: orgId, role }), {
-    status: 200,
-    headers: { "Content-Type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ token, org_id: orgId, role, invite_url: inviteUrl, emailed }),
+    {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 });

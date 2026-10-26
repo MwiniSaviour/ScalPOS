@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/api/supabase";
+import { readConnection } from "@/lib/api/bootstrap";
 import { enqueue } from "./outbox";
 import type { Op, Row } from "./types";
 
@@ -10,7 +11,7 @@ function uuid(): string {
 }
 
 export class SyncClient {
-  private sb = getSupabase();
+  private sb = getSupabase(readConnection()?.access_token);
 
   get available(): boolean {
     return this.sb !== null;

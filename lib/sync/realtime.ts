@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/api/supabase";
+import { readConnection } from "@/lib/api/bootstrap";
 
 export type RealtimeChange = {
   table: string;
@@ -12,7 +13,7 @@ export function subscribe(
   tables: string[],
   onChange: (change: RealtimeChange) => void,
 ): () => void {
-  const sb = getSupabase();
+  const sb = getSupabase(readConnection()?.access_token);
   if (!sb) return () => {};
 
   const channel = sb.channel(`org:${orgId}`);
