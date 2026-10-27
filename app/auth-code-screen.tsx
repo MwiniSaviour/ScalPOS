@@ -45,6 +45,7 @@ export default function AuthCodeScreen() {
     void (async () => {
       try {
         await signUp.create({ emailAddress: email });
+        await signUp.prepareVerification({ strategy: "email_code" });
         setCool(30);
       } catch (e) {
         setError(errMessage(e));
