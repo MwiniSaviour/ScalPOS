@@ -11,6 +11,7 @@ import {
   DriveAuthError,
   applyRestore,
   buildBackup,
+  builtinClientId,
   clientId,
   clearDriveToken,
   connectDrive,
@@ -65,6 +66,8 @@ export default function BackupScreen() {
     () => (typeof window !== "undefined" ? window.location.origin : ""),
     "",
   );
+  /** baked at build time — owners never see Google Cloud Console */
+  const builtinCid = builtinClientId();
   const [cidEdit, setCidEdit] = useState<string | null>(null);
   const [cidError, setCidError] = useState("");
   const [includePhotos, setIncludePhotos] = useState(true);
@@ -77,7 +80,7 @@ export default function BackupScreen() {
 
   const localPhotos = useMemo(() => localImageRefs({ products, orders }).length, [products, orders]);
   const incompatible = !!preview && preview.schemaVersion > currentVersion;
-  const cid = cidEdit ?? storedCid;
+  const cid = cidEdit ?? (builtinCid ? "" : storedCid);
 
   /* --------------------------------- back up -------------------------------- */
 
@@ -187,12 +190,14 @@ export default function BackupScreen() {
   };
 
   const connectNow = async () => {
-    const value = cid.trim();
-    if (!value) {
-      setCidError("Paste a Google web client ID first");
-      return;
+    if (!builtinCid) {
+      const value = cid.trim();
+      if (!value) {
+        setCidError("Paste a Google web client ID first");
+        return;
+      }
+      saveClientId(value);
     }
-    saveClientId(value);
     setBusy("connect");
     try {
       await connectDrive();
@@ -413,7 +418,7 @@ export default function BackupScreen() {
               Cancel
             </Button>
             <Button block loading={busy === "connect"} onClick={() => void connectNow()}>
-              Connect
+              {builtinCid ? "Continue" : "Connect"}
             </Button>
           </div>
         }
@@ -422,23 +427,35 @@ export default function BackupScreen() {
           Backups go to one file, <span className="font-semibold text-ink">{BACKUP_FILENAME}</span>,
           in your own Google Drive — no Nova POS servers involved.
         </p>
-        <p className="pb-3 text-[14px] leading-6 text-ink3">
-          Google asks for a web client id (Cloud Console → APIs &amp; Services → Credentials →
-          OAuth client id, type Web). Authorise this origin:{" "}
-          <span className="font-semibold text-ink">{origin || "this app"}</span>
-        </p>
-        <Input
-          label="Google client ID"
-          value={cid}
-          onChange={(e) => {
-            setCidEdit(e.target.value);
-            setCidError("");
-          }}
-          placeholder="1234567890-abc.apps.googleusercontent.com"
-          inputMode="text"
-          hint="Kept only on this device"
-          error={cidError || undefined}
-        />
+        {builtinCid ? (
+          <p className="pb-3 text-[14px] leading-6 text-ink3">
+            Next, Google shows the account chooser — pick the email your shop should stay saved
+            under. Only this one backup file can be seen by the app.
+          </p>
+        ) : (
+          <>
+            <p className="pb-3 text-[14px] leading-6 text-ink3">
+              Google asks for a web client id (Cloud Console → APIs &amp; Services → Credentials
+              → OAuth client id, type Web). Authorise this origin:{" "}
+              <span className="font-semibold text-ink">{origin || "this app"}</span>
+            </p>
+            <Input
+              label="Google client ID"
+              value={cid}
+              onChange={(e) => {
+                setCidEdit(e.target.value);
+                setCidError("");
+              }}
+              placeholder="1234567890-abc.apps.googleusercontent.com"
+              inputMode="text"
+              hint="Kept only on this device"
+              error={cidError || undefined}
+            />
+          </>
+        )}
+        {builtinCid && cidError && (
+          <p className="text-[14px] text-danger">{cidError}</p>
+        )}
       </Sheet>
     </div>
   );

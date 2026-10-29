@@ -352,12 +352,35 @@ export class DriveAuthError extends Error {
 }
 
 export function clientId(): string {
+  const builtin = builtinClientId();
+  if (builtin) return builtin;
   if (typeof window === "undefined") return "";
   try {
     return (window.localStorage.getItem(GSI_CLIENT_KEY) ?? "").trim();
   } catch {
     return "";
   }
+}
+
+/**
+ * Web client id baked into the build via NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID.
+ *
+ * When set, shop owners never touch Google Cloud Console: tapping
+ * "Back up to Google Drive" opens Google's own account chooser (pick an
+ * email → allow) and the app handles everything else.
+ *
+ * Deployer setup (one-time, in Google Cloud Console):
+ *   1. Create an OAuth client id, type "Web application".
+ *   2. Authorised JavaScript origins: the Capacitor webview origin
+ *      (https://localhost) plus the production site (https://pos.scalmint.com).
+ *   3. Put the client id in .env.local as
+ *      NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID=<id>.apps.googleusercontent.com
+ *   4. Publish the OAuth consent screen in "Production" (In testing shows a
+ *      warning banner every 7 days for test users only).
+ * When unset, the backend screen keeps the manual client-id entry flow.
+ */
+export function builtinClientId(): string {
+  return (process.env.NEXT_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? "").trim();
 }
 
 export function saveClientId(value: string): void {
