@@ -1,5 +1,5 @@
 import { getSupabase } from "@/lib/api/supabase";
-import { readConnection } from "@/lib/api/bootstrap";
+import { freshToken } from "@/lib/api/session";
 
 export type RealtimeChange = {
   table: string;
@@ -13,26 +13,36 @@ export function subscribe(
   tables: string[],
   onChange: (change: RealtimeChange) => void,
 ): () => void {
-  const sb = getSupabase(readConnection()?.access_token);
-  if (!sb) return () => {};
+  let off: (() => void) | null = null;
+  let dead = false;
 
-  const channel = sb.channel(`org:${orgId}`);
-  for (const table of tables) {
-    channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table, filter: `org_id=eq.${orgId}` },
-      (payload: { eventType?: string; new?: Record<string, unknown> | null; old?: Record<string, unknown> | null }) => {
-        onChange({
-          table,
-          eventType: payload.eventType ?? "*",
-          new: payload.new ?? null,
-          old: payload.old ?? null,
-        });
-      },
-    );
-  }
-  channel.subscribe();
+  void (async () => {
+    const sb = getSupabase((await freshToken()) ?? undefined);
+    if (!sb || dead) return;
+    const channel = sb.channel(`org:${orgId}.${Math.random().toString(36).slice(2, 8)}`);
+    for (const table of tables) {
+      channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `org_id=eq.${orgId}` },
+        (payload: { eventType?: string; new?: Record<string, unknown> | null; old?: Record<string, unknown> | null }) => {
+          onChange({
+            table,
+            eventType: payload.eventType ?? "*",
+            new: payload.new ?? null,
+            old: payload.old ?? null,
+          });
+        },
+      );
+    }
+    channel.subscribe();
+    off = () => {
+      void sb.removeChannel(channel);
+    };
+    if (dead) off();
+  })();
+
   return () => {
-    void sb.removeChannel(channel);
+    dead = true;
+    off?.();
   };
 }

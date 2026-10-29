@@ -139,20 +139,13 @@ async function remove(opId: string): Promise<void> {
 }
 
 async function defaultApply(op: Op): Promise<void> {
-  const mod = await import("@/lib/api/supabase");
-  const { readConnection } = await import("@/lib/api/bootstrap");
-  const sb = mod.getSupabase(readConnection()?.access_token);
-  if (!sb) throw new Error("supabase not configured");
+  const engine = await import("./engine");
+  const rowId = (op.row as { id?: string } | undefined)?.id ?? op.id ?? "";
   if (op.kind === "delete") {
-    const { error } = await sb
-      .from(op.table)
-      .update({ deleted_at: new Date().toISOString(), op_id: op.op_id })
-      .eq("id", op.id ?? "");
-    if (error) throw new Error(error.message);
-  } else {
-    const { error } = await sb.from(op.table).upsert({ ...(op.row ?? {}), op_id: op.op_id }, { onConflict: "op_id" });
-    if (error) throw new Error(error.message);
+    await engine.softDeleteRemote(op.table as Parameters<typeof engine.softDeleteRemote>[0], rowId);
+    return;
   }
+  await engine.pushLocalRow(op.table as Parameters<typeof engine.pushLocalRow>[0], rowId);
 }
 
 export async function drain(
@@ -169,10 +162,24 @@ export async function drain(
       await remove(op.op_id);
       applied++;
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      // Nothing exists to push any more — retire the op instead of letting it
+      // fail ten times and surface as a sync error.
+      if (msg === "row deleted locally" || msg === "order deleted locally") {
+        await remove(op.op_id);
+        applied++;
+        continue;
+      }
+      const attempts = (op.attempts ?? 0) + 1;
+      if (attempts >= 10) {
+        await remove(op.op_id);
+        failed.push({ ...op, attempts, last_error: msg });
+        continue;
+      }
       const updated: Op = {
         ...op,
-        attempts: (op.attempts ?? 0) + 1,
-        last_error: e instanceof Error ? e.message : String(e),
+        attempts,
+        last_error: msg,
       };
       await enqueue(updated);
       failed.push(updated);

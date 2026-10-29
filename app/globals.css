@@ -70,6 +70,20 @@
   --hue-amber: #f5a524;
   --hue-rose: #f4586e;
   --hue-gold: #f6c453;
+  --hue-teal: #2dd4bf;
+  --hue-cyan: #22d3ee;
+  --hue-indigo: #818cf8;
+  --hue-orange: #fb923c;
+  --hue-pink: #f472b6;
+  --hue-lime: #a3e635;
+  --hue-sky: #7dd3fc;
+  --hue-fuchsia: #e879f9;
+  --hue-red: #f87171;
+  --hue-yellow: #facc15;
+  --hue-cocoa: #c98f5b;
+  --hue-slate: #94a3b8;
+  --hue-mauve: #d68fb7;
+  --hue-sage: #a7c4a9;
   --hue-on-solid: #06281a;
   --hue-green-soft: #34d39924;
   --hue-blue-soft: #4c8dff24;
@@ -77,6 +91,20 @@
   --hue-amber-soft: #f5a52424;
   --hue-rose-soft: #f4586e24;
   --hue-gold-soft: #f6c45324;
+  --hue-teal-soft: #2dd4bf24;
+  --hue-cyan-soft: #22d3ee24;
+  --hue-indigo-soft: #818cf824;
+  --hue-orange-soft: #fb923c24;
+  --hue-pink-soft: #f472b624;
+  --hue-lime-soft: #a3e63524;
+  --hue-sky-soft: #7dd3fc24;
+  --hue-fuchsia-soft: #e879f924;
+  --hue-red-soft: #f8717124;
+  --hue-yellow-soft: #facc1524;
+  --hue-cocoa-soft: #c98f5b24;
+  --hue-slate-soft: #94a3b824;
+  --hue-mauve-soft: #d68fb724;
+  --hue-sage-soft: #a7c4a924;
 
   /* surfaces & chrome that are theme-aware */
   --scrim: rgb(0 0 0 / 0.55);
@@ -126,6 +154,20 @@
   --hue-amber: #9a3412;
   --hue-rose: #be123c;
   --hue-gold: #8a5a00;
+  --hue-teal: #0f766e;
+  --hue-cyan: #0891b2;
+  --hue-indigo: #4338ca;
+  --hue-orange: #c2410c;
+  --hue-pink: #be185d;
+  --hue-lime: #3f6212;
+  --hue-sky: #0369a1;
+  --hue-fuchsia: #a21caf;
+  --hue-red: #b91c1c;
+  --hue-yellow: #a16207;
+  --hue-cocoa: #7c4a1e;
+  --hue-slate: #475569;
+  --hue-mauve: #93365f;
+  --hue-sage: #4d6b50;
   --hue-on-solid: #ffffff;
   --hue-green-soft: #0478571f;
   --hue-blue-soft: #1d4ed81f;
@@ -133,6 +175,20 @@
   --hue-amber-soft: #9a34121f;
   --hue-rose-soft: #be123c1f;
   --hue-gold-soft: #8a5a001f;
+  --hue-teal-soft: #0f766e1f;
+  --hue-cyan-soft: #0891b21f;
+  --hue-indigo-soft: #4338ca1f;
+  --hue-orange-soft: #c2410c1f;
+  --hue-pink-soft: #be185d1f;
+  --hue-lime-soft: #3f62121f;
+  --hue-sky-soft: #0369a11f;
+  --hue-fuchsia-soft: #a21caf1f;
+  --hue-red-soft: #b91c1c1f;
+  --hue-yellow-soft: #a162071f;
+  --hue-cocoa-soft: #7c4a1e1f;
+  --hue-slate-soft: #4755691f;
+  --hue-mauve-soft: #93365f1f;
+  --hue-sage-soft: #4d6b501f;
 
   /* surfaces & chrome that are theme-aware */
   --scrim: rgb(15 23 42 / 0.34);
@@ -365,3 +421,10 @@ html {
   }
 }
 
+
+/* native boot: the static "/" export contains the web landing screen; hide it
+   until the app decides the real route (shop → pin, visitor → landing) so the
+   marketing page never flashes on launch */
+html[data-nova-boot="1"] body {
+  visibility: hidden;
+}

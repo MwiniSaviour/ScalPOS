@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useState, useCallback } from "react";
 
 /**
  * Device PIN lock.
@@ -17,7 +17,32 @@ import { useEffect, useState, useCallback } from "react";
  */
 
 export const PIN_KEY = "nova-pos-pin-v1";
+/** Legacy key from builds that kept the unlock flag in sessionStorage. */
 export const SESSION_KEY = "nova-pos-pin-unlocked";
+
+/**
+ * Unlock state is deliberately in-memory only. sessionStorage survives
+ * Android WebView restores, which silently disabled the PIN on relaunch.
+ * A JS process restart (app relaunch) must always re-lock.
+ */
+let unlockedThisSession = false;
+const lockListeners = new Set<() => void>();
+
+/** Subscribe to unlock-flag changes (used by the gate to re-render in place). */
+export function subscribeLock(cb: () => void): () => void {
+  lockListeners.add(cb);
+  return () => {
+    lockListeners.delete(cb);
+  };
+}
+
+if (typeof window !== "undefined") {
+  try {
+    window.sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* best effort */
+  }
+}
 
 export interface StoredPin {
   hash: string; // sha256(salt + pin)
@@ -120,20 +145,13 @@ export function isContentLocked(): boolean {
 }
 
 export function sessionUnlocked(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return window.sessionStorage.getItem(SESSION_KEY) === "1";
-  } catch {
-    return false;
-  }
+  return unlockedThisSession;
 }
 
 export function setSessionUnlocked(enabled: boolean): void {
-  try {
-    window.sessionStorage.setItem(SESSION_KEY, enabled ? "1" : "0");
-  } catch {
-    /* best effort */
-  }
+  if (unlockedThisSession === enabled) return;
+  unlockedThisSession = enabled;
+  for (const cb of lockListeners) cb();
 }
 
 /**
@@ -145,13 +163,11 @@ export function setSessionUnlocked(enabled: boolean): void {
  */
 export function usePinLock() {
   const [store, setStore] = useState<StoredPin | null>(() => readStore());
-  const [unlocked, setUnlocked] = useState<boolean>(() => sessionUnlocked());
+  const [unlocked, setUnlockedState] = useState<boolean>(() => sessionUnlocked());
 
-  // Re-sync the unlocked flag if another tab flips it.
-  useEffect(() => {
-    const onStorage = () => setUnlocked(sessionUnlocked());
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+  const setUnlocked = useCallback((value: boolean) => {
+    setSessionUnlocked(value);
+    setUnlockedState(value);
   }, []);
 
   const attemptPin = useCallback(
@@ -164,7 +180,7 @@ export function usePinLock() {
       }
       return ok;
     },
-    [],
+    [setUnlocked],
   );
 
   const setPin = useCallback(

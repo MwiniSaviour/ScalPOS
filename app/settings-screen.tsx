@@ -42,6 +42,28 @@ export default function SettingsScreen() {
         </Card>
       </section>
 
+      {/* security */}
+      <section className="mt-6">
+        <h2 className="text-[15px] font-medium text-ink2">Security</h2>
+        <Card inset className="mt-2.5">
+          <Link
+            href="/security"
+            className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <Lock className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[17px] font-semibold text-ink">App lock</span>
+              <span className="block truncate text-[14px] text-ink3">
+                Set, change or remove the PIN
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
+          </Link>
+        </Card>
+      </section>
+
       {/* business */}
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Business</h2>

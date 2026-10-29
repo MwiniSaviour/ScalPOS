@@ -7,6 +7,7 @@ import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { Chip } from "@/components/ui/chip";
 import { getSubscription, startCheckout, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
 import { dateShort } from "@/lib/format";
+import { toneClasses, cn } from "@/lib/ui";
 import { usePos } from "@/lib/store";
 import { BadgeCheck, Clock, RefreshCw, ShieldAlert } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ function PlanCard({
   bullets,
   busy,
   disabled,
+  current,
   onSubscribe,
 }: {
   plan: SubPlan;
@@ -47,14 +49,32 @@ function PlanCard({
   bullets: string[];
   busy: boolean;
   disabled: boolean;
+  current?: boolean;
   onSubscribe: () => void;
 }) {
   return (
-    <Card data-testid={`plan-${plan}`} className="p-4">
+    <Card
+      data-testid={current ? `plan-${plan}-current` : `plan-${plan}`}
+      className={cn("p-4", current && "ring-2 ring-accent bg-accent/[0.04]")}
+    >
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[17px] font-semibold text-ink">{title}</span>
-        <span className="tabnum text-[15px] font-bold text-ink">{price}</span>
+        {current ? (
+          <span
+            data-testid="current-plan"
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[12px] font-semibold",
+              toneClasses.ok,
+            )}
+          >
+            <BadgeCheck className="size-[14px]" />
+            Current plan
+          </span>
+        ) : (
+          <span className="tabnum text-[15px] font-bold text-ink">{price}</span>
+        )}
       </div>
+      <p className="mt-0.5 text-[14px] text-ink3">{current ? price : "Yearly subscription"}</p>
       <ul className="mt-3 space-y-2">
         {bullets.map((b) => (
           <li key={b} className="flex items-start gap-2">
@@ -65,13 +85,13 @@ function PlanCard({
       </ul>
       <Button
         className="mt-4"
-        variant="primary"
+        variant={current ? "secondary" : "primary"}
         block
         loading={busy}
         disabled={disabled}
         onClick={onSubscribe}
       >
-        Subscribe
+        {current ? "Renew" : "Subscribe"}
       </Button>
     </Card>
   );
@@ -279,8 +299,10 @@ export default function BillingScreen() {
               plan="standard"
               title="Standard"
               price="GHS 120/year"
-              bullets={["Single owner", "Unlimited sales", "Offline register"]}              busy={busy === "standard"}
+              bullets={["Single owner", "Unlimited sales", "Offline register"]}
+              busy={busy === "standard"}
               disabled={!conn || busy !== null}
+              current={state?.status === "active" && state?.plan === "standard"}
               onSubscribe={() => void subscribe("standard")}
             />
             <PlanCard
@@ -295,6 +317,7 @@ export default function BillingScreen() {
               ]}
               busy={busy === "enterprise"}
               disabled={!conn || busy !== null}
+              current={state?.status === "active" && state?.plan === "enterprise"}
               onSubscribe={() => void subscribe("enterprise")}
             />
           </div>

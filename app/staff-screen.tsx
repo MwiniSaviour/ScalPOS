@@ -8,6 +8,8 @@ import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { ChevronLeft, ChevronRight, Camera, ImagePlus, Plus, TriangleAlert, Trash2, UserRoundCheck } from "lucide-react";
 import { processImageFile, saveImageBlob } from "@/lib/image-store";
+import { readConnection } from "@/lib/api/bootstrap";
+import { inviteMember } from "@/lib/api/team";
 import { usePos } from "@/lib/store";
 import {
   createStaff,
@@ -145,12 +147,16 @@ function StaffFormSheet({
   const [role, setRole] = useState<StaffRole>(target?.role ?? "cashier");
   const [active, setActive] = useState(target?.active ?? true);
   const [photoId, setPhotoId] = useState<string | undefined>(target?.photoId);
+  const [email, setEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [nameError, setNameError] = useState("");
   const galleryInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
 
   const nameOk = name.trim().length > 0;
+  const isCreate = target === null;
 
   const handlePhoto = async (file: File) => {
     setBusy(true);
@@ -177,11 +183,44 @@ function StaffFormSheet({
     if (target) {
       upsertStaff({ ...target, name: name.trim(), phone: phone.trim(), role, active, photoId });
       toast("Staff updated");
-    } else {
-      upsertStaff(createStaff({ name: name.trim(), role, phone: phone.trim(), photoId }));
-      toast("Staff added");
+      onClose();
+      return;
     }
+    const created = createStaff({ name: name.trim(), role, phone: phone.trim(), photoId });
+    upsertStaff(created);
+    const addr = email.trim();
+    if (addr) {
+      void inviteNew(created.name, addr);
+      return;
+    }
+    toast("Staff added");
     onClose();
+  }
+
+  async function inviteNew(name_: string, addr: string) {
+    const conn = readConnection();
+    if (!conn) {
+      toast(`${name_} added — connect the shop to send invites`, "warn");
+      setInviteNote(`${name_} was added on this device. Connect the shop once, then add again with the same email to send the invite.`);
+      setInviting(false);
+      return;
+    }
+    setInviting(true);
+    try {
+      const r = await inviteMember(conn, addr);
+      if (!r.emailed && r.invite_url) {
+        setInviteNote(`Invite link for ${addr}: ${r.invite_url}`);
+        toast("Invite created — share the link manually", "warn");
+      } else {
+        toast(`Invite sent to ${addr}`, "ok");
+        onClose();
+      }
+    } catch (e) {
+      setInviteNote(`${name_} was added on this device, but the invite failed: ${e instanceof Error ? e.message : String(e)}`);
+      toast("Invite failed", "error");
+    } finally {
+      setInviting(false);
+    }
   }
 
   return (
@@ -190,14 +229,20 @@ function StaffFormSheet({
       onClose={onClose}
       title={target ? "Edit staff" : "New staff"}
       footer={
-        <div className="grid grid-cols-2 gap-2.5">
+        inviteNote ? (
           <Button variant="secondary" block onClick={onClose}>
-            Cancel
+            Done
           </Button>
-          <Button block onClick={save}>
-            {target ? "Save changes" : "Add staff"}
-          </Button>
-        </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-2.5">
+            <Button variant="secondary" block onClick={onClose}>
+              Cancel
+            </Button>
+            <Button block loading={busy || inviting} onClick={save}>
+              {target ? "Save changes" : "Add staff"}
+            </Button>
+          </div>
+        )
       }
     >
       <div className="flex flex-col gap-4 pb-2">
@@ -287,6 +332,22 @@ function StaffFormSheet({
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
+
+        {isCreate && (
+          <Input
+            label="Email (cloud invite, optional)"
+            hint="Sends a Nova POS invite so this teammate can sync and sign in from their own device."
+            placeholder="teammate@shop.com"
+            inputMode="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        )}
+        {inviteNote && (
+          <div className="rounded-xl border border-line2 bg-surface2 px-3.5 py-3">
+            <p className="text-[14px] leading-5 text-ink2 select-all">{inviteNote}</p>
+          </div>
+        )}
 
         <div>
           <p className="mb-1.5 text-[13px] font-medium text-ink2">Role</p>

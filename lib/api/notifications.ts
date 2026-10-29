@@ -1,5 +1,6 @@
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { createSupabaseClient } from "@/lib/api/supabase";
+import { freshToken } from "@/lib/api/session";
 
 export type NotifKind = "sale" | "low_stock";
 
@@ -32,12 +33,14 @@ export async function listNotifications(
   conn: SyncConnection,
   limit = 40,
 ): Promise<OrgNotification[]> {
-  const sb = createSupabaseClient(conn.access_token);
+  const sb = createSupabaseClient((await freshToken()) ?? conn.access_token ?? undefined);
   if (!sb) throw new Error("Supabase not configured");
+  const since = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await sb
     .from("notifications")
     .select("id,org_id,kind,title,body,data,created_at")
     .eq("org_id", conn.org_id)
+    .gte("created_at", since)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) throw new Error(error.message);
@@ -51,7 +54,7 @@ export async function insertLowStockNotification(
   unit: string,
   productId: string,
 ): Promise<void> {
-  const sb = createSupabaseClient(conn.access_token);
+  const sb = createSupabaseClient((await freshToken()) ?? conn.access_token ?? undefined);
   if (!sb) return;
   await sb.from("notifications").insert({
     org_id: conn.org_id,

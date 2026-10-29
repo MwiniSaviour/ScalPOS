@@ -45,20 +45,28 @@ export async function hasAlertPermission(): Promise<boolean> {
   }
 }
 
+async function postToTray(title: string, body: string): Promise<boolean> {
+  try {
+    const res = await NovaAlerts.show({ title, body });
+    return Boolean(res.shown);
+  } catch {
+    return false;
+  }
+}
+
 export async function notifyLocal(title: string, body: string, dedupeKey = ""): Promise<void> {
   if (!title || !body) return;
-  if (dedupeKey && shownToday(dedupeKey)) return;
-  markShown(dedupeKey);
   if (!Capacitor.isNativePlatform()) return;
-  try {
-    await NovaAlerts.show({ title, body });
-  } catch {
-    if (await hasAlertPermission()) {
-      try {
-        await NovaAlerts.show({ title, body });
-      } catch {
-        /* alert is best effort */
-      }
+  if (dedupeKey && shownToday(dedupeKey)) return;
+  let shown = await postToTray(title, body);
+  if (!shown) {
+    let granted = false;
+    try {
+      granted = (await NovaAlerts.requestPermission()).granted;
+    } catch {
+      granted = false;
     }
+    if (granted) shown = await postToTray(title, body);
   }
+  if (shown && dedupeKey) markShown(dedupeKey);
 }

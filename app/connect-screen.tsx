@@ -9,11 +9,14 @@ import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/ui/statuspill";
 import {
+  BootstrapError,
   bootstrapConnection,
   readConnection,
   writeConnection,
   type SyncConnection,
 } from "@/lib/api/bootstrap";
+import { acceptInviteToken } from "@/lib/api/bootstrap";
+import { armSync, disarmSync, drainOutbox, pullAll } from "@/lib/sync/engine";
 import {
   layoffMember,
   listMembers,
@@ -25,15 +28,11 @@ import {
 import { cn } from "@/lib/ui";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
-import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw, UserPlus } from "lucide-react";
+import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
 import { oauthRedirectTargets } from "@/lib/api/oauth";
-
-function supabaseUrl(): string {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-}
 
 const ROLE_OPTIONS = ["owner", "supervisor", "cashier"] as const;
 
@@ -57,7 +56,7 @@ function errorCode(e: unknown): string | null {
   return null;
 }
 
-function PeopleSection({ conn, refreshKey }: { conn: SyncConnection; refreshKey: number }) {
+function PeopleSection({ conn }: { conn: SyncConnection }) {
   const toast = usePos((s) => s.toast);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,7 +80,7 @@ function PeopleSection({ conn, refreshKey }: { conn: SyncConnection; refreshKey:
     return () => {
       ok = false;
     };
-  }, [conn, refreshKey]);
+  }, [conn]);
 
   async function reload() {
     try {
@@ -281,11 +280,10 @@ export default function ConnectScreen() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [sessionUserId, setSessionUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [rosterVersion, setRosterVersion] = useState(0);
+  const [inviteToken, setInviteToken] = useState("");
   const autoConnectTried = useRef(false);
   const userEmail = userResource?.primaryEmailAddress?.emailAddress ?? null;
 
@@ -336,7 +334,11 @@ export default function ConnectScreen() {
           setMessage("Connected.");
           usePos.getState().toast("Connected to backend", "ok");
         } catch (e) {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(
+            e instanceof BootstrapError && e.code === "no_shop"
+              ? "This account isn't part of a shop yet."
+              : e instanceof Error ? e.message : String(e),
+          );
         } finally {
           setBusy(false);
         }
@@ -367,10 +369,10 @@ export default function ConnectScreen() {
         setMessage("Signed in — syncing…");
         return;
       }
-      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
+      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&from=connect`);
     } catch (e) {
       if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
-        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1`);
+        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1&from=connect`);
         return;
       }
       setError(errMessage(e) || "Sign-in failed.");
@@ -402,20 +404,73 @@ export default function ConnectScreen() {
     }
   }
 
-  async function connect() {
-    if (!online || !signedIn || !sessionToken || !sessionUserId) return;
+  async function supabaseToken(): Promise<string | null> {
+    try {
+      const t = await getToken({ template: "supabase" });
+      return t ?? sessionToken;
+    } catch {
+      console.warn("[nova] supabase token mint failed");
+      return sessionToken;
+    }
+  }
+
+  async function connect(action?: "create") {
+    if (!online || !sessionUserId) return;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
+      const token = await supabaseToken();
+      if (!token) {
+        setError("Sign-in session expired — tap Sign in again.");
+        return;
+      }
       const c = await bootstrapConnection({
-        access_token: sessionToken,
+        access_token: token,
         user_id: sessionUserId,
         email: userEmail ?? email.trim() ?? undefined,
+        ...(action ? { action } : {}),
       });
       setConn(c);
       setMessage("Connected.");
       toast("Connected to backend", "ok");
+      try {
+        await armSync(c);
+        await drainOutbox();
+      } catch (e2) {
+        console.warn("sync: arm", e2);
+      }
+    } catch (e) {
+      if (e instanceof BootstrapError && e.code === "no_shop") {
+        setError("This account isn't part of a shop yet.");
+      } else {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function joinWithToken() {
+    if (!online) return;
+    const raw = inviteToken.trim();
+    const token = raw.includes("token=") ? raw.split("token=")[1]?.split("&")[0] ?? "" : raw;
+    if (!token) {
+      setError("Paste the invite link or code");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const sessionJwt = await supabaseToken();
+      if (!sessionJwt) {
+        setError("Sign-in session expired — tap Sign in again.");
+        return;
+      }
+      const r = await acceptInviteToken(token, sessionJwt);
+      toast(`Joined as ${r.role}`, "ok");
+      await connect();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -430,6 +485,7 @@ export default function ConnectScreen() {
     try {
       writeConnection(null);
       setConn(null);
+      await disarmSync();
       await signOut();
       setSessionToken(null);
       setSessionUserId(null);
@@ -449,6 +505,7 @@ export default function ConnectScreen() {
     try {
       const mod = await import("@/lib/sync/outbox");
       const res = await mod.drain();
+      if (conn) await pullAll(conn);
       setMessage(`Synced ${res.applied} · ${res.failed.length} failed`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -457,46 +514,7 @@ export default function ConnectScreen() {
     }
   }
 
-  async function invite() {
-    if (!online || !conn) return;
-    const trimmed = inviteEmail.trim();
-    if (!trimmed) {
-      setError("Enter an email to invite");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      const url = supabaseUrl();
-      const res = await fetch(`${url}/functions/v1/invite-member`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${conn.access_token}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ org_id: conn.org_id, email: trimmed, role: "cashier" }),
-      });
-      const json = (await res.json().catch(() => ({}))) as {
-        token?: string;
-        invite_url?: string;
-        emailed?: boolean;
-        error?: string;
-      };
-      if (!res.ok) throw new Error(json.error ?? "invite failed");
-      setInviteEmail("");
-      setRosterVersion((v) => v + 1);
-      if (json.emailed === false && json.invite_url) {
-        setMessage(`Invite link: ${json.invite_url}`);
-        toast("Share the invite link manually", "warn");
-      } else {
-        setMessage(`Invited ${trimmed}.`);
-        toast(`Invite sent to ${trimmed}`, "ok");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
+  const noShop = error === "This account isn't part of a shop yet.";
   const connected = !!conn;
   const statusLabel = !online && !connected ? "Offline" : connected ? (online ? "Connected" : "Offline") : "Not connected";
   const statusColor = statusLabel === "Connected" ? "text-ok" : statusLabel === "Offline" ? "text-warn" : "text-ink3";
@@ -552,23 +570,59 @@ export default function ConnectScreen() {
                 inputMode="email"
               />
               <p className="mt-2.5 text-[14px]/5 text-ink3">
-                Use an existing Nova POS email, or a new one — a new account is
-                created automatically.
+                Use your Nova POS email to sign in — your shop and data sync
+                across devices.
               </p>
-              <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />}>
-                Sign in or create account
+              <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />} data-testid="connect-signin">
+                Sign in
               </Button>
               <Button className="mt-2" variant="secondary" block loading={busy} disabled={!online || busy} onClick={startGoogle} data-testid="connect-google">
                 Continue with Google
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-1"
+                onClick={() => router.push("/shop/create")}
+                data-testid="connect-signup-link"
+              >
+                New to Nova POS? Create a shop →
               </Button>
             </>
           )}
           {signedIn && !connected && (
             <>
               <p className="text-[14px] text-ink3">Signed in as {userEmail ?? email.trim()}</p>
-              <Button className="mt-3" block loading={busy} disabled={!online} onClick={connect} icon={<Cloud className="size-[18px]" />}>
+              <Button className="mt-3" block loading={busy} disabled={!online} onClick={() => void connect()} icon={<Cloud className="size-[18px]" />}>
                 Connect
               </Button>
+              {noShop && (
+                <>
+                  <p className="mt-3 text-[14px]/5 text-ink2">
+                    You&apos;re not part of a shop yet. If you own the business, create your
+                    shop&apos;s cloud workspace — otherwise join with the invite your owner sent you.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <Button variant="secondary" className="flex-1" loading={busy} disabled={!online} onClick={() => void connect("create")}>
+                      I own the shop
+                    </Button>
+                    <Button variant="ghost" size="sm" className="flex-1" onClick={() => router.push("/shop/create")}>
+                      New shop setup
+                    </Button>
+                  </div>
+                  <div className="mt-3">
+                    <Input
+                      label="Invite link or code"
+                      value={inviteToken}
+                      onChange={(e) => setInviteToken(e.target.value)}
+                      placeholder="Paste the invite link from your owner"
+                    />
+                    <Button variant="secondary" block className="mt-2" loading={busy} disabled={!online} onClick={() => void joinWithToken()}>
+                      Join shop with invite
+                    </Button>
+                  </div>
+                </>
+              )}
             </>
           )}
           {connected && (
@@ -592,21 +646,8 @@ export default function ConnectScreen() {
 
           <section className="mt-6">
             <h2 className="text-[15px] font-medium text-ink2">Team</h2>
-            <Card className="mt-2.5 p-4">
-              <Input
-                label="Teammate email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                placeholder="teammate@shop.com"
-                inputMode="email"
-              />
-              <Button className="mt-3" block loading={busy} disabled={!online} onClick={invite} icon={<UserPlus className="size-[18px]" />}>
-                Invite a teammate
-              </Button>
-            </Card>
+            <PeopleSection conn={conn} />
           </section>
-
-          <PeopleSection conn={conn} refreshKey={rosterVersion} />
         </>
       )}
 

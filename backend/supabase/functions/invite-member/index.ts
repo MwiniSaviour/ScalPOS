@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyClerkToken } from "../_shared/clerk.ts";
+import { verifyClerkToken } from "./clerk.ts";
+import { preflight, json } from "./cors.ts";
 
 const enc = new TextEncoder();
 
@@ -26,6 +27,8 @@ function b64urlEncode(obj: unknown): string {
 }
 
 Deno.serve(async (req: Request) => {
+  const pre = preflight(req);
+  if (pre) return pre;
   if (req.method !== "POST") {
     return new Response("method not allowed", { status: 405 });
   }
@@ -34,24 +37,15 @@ Deno.serve(async (req: Request) => {
   const email = body?.email as string | undefined;
   const role = (body?.role as string | undefined) ?? "cashier";
   if (!orgId || !email) {
-    return new Response(JSON.stringify({ error: "org_id and email required" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "org_id and email required" }, 400);
   }
   if (!["owner", "supervisor", "cashier"].includes(role)) {
-    return new Response(JSON.stringify({ error: "invalid role" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "invalid role" }, 400);
   }
 
   const user = await verifyClerkToken(req);
   if (!user) {
-    return new Response(JSON.stringify({ error: "invalid session" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "invalid session" }, 401);
   }
 
   const admin = createClient(
@@ -68,18 +62,12 @@ Deno.serve(async (req: Request) => {
     .is("deleted_at", null)
     .limit(1);
   if (!callerMem || callerMem.length === 0 || !["owner", "supervisor"].includes(callerMem[0].role)) {
-    return new Response(JSON.stringify({ error: "not allowed" }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "not allowed" }, 403);
   }
 
   // only owner can invite owners
   if (role === "owner" && callerMem[0].role !== "owner") {
-    return new Response(JSON.stringify({ error: "only owner can invite owners" }), {
-      status: 403,
-      headers: { "Content-Type": "application/json" },
-    });
+    return json({ error: "only owner can invite owners" }, 403);
   }
 
   const payload = {
@@ -122,11 +110,5 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  return new Response(
-    JSON.stringify({ token, org_id: orgId, role, invite_url: inviteUrl, emailed }),
-    {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+  return json({ token, org_id: orgId, role, invite_url: inviteUrl, emailed }, 200);
 });

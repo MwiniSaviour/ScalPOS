@@ -40,3 +40,17 @@ design/qa-light-results.json
 
 # supabase cli local state (project ref)
 backend/supabase/.temp/
+
+# session clutter (build probes, harness state)
+/*.log
+/logs/
+/.logs/
+/supabase/.temp/
+/target-ws.txt
+/tsc-output.txt
+/nova-pos-debug.apk
+tsc*.log
+/$PREFIX/
+/tsc-log.txt
+/tsc-clerk.log
+/tsc-clerk2.log

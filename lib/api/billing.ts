@@ -1,4 +1,5 @@
 import type { SyncConnection } from "@/lib/api/bootstrap";
+import { freshToken } from "@/lib/api/session";
 
 export type SubPlan = "standard" | "enterprise";
 
@@ -16,17 +17,26 @@ function supabaseUrl(): string {
 }
 
 async function edgePost(conn: SyncConnection, fn: string, body: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
-  const res = await fetch(`${supabaseUrl()}/functions/v1/${fn}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${conn.access_token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const token = (await freshToken(true)) ?? conn.access_token ?? "";
+  if (!token) throw new Error("signed out — reconnect first");
+  let res: Response;
+  try {
+    res = await fetch(`${supabaseUrl()}/functions/v1/${fn}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch {
+    throw new Error(`${fn} timed out — check your connection`);
+  }
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
-    throw new Error(typeof json.error === "string" ? json.error : `${fn} failed (${res.status})`);
+    const raw = typeof json.error === "string" ? json.error : `${fn} failed (${res.status})`;
+    throw new Error(res.status === 401 ? `${raw} — open Connect and reconnect` : raw);
   }
   return json;
 }
@@ -55,6 +65,7 @@ export type CheckoutPayload = {
   amount: number;
   currency: string;
   metadata: Record<string, unknown>;
+  authorization_url?: string;
 };
 
 export async function startCheckout(
@@ -77,5 +88,6 @@ export async function startCheckout(
     amount: typeof json.amount === "number" ? json.amount : 0,
     currency: typeof json.currency === "string" ? json.currency : "GHS",
     metadata: json.metadata && typeof json.metadata === "object" ? (json.metadata as Record<string, unknown>) : {},
+    authorization_url: typeof json.authorization_url === "string" ? json.authorization_url : undefined,
   };
 }

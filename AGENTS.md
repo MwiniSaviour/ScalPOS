@@ -72,6 +72,17 @@ Actions (via usePos.getState() or selector):
 
 Icons: lucide-react v1 tree, `size-[18px]` typical.
 
+## BANNED: unstable external-store snapshots (the billing crash class)
+
+`useSyncExternalStore` (including the local `useClientValue` helper in billing/backup/callback screens) requires `getSnapshot` to return a **referentially stable** value between renders. Passing a reader that `JSON.parse`s localStorage (or builds any fresh array/object per call) throws React #185 "Maximum update depth exceeded" → Next's default error page ("This page couldn't load / Reload / Back"), and **only when non-empty data is present** — empty data returns the same `null` every time, so the bug tests fine and crashes in the field. This cost a full billing-page outage.
+
+Rules (never violate):
+- NEVER pass a `getSnapshot` that returns a fresh object/array each call. This includes `readConnection()`-style parsers. Primitives (`string`/`number`/`boolean`) are always safe.
+- If the stored value is structured (JSON), the reader must memoize: parse once, cache per raw string, return the cached reference (see `readConnection` in `lib/api/bootstrap.ts`).
+- ESLint cannot catch this. Before claiming done, grep for storage-reading snapshot fns:
+  `grep -rn "useClientValue\|useSyncExternalStore" app components lib` and confirm every `getSnapshot` argument is either a primitive reader or a memoized reader.
+- New code: prefer `useState` + explicit `useEffect` read, or a proper store (zustand), over ad-hoc `useSyncExternalStore` wrappers.
+
 ## Design language
 
 See DESIGN.md (tokens, radii, list-row anatomy, CTA rules, do-not list). THE canonical QA:

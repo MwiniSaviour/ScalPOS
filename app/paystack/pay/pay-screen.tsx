@@ -25,6 +25,10 @@ type PaystackInstance = {
 
 type PaystackConstructor = new (publicKey: string) => PaystackInstance;
 
+function isCapacitorNative(): boolean {
+  return Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+}
+
 function paystackFromWindow(): PaystackConstructor | null {
   return (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop ?? null;
 }
@@ -80,6 +84,7 @@ function parsePayload(raw: string): CheckoutPayload | null {
       amount: typeof value.amount === "number" ? value.amount : 0,
       currency: typeof value.currency === "string" ? value.currency : "GHS",
       metadata: value.metadata && typeof value.metadata === "object" ? (value.metadata as Record<string, unknown>) : {},
+      authorization_url: typeof value.authorization_url === "string" ? value.authorization_url : undefined,
     };
   } catch {
     return null;
@@ -140,6 +145,45 @@ export default function PaystackPayScreen() {
         setPhase("missing");
         return;
       }
+
+      // Native (Capacitor webview): inline.js iframes are blocked/unstable, so
+      // send the secure checkout to the system browser.
+      if (isCapacitorNative() && payload.authorization_url) {
+        setPhase("open");
+        let opened = false;
+        try {
+          const mod = await import("@capacitor/browser");
+          await mod.Browser.open({ url: payload.authorization_url });
+          opened = true;
+          mod.Browser.addListener("browserFinished", () => {
+            sessionStorage.removeItem(CHECKOUT_KEY);
+            router.replace("/billing");
+          });
+        } catch {
+          // Capacitor Browser unavailable — fall back to a plain system
+          // browser window (handled natively by the webview).
+          try {
+            window.open(payload.authorization_url, "_system");
+            opened = true;
+          } catch {
+            opened = false;
+          }
+        }
+        if (!opened) {
+          setMessage("Could not open the checkout. Check your connection and try again.");
+          setPhase("error");
+          return;
+        }
+        // Watchdog: if the browser closes without a callback, return to billing.
+        window.setTimeout(() => {
+          if (alive && sessionStorage.getItem(CHECKOUT_KEY)) {
+            sessionStorage.removeItem(CHECKOUT_KEY);
+            router.replace("/billing");
+          }
+        }, 90_000);
+        return;
+      }
+
       try {
         const PaystackPop = await ensurePaystack();
         if (!alive) return;

@@ -56,7 +56,7 @@ export default function NotificationsScreen() {
             title={data.conn ? "No notifications yet" : "Connect to receive alerts"}
             hint={
               data.conn
-                ? "New sales and low stock alerts will show up here."
+                ? "Alerts from the last 2 days show up here."
                 : "Connect your shop from Settings to get sale and low stock alerts."
             }
             action={

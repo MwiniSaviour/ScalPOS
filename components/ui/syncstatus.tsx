@@ -9,8 +9,12 @@ export function SyncStatus() {
     return (
       <div className="safe-t pointer-events-none fixed inset-x-0 top-0 z-[45]">
         <div className="mx-auto flex max-w-[440px] justify-start px-4 pt-2">
-          <div className="anim-fade flex items-center gap-2 rounded-full bg-danger/10 px-3.5 py-2 text-[13px] font-medium leading-tight text-danger">
+          <div
+            title={error}
+            className="anim-fade flex max-w-full items-center gap-2 rounded-full bg-danger/10 px-3.5 py-2 text-[13px] font-medium leading-tight text-danger"
+          >
             <span>Sync error</span>
+            <span className="max-w-[220px] truncate opacity-80">{error}</span>
           </div>
         </div>
       </div>

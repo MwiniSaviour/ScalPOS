@@ -2,14 +2,22 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
 import { Button, IconButton } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { usePos } from "@/lib/store";
 import { createStaff, setCurrentStaff } from "@/lib/staff";
-import { markOnboarded } from "@/lib/first-run";
+import { markOnboarded, useHasOnboarded } from "@/lib/first-run";
 import { savePin, setSessionUnlocked } from "@/lib/pin";
+import { useSignUp } from "@clerk/clerk-react";
 import { ChevronLeft, Eye, EyeOff } from "lucide-react";
+
+const SHOP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DRAWER_PASSWORD: string =
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? `${crypto.randomUUID()}${crypto.randomUUID()}`
+    : `${Date.now()}${Math.random()}`;
 
 export default function ShopCreateScreen() {
   const router = useRouter();
@@ -24,10 +32,15 @@ export default function ShopCreateScreen() {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const onboarded = useHasOnboarded();
+  const { signUp } = useSignUp();
+  const [email, setEmail] = useState("");
 
   const shopNameOk = shopName.trim().length > 0;
   const ownerNameOk = ownerName.trim().length > 0;
   const pinOk = pin.trim().length >= 4 && pin === confirm;
+  const emailTrim = email.trim();
+  const emailOk = emailTrim === "" || SHOP_EMAIL_RE.test(emailTrim);
 
   function handleBack() {
     router.back();
@@ -36,6 +49,10 @@ export default function ShopCreateScreen() {
   async function submit() {
     if (!shopNameOk || !ownerNameOk || !pinOk) {
       setError("Shop name, owner name and a 4+ digit PIN (confirmed) are required.");
+      return;
+    }
+    if (emailTrim && !emailOk) {
+      setError("Enter a valid email address or leave it empty.");
       return;
     }
     setBusy(true);
@@ -60,6 +77,17 @@ export default function ShopCreateScreen() {
       // 4. Unlock this session; the PIN prompt returns on later launches.
       setSessionUnlocked(true);
       toast("Shop created — protected with your PIN");
+
+      if (emailTrim) {
+        // Optional: create a shop account now so cloud sync/billing can be
+        // linked from the email instead of only from the Settings flow.
+        if (!signUp) throw new Error("Sign-up is still loading. Try again.");
+        await signUp.create({ emailAddress: emailTrim, password: DRAWER_PASSWORD });
+        await signUp.prepareVerification({ strategy: "email_code" });
+        router.push(`/auth/code?email=${encodeURIComponent(emailTrim)}&new=1&from=shop-create`);
+        return;
+      }
+
       router.replace("/");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create your shop.");
@@ -69,8 +97,37 @@ export default function ShopCreateScreen() {
   }
 
 
+  if (onboarded) {
+    return (
+      <div className="anim-fade flex min-h-dvh flex-col justify-center px-5 pb-[calc(var(--nova-sab)+24px)]">
+        <Card className="px-4 py-5">
+          <h2 className="text-[20px] font-bold tracking-[-0.02em] text-ink">
+            Shop already exists on this device
+          </h2>
+          <p className="mt-1.5 text-[14px] text-ink3">
+            You create one shop per device. Open your shop, or sign in to a different account to
+            link it.
+          </p>
+          <div className="mt-4 flex flex-col gap-2">
+            <Button block onClick={() => router.replace("/")} data-testid="gate-home">
+              Go to my shop
+            </Button>
+            <Button
+              variant="secondary"
+              block
+              onClick={() => router.push("/connect")}
+              data-testid="gate-connect"
+            >
+              Sign in to a different account
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="anim-fade px-5 pt-4 pb-10">
+    <div className="anim-fade px-5 pt-4 pb-[calc(var(--nova-sab)+110px)]">
       <header className="flex items-center gap-1">
         <IconButton label="Back" onClick={handleBack} className="-ml-2 shrink-0 text-ink">
           <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
@@ -114,6 +171,15 @@ export default function ShopCreateScreen() {
             onChange={(e) => setOwnerName(e.target.value)}
             placeholder="e.g. Ama Serwaa"
             error={!ownerNameOk ? "Owner name is required" : undefined}
+          />
+          <Input
+            label="Email (optional)"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="shop@example.com"
+            inputMode="email"
+            hint="Add an email to create a shop account and enable cloud sync."
+            error={emailTrim && !emailOk ? "Enter a valid email address" : undefined}
           />
           <div>
             <p className="mb-1.5 text-[13px] font-medium text-ink2">PIN</p>
@@ -161,6 +227,17 @@ export default function ShopCreateScreen() {
           </div>
         </div>
       </Card>
+
+      <p className="mt-5 text-center text-[14px] text-ink3">
+        Have a Nova POS account?{" "}
+        <button
+          type="button"
+          onClick={() => router.push("/connect")}
+          className="font-medium text-accent press"
+        >
+          Sign in to link this device
+        </button>
+      </p>
 
       <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[440px] border-t border-line bg-surface px-4 pt-3 pb-[calc(var(--nova-sab)+12px)]">
         <div className="grid grid-cols-2 gap-2.5">

@@ -2,20 +2,28 @@
 
 import { Button } from "@/components/ui/button";
 import { markOnboarded } from "@/lib/first-run";
+import { bootstrapConnection, writeConnection } from "@/lib/api/bootstrap";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useSignIn, useSignUp, useClerk } from "@clerk/clerk-react";
+import { useAuth, useSignIn, useSignUp, useClerk } from "@clerk/clerk-react";
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
+
+const DRAWER_PASSWORD: string =
+  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+    ? `${crypto.randomUUID()}${crypto.randomUUID()}`
+    : `${Date.now()}${Math.random()}`;
 
 export default function AuthCodeScreen() {
   const router = useRouter();
   const sp = useSearchParams();
   const email = sp.get("email") ?? "";
   const isNew = sp.get("new") === "1";
+  const fromParam = sp.get("from") === "connect" ? "connect" : "auth";
   const { online } = useNet();
+  const { getToken, userId } = useAuth();
   const { signUp } = useSignUp();
   const { signIn } = useSignIn();
   const clerk = useClerk();
@@ -35,6 +43,14 @@ export default function AuthCodeScreen() {
     return e instanceof Error ? e.message : String(e);
   }
 
+  function errorCode(e: unknown): string | null {
+    if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
+      const first = (e as { errors: { code?: unknown }[] }).errors[0];
+      if (first && typeof first.code === "string") return first.code;
+    }
+    return null;
+  }
+
   useEffect(() => {
     if (!email) router.replace("/auth");
   }, [email, router]);
@@ -44,14 +60,43 @@ export default function AuthCodeScreen() {
     emailSentRef.current = true;
     void (async () => {
       try {
-        await signUp.create({ emailAddress: email });
+        await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
         await signUp.prepareVerification({ strategy: "email_code" });
         setCool(30);
       } catch (e) {
+        if (errorCode(e) === "form_identifier_exists") {
+          router.replace(`/auth/code?email=${encodeURIComponent(email)}&from=${fromParam}`);
+          return;
+        }
         setError(errMessage(e));
       }
     })();
-  }, [isNew, signUp, email]);
+  }, [isNew, signUp, email, router, fromParam]);
+
+  const signInStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (isNew || !signIn || !email || signInStartedRef.current) return;
+    signInStartedRef.current = true;
+    const id = setTimeout(() => {
+      if (signIn.status) return;
+      void (async () => {
+        try {
+          await signIn.create({ identifier: email, strategy: "email_code" });
+          setCool(30);
+        } catch (e) {
+          const code = errorCode(e);
+          if (code === "form_identifier_not_found" || code === "identifier_not_found") {
+            router.replace(`/auth/code?email=${encodeURIComponent(email)}&new=1&from=${fromParam}`);
+            return;
+          }
+          signInStartedRef.current = false;
+          setError(errMessage(e));
+        }
+      })();
+    }, 400);
+    return () => clearTimeout(id);
+  }, [isNew, signIn, email, router, fromParam]);
 
   useEffect(() => {
     if (!cooling) return;
@@ -86,6 +131,7 @@ export default function AuthCodeScreen() {
     try {
       if (isNew) {
         if (!signUp) throw new Error("Sign-up is still loading. Try again.");
+        await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
         await signUp.prepareVerification({ strategy: "email_code" });
       } else {
         await signIn.create({ identifier: email, strategy: "email_code" });
@@ -130,14 +176,39 @@ export default function AuthCodeScreen() {
           setError("Couldn't confirm the code — try again.");
           return;
         }
+        if (result.createdSessionId) {
+          await clerk.setActive({ session: result.createdSessionId });
+        }
       }
       markOnboarded();
       usePos.getState().toast(
         isNew ? "Account created — connecting your shop" : "Signed in — connecting your shop",
         "ok",
       );
+      if (isNew) {
+        // Arrived from the Create-your-shop flow with an optional email: create
+        // the owner account and immediately bootstrap the new shop onto it.
+        let created = false;
+        try {
+          const token = await getToken({ template: "supabase" });
+          const uid = userId ?? "";
+          if (token && uid) {
+            const c = await bootstrapConnection({ access_token: token, user_id: uid, email, action: "create" });
+            writeConnection(c);
+            created = true;
+          }
+        } catch {
+          /* fall through to connect */
+        }
+        router.replace(created ? "/" : "/connect");
+        return;
+      }
       router.replace("/connect");
     } catch (e) {
+      if (errorCode(e) === "form_code_incorrect") {
+        setError("That code isn't correct — double-check the latest email, or tap Resend code.");
+        return;
+      }
       setError(errMessage(e));
     } finally {
       setBusy(false);
@@ -202,7 +273,12 @@ export default function AuthCodeScreen() {
           <Button variant="ghost" size="sm" disabled={cooling || busy} onClick={resend}>
             {`Resend code${cool > 0 ? ` (${cool}s)` : ""}`}
           </Button>
-          <Button variant="ghost" size="sm" disabled={busy} onClick={() => router.replace("/auth")}>
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => router.replace(fromParam === "connect" ? "/connect" : "/auth")}
+          >
             Change email
           </Button>
         </div>

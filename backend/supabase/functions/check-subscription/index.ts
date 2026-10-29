@@ -1,14 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { verifyClerkToken } from "../_shared/clerk.ts";
+import { verifyClerkToken } from "./clerk.ts";
+import { preflight, CORS_HEADERS, json } from "./cors.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+
 
 async function verifyWithPaystack(
   secretKey: string,
@@ -33,6 +29,8 @@ async function verifyWithPaystack(
 }
 
 Deno.serve(async (req: Request) => {
+  const pre = preflight(req);
+  if (pre) return pre;
   if (req.method !== "POST") {
     return json({ error: "method not allowed" }, 405);
   }

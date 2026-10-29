@@ -50,33 +50,7 @@ export default function MoreScreen() {
     };
   }, []);
 
-  function exportData() {
-    const s = usePos.getState();
-    const dump = {
-      exportedAt: new Date().toISOString(),
-      app: "Nova POS",
-      note: "Uploaded product photos are stored on this device and are not included in this file.",
-      categories: s.categories,
-      products: s.products,
-      orders: s.orders,
-      customers: s.customers,
-      settings: s.settings,
-      stockMoves: s.stockMoves,
-    };
-    const slug = settings.shopName
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "") || "nova";
-    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${slug}-pos-backup.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("Backup saved to your downloads");
-  }
+
 
   async function handleSignOut() {
     writeConnection(null);
@@ -200,11 +174,11 @@ export default function MoreScreen() {
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Data</h2>
         <Card inset className="mt-2.5">
-          <RowAction
+          <RowLink
             icon={<Download className="size-[18px]" />}
-            label="Export data"
-            sub="Save a JSON backup to your device"
-            onClick={exportData}
+            label="Backup &amp; recovery"
+            sub="Full backup, restore and export"
+            href="/backup"
           />
         </Card>
       </section>

@@ -1,11 +1,19 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "https://esm.sh/jose@6.0.10";
 
-const ISSUERS = (
-  Deno.env.get("CLERK_ISSUER_URL") ?? "https://emerging-grackle-5286.clerk.accounts.dev"
-)
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
+const DEFAULT_ISSUERS = [
+  "https://current-phoenix-8305.clerk.accounts.dev",
+  "https://emerging-grackle-5286.clerk.accounts.dev",
+];
+
+const ISSUERS = Array.from(
+  new Set([
+    ...(Deno.env.get("CLERK_ISSUER_URL") ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean),
+    ...DEFAULT_ISSUERS,
+  ]),
+);
 
 const JWKSETS = ISSUERS.map((issuer) => ({
   issuer,

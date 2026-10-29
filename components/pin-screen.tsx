@@ -9,7 +9,7 @@ import { usePos } from "@/lib/store";
 import { setSessionUnlocked, usePinLock, sessionUnlocked } from "@/lib/pin";
 import { Lock, ClockCheck, Eye, EyeOff } from "lucide-react";
 
-export default function PinScreen() {
+export default function PinScreen({ inline = false }: { inline?: boolean }) {
   const router = useRouter();
 
   const shopName = usePos((s) => s.settings.shopName);
@@ -19,10 +19,11 @@ export default function PinScreen() {
   const [error, setError] = useState<string | null>(null);
   const [show, setShow] = useState(false);
 
-  // Fresh session (just created the shop / unlocked) — return straight to content.
+  // Standalone /pin route: on unlock return to content. When the gate renders
+  // this inline, unlocking already swaps the screen in place — stay put.
   useEffect(() => {
-    if (unlocked) router.replace("/");
-  }, [unlocked, router]);
+    if (unlocked && !inline) router.replace("/");
+  }, [unlocked, inline, router]);
 
   if (sessionUnlocked()) return null;
 

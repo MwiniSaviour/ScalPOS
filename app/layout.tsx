@@ -36,6 +36,10 @@ t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?
 var r=document.documentElement;
 r.dataset.theme=t;
 r.style.colorScheme=t;
+/* native webview: suppress the static landing paint until the pin/home
+   screen takes over (boot flag removed after the route decides) */
+var cap=window.Capacitor||window.CapacitorCustomPlatform;
+if(cap&&cap.isNativePlatform&&cap.isNativePlatform()){r.dataset.novaBoot="1";}
 }catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

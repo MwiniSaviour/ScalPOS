@@ -50,7 +50,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "Subscriptions",
         body: [
           "Nova POS has two paid plans: Offline Single Owner at GHS 120 per year and Enterprise at GHS 360 per year. See the Subscription and Refund Policy for what each plan includes.",
-          "Plans are billed through Paystack, a payment service provider licensed under Ghana's Payment Systems and Services Act, 2019 (Act 987). You are charged once for 12 months and never automatically recharged — renewal is always manual. You can cancel at any time in the app or by emailing support@novapos.app.",
+          "Plans are billed through Paystack, a payment service provider licensed under Ghana's Payment Systems and Services Act, 2019 (Act 987). You are charged once for 12 months and never automatically recharged — renewal is always manual. You can cancel at any time in the app or by emailing support@scalmint.com.",
         ],
       },
       {
@@ -84,14 +84,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Disputes",
         body: [
-          "If you have a problem, contact us first at support@novapos.app. We aim to resolve every complaint within 30 days.",
+          "If you have a problem, contact us first at support@scalmint.com. We aim to resolve every complaint within 30 days.",
           "If we cannot agree, a court of Ghana will decide, and these terms are governed by the laws of Ghana.",
         ],
       },
       {
         heading: "Contact",
         body: [
-          "Nova POS is operated by [Nova POS operator legal entity], Accra, Ghana. Questions about these terms: support@novapos.app.",
+          "Nova POS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Questions about these terms: support@scalmint.com.",
         ],
       },
     ],
@@ -104,7 +104,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Who we are",
         body: [
-          "Nova POS is a point-of-sale app for Ghanaian shops, run by [Nova POS operator legal entity], Accra, Ghana. We are the data controller for the personal data described here.",
+          "Nova POS is a point-of-sale app for Ghanaian shops, run by ScalMint (www.scalmint.com), Accra, Ghana. We are the data controller for the personal data described here.",
           "We plan to register with Ghana's Data Protection Commission as the law requires, and to renew that registration every two years. This notice is written to meet Ghana's Data Protection Act, 2012 (Act 843).",
         ],
       },
@@ -155,7 +155,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Your rights",
         body: [
-          "You can ask us for a copy of your personal data, ask us to correct it, ask us to delete it, or object to how we use it. Email support@novapos.app and we will respond within a reasonable time.",
+          "You can ask us for a copy of your personal data, ask us to correct it, ask us to delete it, or object to how we use it. Email support@scalmint.com and we will respond within a reasonable time.",
           "If you are not happy with how we handle your data, you can appeal to us first — and you can also complain to the Data Protection Commission of Ghana.",
         ],
       },
@@ -181,7 +181,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Contact",
         body: [
-          "Data controller: [Nova POS operator legal entity], Accra, Ghana. For any privacy question or request, email support@novapos.app. Our Data Protection Commission registration details will be published here once the registration is complete.",
+          "Data controller: ScalMint (www.scalmint.com), Accra, Ghana. For any privacy question or request, email support@scalmint.com. Our Data Protection Commission registration details will be published here once the registration is complete.",
         ],
       },
     ],
@@ -231,14 +231,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Refunds",
         body: [
-          "Within 7 days of paying, you can ask for a full refund if Nova POS did not do what we said it would. Email support@novapos.app, tell us what fell short, and we will refund you through Paystack.",
+          "Within 7 days of paying, you can ask for a full refund if Nova POS did not do what we said it would. Email support@scalmint.com, tell us what fell short, and we will refund you through Paystack.",
           "After 7 days we do not refund unused time. Your plan keeps running until it expires, so you lose nothing you have paid for.",
         ],
       },
       {
         heading: "Cancelling",
         body: [
-          "You can cancel in the app or by emailing support@novapos.app at any time. Cancelling stops future charges; there are none to stop, since renewal is manual. Your current plan simply runs to its expiry date.",
+          "You can cancel in the app or by emailing support@scalmint.com at any time. Cancelling stops future charges; there are none to stop, since renewal is manual. Your current plan simply runs to its expiry date.",
         ],
       },
       {
@@ -250,7 +250,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Contact",
         body: [
-          "Nova POS is operated by [Nova POS operator legal entity], Accra, Ghana. Billing and refund questions: support@novapos.app.",
+          "Nova POS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Billing and refund questions: support@scalmint.com.",
         ],
       },
     ],

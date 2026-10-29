@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { useNet } from "@/lib/net";
-import { markOnboarded } from "@/lib/first-run";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
@@ -63,10 +62,10 @@ export default function AuthScreen() {
         router.push("/home");
         return;
       }
-      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}`);
+      router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&from=auth`);
     } catch (e) {
       if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
-        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1`);
+        router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1&from=auth`);
         return;
       }
       setError(errMessage(e) || "Sign-in failed.");
@@ -150,7 +149,7 @@ export default function AuthScreen() {
               onClick={send}
               data-testid="auth-send"
             >
-              Sign in or create account
+              Sign in
             </Button>
             <Button
               className="mt-2 h-12 rounded-full"
@@ -163,6 +162,15 @@ export default function AuthScreen() {
               data-testid="auth-google"
             >
               Continue with Google
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-1"
+              onClick={() => setMode("shop")}
+              data-testid="auth-signup-link"
+            >
+              New to Nova POS? Create a shop →
             </Button>
             {!online && (
               <p className="mt-3 rounded-card bg-surface2 px-3 py-2 text-[14px] text-ink3">
@@ -180,15 +188,14 @@ export default function AuthScreen() {
           variant="secondary"
           block
           onClick={() => {
-            markOnboarded();
-            router.replace("/home");
+            router.push("/shop/create");
           }}
           data-testid="auth-offline"
         >
-          Continue on this device
+          Create a local shop first
         </Button>
         <p className="mt-2 text-center text-[13px] text-ink3">
-          Sell on this device first — connect a shop account later from Settings.
+          No account needed — connect one later from Settings.
         </p>
       </div>
     </div>

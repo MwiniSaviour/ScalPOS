@@ -13,6 +13,7 @@ import { cn } from "@/lib/ui";
 import { initDeepLinking } from "@/lib/deep-link";
 import { PinGate } from "@/components/pin-gate";
 import { appChrome } from "@/lib/appchrome";
+import { hasPin, sessionUnlocked, subscribeLock } from "@/lib/pin";
 
 /** paints the window chrome (decor + bar zones) — no-op when unsupported */
 async function applyBarColor(color: string): Promise<void> {
@@ -117,7 +118,14 @@ function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
     hydrate();
   }, [hydrate]);
 
+  const unlocked = useSyncExternalStore(subscribeLock, sessionUnlocked, () => false);
+  const locked = hasPin() && !unlocked;
   useEffect(() => {
+    // boot-hide flag served its purpose (native launch suppressed the landing
+    // SSR paint) — clear it only once we're past the landing route, so a slow
+    // hydration on "/" can't re-expose the marketing page before the route
+    // replacement to /home lands
+    if (!isLanding) delete document.documentElement.dataset.novaBoot;
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
 
@@ -151,10 +159,12 @@ function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [theme]);
+  }, [theme, isLanding]);
 
   if (!hydrated) return null;
-  if (isLanding) {
+  if (isLanding || locked) {
+    // locked (PIN screen up) or landing: no tab bar / sync pill — chrome only
+    // returns once the app is unlocked
     return <Toaster />;
   }
   return (
