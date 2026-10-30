@@ -3,5 +3,5 @@
     <string name="app_name">ScalPOS</string>
     <string name="title_activity_main">ScalPOS</string>
     <string name="package_name">gg.scalpos.app</string>
-    <string name="custom_url_scheme">gg.scalpos.app</string>
+    <string name="custom_url_scheme">com.scalmint.pos</string>
 </resources>

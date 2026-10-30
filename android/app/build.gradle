@@ -4,7 +4,7 @@ android {
     namespace = "gg.novapos.app"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "gg.scalpos.app"
+        applicationId "com.scalmint.pos"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
