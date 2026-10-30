@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="term" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#059669"/>
+      <stop offset="1" stop-color="#34d399"/>
+    </linearGradient>
+  </defs>
+  <!-- white tile -->
+  <rect width="1024" height="1024" fill="#ffffff"/>
+  <!-- POS terminal (green gradient) -->
+  <rect x="257" y="96" width="510" height="832" rx="76" fill="url(#term)"/>
+  <!-- receipt slot -->
+  <rect x="427" y="150" width="170" height="40" rx="20" fill="#ffffff"/>
+  <!-- white screen -->
+  <rect x="317" y="242" width="390" height="256" rx="30" fill="#ffffff"/>
+  <!-- pulse arc bars inside the screen (the signature shape) -->
+  <rect x="392" y="436" width="52" height="50" rx="26" fill="#059669"/>
+  <rect x="486" y="410" width="52" height="76" rx="26" fill="#10b981"/>
+  <rect x="580" y="368" width="52" height="118" rx="26" fill="#059669"/>
+  <!-- keypad: two rows of rounded pills -->
+  <rect x="352" y="568" width="96" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <rect x="474" y="568" width="96" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <rect x="596" y="568" width="76" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <rect x="352" y="656" width="96" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <rect x="474" y="656" width="96" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <rect x="596" y="656" width="76" height="44" rx="22" fill="#ffffff" opacity="0.92"/>
+  <!-- charge button -->
+  <rect x="352" y="752" width="320" height="64" rx="32" fill="#ffffff"/>
+  <rect x="404" y="768" width="216" height="32" rx="16" fill="url(#term)"/>
+</svg>

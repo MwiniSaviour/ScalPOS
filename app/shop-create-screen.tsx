@@ -229,7 +229,7 @@ export default function ShopCreateScreen() {
       </Card>
 
       <p className="mt-5 text-center text-[14px] text-ink3">
-        Have a Nova POS account?{" "}
+        Have a ScalPOS account?{" "}
         <button
           type="button"
           onClick={() => router.push("/connect")}

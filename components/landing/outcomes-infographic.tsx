@@ -41,13 +41,13 @@ export function OutcomesInfographic({
                 Net margin retention over 12 months
               </h3>
               <p className="mt-1 text-sm text-slate-400">
-                Measured across shops switching from paper credit books to Nova POS.
+                Measured across shops switching from paper credit books to ScalPOS.
               </p>
             </div>
             <div className="flex items-center gap-4 text-xs">
               <span className="flex items-center gap-1.5 font-medium text-slate-200">
                 <span className="size-2 rounded-full bg-emerald-400" />
-                Nova POS
+                ScalPOS
               </span>
               <span className="flex items-center gap-1.5 font-medium text-slate-400">
                 <span className="size-2 rounded-full bg-rose-400/70" />
@@ -62,7 +62,7 @@ export function OutcomesInfographic({
               viewBox="0 0 700 260"
               className="h-[220px] w-full overflow-visible sm:h-[245px]"
               role="img"
-              aria-label="Chart showing rising net revenue retention with Nova POS reaching +34% by Month 12 compared to paper notebooks"
+              aria-label="Chart showing rising net revenue retention with ScalPOS reaching +34% by Month 12 compared to paper notebooks"
             >
               <defs>
                 <linearGradient
@@ -132,7 +132,7 @@ export function OutcomesInfographic({
                 Paper ledger (-6.8% leak)
               </text>
 
-              {/* Rising Nova POS Area + Curve */}
+              {/* Rising ScalPOS Area + Curve */}
               <path
                 d="M 65 205 C 185 190, 310 142, 465 95 C 545 70, 600 48, 645 34 L 645 205 L 65 205 Z"
                 fill="url(#outcomeAreaGrad)"
@@ -360,7 +360,7 @@ export function OutcomesInfographic({
       <div className="grid grid-cols-1 divide-y divide-line overflow-hidden rounded-2xl border border-line2 bg-surface md:grid-cols-2 md:divide-x md:divide-y-0">
         <div className="p-6 sm:p-8">
           <p className="text-xs font-medium uppercase tracking-wider text-ink3">
-            Without Nova POS
+            Without ScalPOS
           </p>
           <h4 className="mt-1 text-lg font-bold text-ink">
             Paper notebooks &amp; calculators
@@ -384,7 +384,7 @@ export function OutcomesInfographic({
 
         <div className="p-6 sm:p-8">
           <p className="text-xs font-medium uppercase tracking-wider text-accent">
-            With Nova POS
+            With ScalPOS
           </p>
           <h4 className="mt-1 text-lg font-bold text-ink">
             Local-first digital register &amp; ledger

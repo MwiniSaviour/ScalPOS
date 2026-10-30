@@ -374,7 +374,7 @@ export default function BackupScreen() {
           </Card>
           {incompatible ? (
             <p className="mt-3 text-[14px] leading-5 text-warn">
-              This backup was made by a newer version — update Nova POS, then restore it here.
+              This backup was made by a newer version — update ScalPOS, then restore it here.
             </p>
           ) : (
             <>
@@ -425,7 +425,7 @@ export default function BackupScreen() {
       >
         <p className="pb-3 text-[14px] leading-6 text-ink2">
           Backups go to one file, <span className="font-semibold text-ink">{BACKUP_FILENAME}</span>,
-          in your own Google Drive — no Nova POS servers involved.
+          in your own Google Drive — no ScalPOS servers involved.
         </p>
         {builtinCid ? (
           <p className="pb-3 text-[14px] leading-6 text-ink3">

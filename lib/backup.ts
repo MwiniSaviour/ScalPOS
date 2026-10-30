@@ -20,7 +20,9 @@ export const LAST_BACKUP_KEY = "nova-pos-last-backup";
 export const GSI_CLIENT_KEY = "nova-pos-gsi-clientid";
 export const DRIVE_TOKEN_KEY = "nova-pos-drive-token";
 export const DRIVE_FILE_KEY = "nova-pos-drive-fileid";
-export const BACKUP_FILENAME = "NovaPOS-backup.json";
+export const BACKUP_FILENAME = "ScalPOS-backup.json";
+/** pre-rebrand file name — still accepted on restore */
+export const BACKUP_FILENAME_LEGACY = "NovaPOS-backup.json";
 export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 /* Google Identity Services token client (no server backend) */
@@ -174,7 +176,7 @@ export function parseBackupText(text: string): BackupPreview {
     /* handled below */
   }
   if (!doc || doc.app !== "nova-pos" || !doc.data || typeof doc.data !== "object" || !doc.data.state) {
-    throw new Error("That file is not a Nova POS backup");
+    throw new Error("That file is not a ScalPOS backup");
   }
   const schemaVersion =
     typeof doc.schemaVersion === "number"
@@ -487,7 +489,9 @@ async function driveFetch(url: string, init?: RequestInit): Promise<Response> {
 }
 
 export async function findDriveBackup(): Promise<{ id: string; modifiedTime?: string } | null> {
-  const q = encodeURIComponent(`name = '${BACKUP_FILENAME}' and trashed = false`);
+  const q = encodeURIComponent(
+    `(name = '${BACKUP_FILENAME}' or name = '${BACKUP_FILENAME_LEGACY}') and trashed = false`,
+  );
   const res = await driveFetch(
     `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,modifiedTime)&pageSize=10&orderBy=modifiedTime%20desc`,
   );
@@ -502,7 +506,7 @@ function multipartBlob(meta: string, payload: string, boundary: string): Blob {
   return new Blob([head, body], { type: `multipart/related; boundary=${boundary}` });
 }
 
-/** Create or update the single NovaPOS-backup.json in the user's Drive. */
+/** Create or update the single ScalPOS-backup.json in the user's Drive. */
 export async function uploadDriveBackup(json: string): Promise<{ id: string; updated: boolean }> {
   const existing = await findDriveBackup();
   const boundary = `nova_pos_backup_${Date.now().toString(36)}`;
@@ -545,7 +549,7 @@ export async function saveBackupFile(json: string): Promise<"shared" | "download
       directory: Directory.Documents,
     });
     const { Share } = await import("@capacitor/share");
-    await Share.share({ title: "Nova POS backup", url: write.uri, dialogTitle: "Save your backup" });
+    await Share.share({ title: "ScalPOS backup", url: write.uri, dialogTitle: "Save your backup" });
     return "shared";
   }
   const blob = new Blob([json], { type: "application/json" });

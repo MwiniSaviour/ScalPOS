@@ -61,11 +61,11 @@ export default function MoreScreen() {
   }
 
   async function shareReferral() {
-    const text = "Nova POS — offline-first point of sale for Ghanaian shops";
+    const text = "ScalPOS — offline-first point of sale for Ghanaian shops";
     const url = "https://pos.scalmint.com";
     try {
       const mod = await import("@capacitor/share");
-      await mod.Share.share({ title: "Nova POS", text, url });
+      await mod.Share.share({ title: "ScalPOS", text, url });
       toast("Invite shared", "ok");
     } catch {
       toast("Sharing is not available here", "warn");
@@ -148,11 +148,16 @@ export default function MoreScreen() {
             label="Plans &amp; billing"
             sub="Choose and manage your plan"
           />
-          <RowLink
-            href="/legal"
+          <RowAction
             icon={<ScrollText className="size-[18px]" />}
             label="Legal"
             sub="Terms, privacy &amp; refund policy"
+            onClick={() => {
+              void import("@/lib/legal-open").then(async ({ openLegal }) => {
+                const internal = await openLegal();
+                if (internal) window.location.assign("/legal");
+              });
+            }}
           />
         </Card>
       </section>
@@ -231,7 +236,7 @@ export default function MoreScreen() {
                 More apps
               </span>
               <span className="block truncate text-[14px] text-ink3">
-                Tools from the Nova POS team
+                Tools from the ScalPOS team
               </span>
             </span>
           </a>

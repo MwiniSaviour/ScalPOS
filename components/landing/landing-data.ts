@@ -229,7 +229,7 @@ export const TESTIMONIALS: TestimonialItem[] = [
   {
     id: "t1",
     quote:
-      "Before Nova POS, customers who bought on part-payment were written in a notebook that got torn or misplaced. In our first six weeks we recovered over ₵3,800 in outstanding balances, and evening cash counting dropped from 45 minutes to under 3.",
+      "Before ScalPOS, customers who bought on part-payment were written in a notebook that got torn or misplaced. In our first six weeks we recovered over ₵3,800 in outstanding balances, and evening cash counting dropped from 45 minutes to under 3.",
     name: "Ama Serwaa Mensah",
     role: "Owner",
     shopName: "Bright Corner Provisions",
@@ -240,7 +240,7 @@ export const TESTIMONIALS: TestimonialItem[] = [
   {
     id: "t2",
     quote:
-      "In Adum, mobile data can drop right when five customers are waiting to pay via MTN MoMo and cash. Nova POS never stalls—cashiers scan barcodes with the phone camera, print the Bluetooth receipt immediately, and everything syncs once signal returns.",
+      "In Adum, mobile data can drop right when five customers are waiting to pay via MTN MoMo and cash. ScalPOS never stalls—cashiers scan barcodes with the phone camera, print the Bluetooth receipt immediately, and everything syncs once signal returns.",
     name: "Kwame Boateng",
     role: "Managing Director",
     shopName: "Adum Tech Hub",
@@ -281,23 +281,23 @@ export type FaqItem = {
 export const FAQ_ITEMS: FaqItem[] = [
   {
     id: "faq-1",
-    q: "Does Nova POS work without internet or mobile data?",
-    a: "Yes. Nova POS is offline-first. Your product catalog, compressed WebP product photos (stored in IndexedDB), customer balances, and order history live directly on your device. You can ring up sales, scan barcodes, adjust stock, and print Bluetooth receipts without a connection. On cloud plans, changes queue in an offline outbox and sync automatically when data returns.",
+    q: "Does ScalPOS work without internet or mobile data?",
+    a: "Yes. ScalPOS is offline-first. Your product catalog, compressed WebP product photos (stored in IndexedDB), customer balances, and order history live directly on your device. You can ring up sales, scan barcodes, adjust stock, and print Bluetooth receipts without a connection. On cloud plans, changes queue in an offline outbox and sync automatically when data returns.",
   },
   {
     id: "faq-2",
     q: "How do MTN MoMo, split payments, and credit sales work?",
-    a: "At checkout (/pay), you can record full payments in Cash (with automatic change calculation), Mobile Money (with transaction reference logging such as MTN-TX001), or Card. If a customer pays partly in Cash and partly via MoMo, add both payment lines to the same order. For partial payments or credit purchases, attach the customer profile and Nova POS tracks the unpaid balance until settled.",
+    a: "At checkout (/pay), you can record full payments in Cash (with automatic change calculation), Mobile Money (with transaction reference logging such as MTN-TX001), or Card. If a customer pays partly in Cash and partly via MoMo, add both payment lines to the same order. For partial payments or credit purchases, attach the customer profile and ScalPOS tracks the unpaid balance until settled.",
   },
   {
     id: "faq-3",
     q: "Do I need dedicated POS hardware or barcode scanners?",
-    a: "No. Nova POS runs on any Android phone, tablet, or desktop browser. Your device camera scans barcodes and captures product photos. For printed receipts, pair any standard 58mm or 80mm Bluetooth ESC/POS thermal printer, or share digital receipts directly with customers.",
+    a: "No. ScalPOS runs on any Android phone, tablet, or desktop browser. Your device camera scans barcodes and captures product photos. For printed receipts, pair any standard 58mm or 80mm Bluetooth ESC/POS thermal printer, or share digital receipts directly with customers.",
   },
   {
     id: "faq-4",
     q: "What happens if two staff members edit the same product while offline?",
-    a: "On the Enterprise plan, if two devices modify the same record while offline, Nova POS flags the discrepancy in the Sync Conflicts view (/conflicts) so the shop owner can compare both versions and choose the correct record without losing a single sale.",
+    a: "On the Enterprise plan, if two devices modify the same record while offline, ScalPOS flags the discrepancy in the Sync Conflicts view (/conflicts) so the shop owner can compare both versions and choose the correct record without losing a single sale.",
   },
   {
     id: "faq-5",

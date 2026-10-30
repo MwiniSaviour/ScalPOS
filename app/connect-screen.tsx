@@ -570,7 +570,7 @@ export default function ConnectScreen() {
                 inputMode="email"
               />
               <p className="mt-2.5 text-[14px]/5 text-ink3">
-                Use your Nova POS email to sign in — your shop and data sync
+                Use your ScalPOS email to sign in — your shop and data sync
                 across devices.
               </p>
               <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />} data-testid="connect-signin">
@@ -586,7 +586,7 @@ export default function ConnectScreen() {
                 onClick={() => router.push("/shop/create")}
                 data-testid="connect-signup-link"
               >
-                New to Nova POS? Create a shop →
+                New to ScalPOS? Create a shop →
               </Button>
             </>
           )}

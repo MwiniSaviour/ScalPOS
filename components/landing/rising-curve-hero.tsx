@@ -201,7 +201,7 @@ export function RisingCurveInfographic({
         {/* Clean Text Tab Strip */}
         <div
           role="tablist"
-          aria-label="Nova POS Workspace Views"
+          aria-label="ScalPOS Workspace Views"
           className="no-scrollbar flex items-center justify-start gap-6 overflow-x-auto pb-4 sm:justify-center sm:gap-9"
         >
           {HERO_PREVIEW_TABS.map((tab) => {

@@ -81,7 +81,7 @@ export function receiptText(order: Order, settings?: Settings): string {
     }
     lines.push("");
   }
-  lines.push("Nova POS receipt");
+  lines.push("ScalPOS receipt");
   lines.push(order.id);
   lines.push(`${dateShort(order.createdAt)} ${timeOf(order.createdAt)}`);
   lines.push("");

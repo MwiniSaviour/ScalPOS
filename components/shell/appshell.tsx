@@ -42,7 +42,7 @@ function useNativeFlag(): boolean | null {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const norm = normalizePath(pathname);
-  const isLanding = norm === "/" || norm === "/landing";
+  const isMarketing = norm === "/" || norm === "/landing" || norm === "/legal";
   const hasTabBar = willHaveTabBar(pathname);
   const native = useNativeFlag();
 
@@ -56,11 +56,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  if (isLanding) {
+  if (isMarketing) {
     return (
       <div className="min-h-dvh w-full">
         {children}
-        <ChromeGate isLanding />
+        <ChromeGate isLanding legal />
       </div>
     );
   }
@@ -88,7 +88,7 @@ function BrowserBlock() {
         <Smartphone className="size-7" />
       </div>
       <h1 className="mt-5 text-[22px] font-semibold tracking-[-0.02em] text-ink">
-        Nova POS lives on your phone
+        ScalPOS lives on your phone
       </h1>
       <p className="mt-2 max-w-[300px] text-[15px]/6 text-ink3">
         The mobile app has the full register — sales, stock, customers and
@@ -109,7 +109,16 @@ function BrowserBlock() {
 }
 
 /** bottom chrome renders only after localStorage hydration → no SSR mismatch */
-function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
+function ChromeGate({
+  isLanding = false,
+  legal = false,
+}: {
+  isLanding?: boolean;
+  /** marketing legal route — hides chrome like landing, but is a real
+   *  destination (deep links can cold-start here), so the boot-hide flag
+   *  must clear */
+  legal?: boolean;
+}) {
   const hydrated = usePos((s) => s.hydrated);
   const theme = usePos((s) => s.settings.theme);
   const hydrate = usePos((s) => s.rehydrate);
@@ -125,7 +134,7 @@ function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
     // SSR paint) — clear it only once we're past the landing route, so a slow
     // hydration on "/" can't re-expose the marketing page before the route
     // replacement to /home lands
-    if (!isLanding) delete document.documentElement.dataset.novaBoot;
+    if (!isLanding || legal) delete document.documentElement.dataset.novaBoot;
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
 
@@ -159,10 +168,10 @@ function ChromeGate({ isLanding = false }: { isLanding?: boolean }) {
     return () => {
       cancelled = true;
     };
-  }, [theme, isLanding]);
+  }, [theme, isLanding, legal]);
 
   if (!hydrated) return null;
-  if (isLanding || locked) {
+  if (isLanding || legal || locked) {
     // locked (PIN screen up) or landing: no tab bar / sync pill — chrome only
     // returns once the app is unlocked
     return <Toaster />;

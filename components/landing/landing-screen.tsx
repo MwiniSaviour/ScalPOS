@@ -139,7 +139,7 @@ export default function LandingScreen() {
             >
               <NovaBrandLogo className="size-7 rounded-lg" />
               <span className="text-[19px] font-bold tracking-tight text-white">
-                Nova POS
+                ScalPOS
               </span>
             </Link>
 
@@ -1094,7 +1094,7 @@ export default function LandingScreen() {
               <div className="flex items-center gap-2">
                 <NovaBrandLogo className="size-6 rounded-md" />
                 <span className="text-base font-bold tracking-tight text-ink">
-                  Nova POS
+                  ScalPOS
                 </span>
               </div>
               <p className="mt-2.5 max-w-xs text-xs leading-relaxed text-ink3">
@@ -1215,16 +1215,16 @@ export default function LandingScreen() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/legal" className="hover:text-ink">
+                  <a href="https://pos.scalmint.com/legal" className="hover:text-ink">
                     Legal &amp; privacy
-                  </Link>
+                  </a>
                 </li>
               </ul>
             </div>
           </div>
 
           <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-line pt-6 text-xs text-ink3 sm:flex-row">
-            <p>© {new Date().getFullYear()} Nova POS. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} ScalPOS. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <button
                 type="button"
@@ -1233,9 +1233,9 @@ export default function LandingScreen() {
               >
                 {theme === "light" ? "Light theme" : "Dark theme"}
               </button>
-              <Link href="/legal" className="hover:text-ink">
+              <a href="https://pos.scalmint.com/legal" className="hover:text-ink">
                 Terms &amp; Privacy
-              </Link>
+              </a>
             </div>
           </div>
         </div>

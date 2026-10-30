@@ -19,23 +19,23 @@ export const LEGAL_DOCS: LegalDoc[] = [
     updated: "23 October 2026",
     sections: [
       {
-        heading: "What Nova POS is",
+        heading: "What ScalPOS is",
         body: [
-          "Nova POS is a point-of-sale app for shops in Ghana. It gives you an offline-first register, inventory tracking, credit book for customers, sales reports and Bluetooth receipt printing. If you choose a cloud plan, you also get team accounts and syncing between devices.",
+          "ScalPOS is a point-of-sale app for shops in Ghana. It gives you an offline-first register, inventory tracking, credit book for customers, sales reports and Bluetooth receipt printing. If you choose a cloud plan, you also get team accounts and syncing between devices.",
           "This app is a tool that runs on your shop's devices. It is not a bank, a mobile money operator or an accountant. We help you record sales; we do not hold or move your money.",
         ],
       },
       {
         heading: "Who these terms are for",
         body: [
-          "You must own the shop or have the owner's permission to use Nova POS for it. You sign up with an email address you control. If you add team members, you are responsible for what they do in your shop's account.",
-          "You must use Nova POS lawfully. Do not use it to sell banned goods, evade tax or mislead customers.",
+          "You must own the shop or have the owner's permission to use ScalPOS for it. You sign up with an email address you control. If you add team members, you are responsible for what they do in your shop's account.",
+          "You must use ScalPOS lawfully. Do not use it to sell banned goods, evade tax or mislead customers.",
         ],
       },
       {
         heading: "Your records and your taxes",
         body: [
-          "Your shop data is yours. You are responsible for keeping your own records accurate and for making sure your tax and VAT filings with the Ghana Revenue Authority are correct. Nova POS reports are a convenience, not official tax records.",
+          "Your shop data is yours. You are responsible for keeping your own records accurate and for making sure your tax and VAT filings with the Ghana Revenue Authority are correct. ScalPOS reports are a convenience, not official tax records.",
           "Keep your own backups outside the app if your records matter to your business.",
         ],
       },
@@ -49,14 +49,14 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Subscriptions",
         body: [
-          "Nova POS has two paid plans: Offline Single Owner at GHS 120 per year and Enterprise at GHS 360 per year. See the Subscription and Refund Policy for what each plan includes.",
+          "ScalPOS has two paid plans: Offline Single Owner at GHS 120 per year and Enterprise at GHS 360 per year. See the Subscription and Refund Policy for what each plan includes.",
           "Plans are billed through Paystack, a payment service provider licensed under Ghana's Payment Systems and Services Act, 2019 (Act 987). You are charged once for 12 months and never automatically recharged — renewal is always manual. You can cancel at any time in the app or by emailing support@scalmint.com.",
         ],
       },
       {
         heading: "Service availability",
         body: [
-          "Nova POS is provided as is, on a best-effort basis. The register, inventory and credit book are designed to work without internet, but cloud features, email sign-in codes and payment screen loading need a network connection.",
+          "ScalPOS is provided as is, on a best-effort basis. The register, inventory and credit book are designed to work without internet, but cloud features, email sign-in codes and payment screen loading need a network connection.",
           "We do not control Paystack, mobile money networks, phone networks, the internet or electricity supply. If a payment fails at the network level, deal with the payment provider for the transaction itself and contact us for the app side.",
         ],
       },
@@ -71,13 +71,13 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "Changes to these terms",
         body: [
           "We may update these terms as the app changes or as the law requires. If a change reduces what you get for your money, we announce it in the app at least 14 days before it takes effect.",
-          "Continuing to use Nova POS after a change means you accept the updated terms.",
+          "Continuing to use ScalPOS after a change means you accept the updated terms.",
         ],
       },
       {
         heading: "Limitation of liability",
         body: [
-          "If something goes wrong with Nova POS, our total liability to you is limited to the amount you paid us in the last 12 months. To the extent allowed by law, we are not liable for indirect losses such as lost profits, lost goodwill or lost stock value.",
+          "If something goes wrong with ScalPOS, our total liability to you is limited to the amount you paid us in the last 12 months. To the extent allowed by law, we are not liable for indirect losses such as lost profits, lost goodwill or lost stock value.",
           "We are not liable for losses caused by internet outages, network failures, printer faults, power cuts, misuse of your devices or actions of your staff.",
         ],
       },
@@ -91,7 +91,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Contact",
         body: [
-          "Nova POS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Questions about these terms: support@scalmint.com.",
+          "ScalPOS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Questions about these terms: support@scalmint.com.",
         ],
       },
     ],
@@ -104,7 +104,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Who we are",
         body: [
-          "Nova POS is a point-of-sale app for Ghanaian shops, run by ScalMint (www.scalmint.com), Accra, Ghana. We are the data controller for the personal data described here.",
+          "ScalPOS is a point-of-sale app for Ghanaian shops, run by ScalMint (www.scalmint.com), Accra, Ghana. We are the data controller for the personal data described here.",
           "We plan to register with Ghana's Data Protection Commission as the law requires, and to renew that registration every two years. This notice is written to meet Ghana's Data Protection Act, 2012 (Act 843).",
         ],
       },
@@ -133,7 +133,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Where your data lives",
         body: [
-          "Nova POS is offline-first. Your shop data is created and first stored on your own device. It only leaves the device when you, the owner, connect a cloud plan and choose to sync.",
+          "ScalPOS is offline-first. Your shop data is created and first stored on your own device. It only leaves the device when you, the owner, connect a cloud plan and choose to sync.",
           "Synced data is cloud-hosted on Supabase, with row-level access controls so no other shop can read your records. Payments are handled by Paystack; card and mobile money details pass between you and Paystack alone.",
           "Bluetooth receipt printing happens entirely on your device through Android. No print data touches our servers. If you add a product photo, it is stored inside your app's own storage on your device.",
         ],
@@ -162,7 +162,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Children",
         body: [
-          "Nova POS is for shop owners and their staff. It is not meant for anyone under 18. If we learn a child has an account, we delete it.",
+          "ScalPOS is for shop owners and their staff. It is not meant for anyone under 18. If we learn a child has an account, we delete it.",
         ],
       },
       {
@@ -194,7 +194,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "About this policy",
         body: [
-          "This policy explains the two Nova POS plans, how billing works, when you get a refund and how prices change. It is part of the Nova POS Terms of Service.",
+          "This policy explains the two ScalPOS plans, how billing works, when you get a refund and how prices change. It is part of the ScalPOS Terms of Service.",
         ],
       },
       {
@@ -231,7 +231,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Refunds",
         body: [
-          "Within 7 days of paying, you can ask for a full refund if Nova POS did not do what we said it would. Email support@scalmint.com, tell us what fell short, and we will refund you through Paystack.",
+          "Within 7 days of paying, you can ask for a full refund if ScalPOS did not do what we said it would. Email support@scalmint.com, tell us what fell short, and we will refund you through Paystack.",
           "After 7 days we do not refund unused time. Your plan keeps running until it expires, so you lose nothing you have paid for.",
         ],
       },
@@ -250,7 +250,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Contact",
         body: [
-          "Nova POS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Billing and refund questions: support@scalmint.com.",
+          "ScalPOS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Billing and refund questions: support@scalmint.com.",
         ],
       },
     ],

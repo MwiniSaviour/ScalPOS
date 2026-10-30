@@ -54,3 +54,9 @@ tsc*.log
 /tsc-log.txt
 /tsc-clerk.log
 /tsc-clerk2.log
+
+# release signing
+*.jks
+*.keystore
+android/key.properties
+keystore.properties

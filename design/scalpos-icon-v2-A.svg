@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="term" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6ee7b7"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <!-- white tile with thin green ring (prototy language) -->
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="#ffffff"/>
+  <rect x="16" y="16" width="992" height="992" rx="224" fill="none" stroke="#0ea56c" stroke-width="14"/>
+  <!-- POS terminal: chunky rounded-bar anatomy, slightly tilted -->
+  <g transform="rotate(-14 512 512)">
+    <!-- terminator bars: stylized terminal made of three bars -->
+    <rect x="362" y="150" width="300" height="92" rx="46" fill="url(#term)"/>
+    <rect x="392" y="150" width="240" height="620" rx="56" fill="url(#term)" opacity="0.98"/>
+    <rect x="470" y="70" width="84" height="80" rx="16" fill="#0b1220" opacity="0.08"/>
+  </g>
+</svg>

@@ -97,15 +97,15 @@ export default function PaystackCallbackScreen() {
     },
     confirmed: {
       title: "Payment confirmed",
-      body: "Your plan is active. Head back to Nova POS → Plans & billing.",
+      body: "Your plan is active. Head back to ScalPOS → Plans & billing.",
     },
     failed: {
       title: "Payment failed",
-      body: "No charge was made. Subscribe again from Nova POS → Plans & billing.",
+      body: "No charge was made. Subscribe again from ScalPOS → Plans & billing.",
     },
     openapp: {
-      title: "Finishing in Nova POS",
-      body: "Payment received. Your plan activates next time you open Nova POS.",
+      title: "Finishing in ScalPOS",
+      body: "Payment received. Your plan activates next time you open ScalPOS.",
     },
     unconfirmed: {
       title: "Still confirming",
@@ -141,12 +141,12 @@ export default function PaystackCallbackScreen() {
               </Button>
             ) : phase === "confirmed" || phase === "openapp" ? (
               <Button variant="primary" size="md" block icon={<Smartphone size={16} />} onClick={openApp}>
-                Open Nova POS
+                Open ScalPOS
               </Button>
             ) : phase === "failed" ? (
               <>
                 <Button variant="primary" size="md" block icon={<Smartphone size={16} />} onClick={openApp}>
-                  Open Nova POS
+                  Open ScalPOS
                 </Button>
                 <p className="text-center text-[12px] leading-4 text-ink3">You can retry the payment from Plans &amp; billing.</p>
               </>
@@ -156,7 +156,7 @@ export default function PaystackCallbackScreen() {
                   Try again
                 </Button>
                 <Button variant="ghost" size="md" block icon={<Smartphone size={16} />} onClick={openApp}>
-                  Open Nova POS
+                  Open ScalPOS
                 </Button>
               </>
             ) : null}

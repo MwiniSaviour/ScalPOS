@@ -10,7 +10,6 @@ import { dateShort } from "@/lib/format";
 import { toneClasses, cn } from "@/lib/ui";
 import { usePos } from "@/lib/store";
 import { BadgeCheck, Clock, RefreshCw, ShieldAlert } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useSyncExternalStore, useState } from "react";
 
@@ -323,13 +322,19 @@ export default function BillingScreen() {
           </div>
           <p className="mt-4 text-[13px] leading-5 text-ink3">
             Payments handled by Paystack. By subscribing you agree to our{" "}
-            <Link href="/legal" className="text-accent underline underline-offset-2">
+            <a
+              href="https://pos.scalmint.com/legal?doc=terms"
+              className="text-accent underline underline-offset-2"
+            >
               Terms of Service
-            </Link>{" "}
+            </a>{" "}
             and{" "}
-            <Link href="/legal" className="text-accent underline underline-offset-2">
+            <a
+              href="https://pos.scalmint.com/legal?doc=refunds"
+              className="text-accent underline underline-offset-2"
+            >
               Refund Policy
-            </Link>
+            </a>
             .
           </p>
         </section>

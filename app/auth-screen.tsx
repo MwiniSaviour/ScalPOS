@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { BrandMark } from "@/components/brandmark";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { useNet } from "@/lib/net";
@@ -114,7 +115,7 @@ export default function AuthScreen() {
   return (
     <div className="anim-fade flex min-h-dvh flex-col px-5 pt-10">
       <BrandMark />
-      <h1 className="mt-5 text-[26px]/7 font-bold tracking-[-0.02em] text-ink">Welcome to Nova POS</h1>
+      <h1 className="mt-5 text-[26px]/7 font-bold tracking-[-0.02em] text-ink">Welcome to ScalPOS</h1>
       <p className="mt-1 text-[15px] text-ink3">Sell, track stock and sync your whole team.</p>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
@@ -170,7 +171,7 @@ export default function AuthScreen() {
               onClick={() => setMode("shop")}
               data-testid="auth-signup-link"
             >
-              New to Nova POS? Create a shop →
+              New to ScalPOS? Create a shop →
             </Button>
             {!online && (
               <p className="mt-3 rounded-card bg-surface2 px-3 py-2 text-[14px] text-ink3">
@@ -202,20 +203,3 @@ export default function AuthScreen() {
   );
 }
 
-function BrandMark() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="size-12">
-      <defs>
-        <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#34d399" />
-          <stop offset="1" stopColor="#059669" />
-        </linearGradient>
-      </defs>
-      <rect width="100" height="100" rx="24" fill="#0a0e17" />
-      <rect x="22" y="26" width="56" height="16" rx="5" fill="url(#g)" />
-      <path d="M30 50h40l-4 24a4 4 0 0 1-4 3.4H38a4 4 0 0 1-4-3.4Z" fill="url(#g)" opacity=".9" />
-      <circle cx="40" cy="66" r="3.4" fill="#0a0e17" />
-      <circle cx="60" cy="66" r="3.4" fill="#0a0e17" />
-    </svg>
-  );
-}

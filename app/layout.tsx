@@ -4,11 +4,11 @@ import { ClerkGate } from "@/components/shell/clerk-gate";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nova POS — Bright Corner Stores",
+  title: "ScalPOS — Bright Corner Stores",
   description: "Offline-first point of sale for Ghanaian retail",
-  applicationName: "Nova POS",
+  applicationName: "ScalPOS",
   manifest: "/manifest.json",
-  icons: [{ rel: "icon", url: "/icon.svg", type: "image/svg+xml" }],
+  icons: [{ rel: "icon", url: "/icon-512.png", type: "image/png" }],
 };
 
 export const viewport: Viewport = {

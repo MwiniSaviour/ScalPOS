@@ -1,11 +1,15 @@
 {
-  "name": "Nova POS",
-  "short_name": "Nova POS",
+  "name": "ScalPOS",
+  "short_name": "ScalPOS",
   "description": "Offline-first point of sale for Ghanaian retail",
-  "id": "nova-pos",
+  "id": "scalpos",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0e17",
-  "theme_color": "#0a0e17",
-  "orientation": "portrait"
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
 }

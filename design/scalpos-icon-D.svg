@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#34d399"/>
+      <stop offset="1" stop-color="#059669"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="#ffffff"/>
+  <!-- minimal chunky-bar POS terminal, prototy language -->
+  <rect x="362" y="212" width="300" height="104" rx="44" fill="url(#g)"/>
+  <rect x="328" y="332" width="368" height="486" rx="62" fill="url(#g)"/>
+  <!-- green window cut out -->
+  <rect x="398" y="404" width="228" height="176" rx="30" fill="#ffffff" opacity="0.35"/>
+  <!-- arc of white bars in the window -->
+  <rect x="452" y="536" width="40" height="32" rx="20" fill="#ffffff"/>
+  <rect x="507" y="518" width="40" height="50" rx="20" fill="#ffffff"/>
+  <rect x="562" y="498" width="40" height="70" rx="20" fill="#ffffff"/>
+  <!-- key pill -->
+  <rect x="398" y="632" width="228" height="46" rx="23" fill="#ffffff" opacity="0.55"/>
+  <rect x="398" y="712" width="228" height="56" rx="28" fill="#ffffff"/>
+</svg>

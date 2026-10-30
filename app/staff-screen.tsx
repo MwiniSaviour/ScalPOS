@@ -336,7 +336,7 @@ function StaffFormSheet({
         {isCreate && (
           <Input
             label="Email (cloud invite, optional)"
-            hint="Sends a Nova POS invite so this teammate can sync and sign in from their own device."
+            hint="Sends a ScalPOS invite so this teammate can sync and sign in from their own device."
             placeholder="teammate@shop.com"
             inputMode="email"
             value={email}
