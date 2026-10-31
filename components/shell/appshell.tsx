@@ -42,7 +42,7 @@ function useNativeFlag(): boolean | null {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const norm = normalizePath(pathname);
-  const isMarketing = norm === "/" || norm === "/landing" || norm === "/legal";
+  const isMarketing = norm === "/" || norm === "/landing" || norm === "/legal" || norm === "/data-deletion";
   const hasTabBar = willHaveTabBar(pathname);
   const native = useNativeFlag();
 
