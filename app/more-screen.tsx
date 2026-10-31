@@ -24,7 +24,6 @@ import {
   ScrollText,
   Settings,
   Store,
-  Trash2,
   Users,
   UsersRound,
   Warehouse,
@@ -159,12 +158,6 @@ export default function MoreScreen() {
                 if (internal) window.location.assign("/legal");
               });
             }}
-          />
-          <RowLink
-            href="/data-deletion"
-            icon={<Trash2 className="size-[18px]" />}
-            label="Delete your data"
-            sub="Request account &amp; shop data deletion"
           />
         </Card>
       </section>

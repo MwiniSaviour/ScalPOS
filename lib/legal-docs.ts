@@ -63,7 +63,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Deleting your account",
         body: [
-          "You can delete your account from the app or by email. When you do, your shop's data is removed from our cloud within 30 days.",
+          "You can delete your account from the app or by email. Request deletion at https://pos.scalmint.com/data-deletion or email support@scalmint.com. When you do, your shop's data is removed from our cloud within 30 days.",
           "Where the law requires records to be kept longer, we may keep the minimum needed, or keep billing records in anonymised form. Data on your local devices stays there until you erase it yourself.",
         ],
       },
