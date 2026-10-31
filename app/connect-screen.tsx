@@ -32,7 +32,6 @@ import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw } from "lucide-re
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
-import { oauthRedirectTargets } from "@/lib/api/oauth";
 
 const ROLE_OPTIONS = ["owner", "supervisor", "cashier"] as const;
 
@@ -381,29 +380,6 @@ export default function ConnectScreen() {
     }
   }
 
-  async function startGoogle() {
-    if (!online || busy) return;
-    if (!signIn) {
-      setError("Sign-in is still loading. Try again.");
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    const t = oauthRedirectTargets();
-    try {
-      await signIn.authenticateWithRedirect({
-        strategy: "oauth_google",
-        redirectUrl: t.redirectUrl,
-        redirectUrlComplete: t.redirectUrlComplete,
-      });
-    } catch (e) {
-      setError(errMessage(e) || "Google sign-in failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function supabaseToken(): Promise<string | null> {
     try {
       const t = await getToken({ template: "supabase" });
@@ -575,9 +551,6 @@ export default function ConnectScreen() {
               </p>
               <Button className="mt-3" block loading={busy} disabled={!online} onClick={startSignIn} icon={<Mail className="size-[18px]" />} data-testid="connect-signin">
                 Sign in
-              </Button>
-              <Button className="mt-2" variant="secondary" block loading={busy} disabled={!online || busy} onClick={startGoogle} data-testid="connect-google">
-                Continue with Google
               </Button>
               <Button
                 variant="ghost"

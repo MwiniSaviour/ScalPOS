@@ -39,6 +39,11 @@ import { useMemo, useRef, useState, useSyncExternalStore } from "react";
 type Busy = "driveSave" | "device" | "driveRestore" | "restore" | "connect" | null;
 type Goal = "save" | "restore";
 
+/* Google Drive backup is temporarily withdrawn from the product (the OAuth
+   round-trip is not behaving on-device). The email/file options stay. Flip
+   this back to true, or restore this screen from git history, to re-feature. */
+const DRIVE_ENABLED = false;
+
 function errorText(e: unknown): string {
   return e instanceof Error ? e.message : "Something went wrong";
 }
@@ -239,7 +244,7 @@ export default function BackupScreen() {
           Backup &amp; recovery
         </h1>
       </header>
-      <p className="mt-0.5 text-[15px] text-ink3">Save a copy to Drive or your device</p>
+      <p className="mt-0.5 text-[15px] text-ink3">Save a copy on this device</p>
 
       {/* status */}
       <Card className="mt-5 px-4 py-3.5">
@@ -268,19 +273,21 @@ export default function BackupScreen() {
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Make a backup</h2>
         <div className="mt-2.5 grid gap-2.5">
+          {DRIVE_ENABLED && (
+            <Button
+              size="lg"
+              block
+              loading={busy === "driveSave" || busy === "connect"}
+              disabled={busy !== null || !online}
+              onClick={() => startDrive("save")}
+            >
+              Back up to Google Drive
+            </Button>
+          )}
           <Button
             size="lg"
             block
-            loading={busy === "driveSave" || busy === "connect"}
-            disabled={busy !== null || !online}
-            onClick={() => startDrive("save")}
-          >
-            Back up to Google Drive
-          </Button>
-          <Button
-            size="lg"
-            block
-            variant="secondary"
+            variant={DRIVE_ENABLED ? "secondary" : "primary"}
             loading={busy === "device"}
             disabled={busy !== null}
             onClick={() => void saveToDevice()}
@@ -288,7 +295,7 @@ export default function BackupScreen() {
             Save copy to device
           </Button>
         </div>
-        {!online && (
+        {!online && DRIVE_ENABLED && (
           <p className="mt-2.5 text-[14px] leading-5 text-ink3">
             You&rsquo;re offline — cloud backup is unavailable. Local save still works.
           </p>
@@ -323,18 +330,20 @@ export default function BackupScreen() {
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Restore</h2>
         <Card inset className="mt-2.5">
-          <button
-            type="button"
-            disabled={busy !== null || !online}
-            onClick={() => startDrive("restore")}
-            className="press w-full px-4 py-3.5 text-left hover:bg-surface2/50 disabled:opacity-45"
-          >
-            <span className="block text-[17px] font-semibold text-ink">Restore from Google Drive</span>
-            <span className="block text-[14px] text-ink3">
-              Downloads {BACKUP_FILENAME} from your Drive — adds nothing to your register until
-              you confirm
-            </span>
-          </button>
+          {DRIVE_ENABLED && (
+            <button
+              type="button"
+              disabled={busy !== null || !online}
+              onClick={() => startDrive("restore")}
+              className="press w-full px-4 py-3.5 text-left hover:bg-surface2/50 disabled:opacity-45"
+            >
+              <span className="block text-[17px] font-semibold text-ink">Restore from Google Drive</span>
+              <span className="block text-[14px] text-ink3">
+                Downloads {BACKUP_FILENAME} from your Drive — adds nothing to your register until
+                you confirm
+              </span>
+            </button>
+          )}
           <button
             type="button"
             disabled={busy !== null}
@@ -409,7 +418,7 @@ export default function BackupScreen() {
 
       {/* drive connect */}
       <Sheet
-        open={connectOpen}
+        open={connectOpen && DRIVE_ENABLED}
         onClose={() => setConnectOpen(false)}
         title="Connect Google Drive"
         footer={

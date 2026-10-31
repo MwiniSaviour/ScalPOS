@@ -32,9 +32,8 @@ function RootRoute() {
   useEffect(() => {
     if (native) {
       router.replace("/home");
-      // failsafe: if the client navigation somehow doesn't land, resume
-      // painting (old landing-flash behaviour) instead of a blank screen.
-      // Routed commits clear the flag sooner via ChromeGate.
+      // failsafe: if the client navigation somehow doesn't land, clear the
+      // boot flag so the user isn't stuck on a blank screen.
       const t = setTimeout(() => {
         delete document.documentElement.dataset.novaBoot;
       }, 5000);

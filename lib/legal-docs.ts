@@ -155,7 +155,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Your rights",
         body: [
-          "You can ask us for a copy of your personal data, ask us to correct it, ask us to delete it, or object to how we use it. Email support@scalmint.com and we will respond within a reasonable time.",
+          "You can ask us for a copy of your personal data, ask us to correct it, ask us to delete it, or object to how we use it. Request deletion at https://pos.scalmint.com/data-deletion or email support@scalmint.com and we will respond within a reasonable time.",
           "If you are not happy with how we handle your data, you can appeal to us first — and you can also complain to the Data Protection Commission of Ghana.",
         ],
       },

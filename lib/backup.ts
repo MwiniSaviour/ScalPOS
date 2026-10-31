@@ -456,10 +456,12 @@ export async function connectDrive(): Promise<void> {
     try {
       const client = window.google?.accounts?.oauth2?.initTokenClient({
         client_id: cid,
-        callback: (r) => resolve(r),
+        callback: (r: GsiTokenResponse) => resolve(r),
         error_callback: () => reject(new Error("Google sign-in was cancelled")),
         scope: DRIVE_SCOPE,
-      });
+        redirect_uri: "novapos://auth/callback",
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
       client?.requestAccessToken();
     } catch (e) {
       reject(e instanceof Error ? e : new Error("Google sign-in failed"));

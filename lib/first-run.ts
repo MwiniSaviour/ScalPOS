@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { PIN_KEY } from "./pin";
 
 const ONBOARD_KEY = "nova-pos-onboarded";
 const STORE_KEY = "nova-pos-v1";
@@ -27,6 +28,13 @@ type PersistedShop = {
  */
 function shopDataExists(): boolean {
   try {
+    // A real shop exists if a PIN was set (PIN is only persisted during
+    // shop creation) OR the store blob carries a non-default shop. This keeps
+    // a legitimate shop from being mistaken for "not onboarded" after an update
+    // or a partial cloud-restore of WebView storage.
+    try {
+      if (window.localStorage.getItem(PIN_KEY)) return true;
+    } catch {}
     const raw = window.localStorage.getItem(STORE_KEY);
     if (!raw) return false;
     const state = (JSON.parse(raw) as { state?: PersistedShop })?.state;

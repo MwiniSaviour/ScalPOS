@@ -8,7 +8,6 @@ import { useNet } from "@/lib/net";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
-import { oauthRedirectTargets } from "@/lib/api/oauth";
 
 type Mode = "signin" | "shop";
 
@@ -75,24 +74,6 @@ export default function AuthScreen() {
     }
   }
 
-  async function google() {
-    if (!signInLoaded || !signIn || busy) return;
-    setBusy(true);
-    setError(null);
-    const t = oauthRedirectTargets();
-    try {
-      await signIn.authenticateWithRedirect({
-        strategy: "oauth_google",
-        redirectUrl: t.redirectUrl,
-        redirectUrlComplete: t.redirectUrlComplete,
-      });
-    } catch (e) {
-      setError(errMessage(e) || "Google sign-in failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   if (isSignedIn) {
     return (
       <div className="anim-fade flex min-h-dvh flex-col px-5 pt-10">
@@ -151,18 +132,6 @@ export default function AuthScreen() {
               data-testid="auth-send"
             >
               Sign in
-            </Button>
-            <Button
-              className="mt-2 h-12 rounded-full"
-              variant="secondary"
-              size="lg"
-              block
-              loading={busy}
-              disabled={!online || busy}
-              onClick={google}
-              data-testid="auth-google"
-            >
-              Continue with Google
             </Button>
             <Button
               variant="ghost"

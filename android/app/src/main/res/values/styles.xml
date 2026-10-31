@@ -20,6 +20,14 @@
 
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <!-- dark brand background on both the 12+ system splash (windowSplashScreenBackground)
+             and the pre-12 windowBackground drawable — a white splash flashing into the dark
+             app reads as a jarring "marketing page" flash -->
+        <item name="android:windowSplashScreenBackground">@color/nova_window_bg</item>
+        <item name="windowSplashScreenBackground">@color/nova_window_bg</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/nova_window_bg</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/nova_window_bg</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
         <item name="android:background">@drawable/splash</item>
     </style>
 </resources>
