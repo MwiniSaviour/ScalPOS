@@ -1,0 +1,118 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: #f8f9fc;
+  --color-foreground: #1a1a2e;
+  --color-primary: #4f46e5;
+  --color-primary-hover: #4338ca;
+  --color-primary-light: #eef2ff;
+  --color-sidebar: #ffffff;
+  --color-sidebar-hover: #f1f5f9;
+  --color-sidebar-active: #eef2ff;
+  --color-sidebar-text: #64748b;
+  --color-sidebar-text-active: #4f46e5;
+  --color-card: #ffffff;
+  --color-card-hover: #fafbfc;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+  --color-muted: #94a3b8;
+  --color-text-secondary: #475569;
+  --color-success: #10b981;
+  --color-success-bg: #ecfdf5;
+  --color-warning: #f59e0b;
+  --color-warning-bg: #fffbeb;
+  --color-danger: #ef4444;
+  --color-danger-bg: #fef2f2;
+  --color-info: #3b82f6;
+  --color-info-bg: #eff6ff;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
+
+@layer components {
+  .stat-card {
+    @apply bg-card rounded-xl border border-border p-6 transition-all hover:shadow-md hover:border-border;
+  }
+
+  .glass-panel {
+    @apply bg-card rounded-xl border border-border;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-primary-hover active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-4 py-2.5 text-sm font-medium text-foreground transition-all hover:bg-sidebar-hover active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-danger px-4 py-2.5 text-sm font-medium text-white transition-all hover:opacity-90 active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-text-secondary transition-all hover:bg-sidebar-hover hover:text-foreground;
+  }
+
+  .input-field {
+    @apply w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20;
+  }
+
+  .label {
+    @apply text-sm font-medium text-text-secondary mb-1.5 block;
+  }
+
+  .badge-success {
+    @apply inline-flex items-center rounded-full bg-success-bg px-2.5 py-0.5 text-xs font-medium text-success;
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center rounded-full bg-warning-bg px-2.5 py-0.5 text-xs font-medium text-warning;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center rounded-full bg-danger-bg px-2.5 py-0.5 text-xs font-medium text-danger;
+  }
+
+  .badge-info {
+    @apply inline-flex items-center rounded-full bg-info-bg px-2.5 py-0.5 text-xs font-medium text-info;
+  }
+
+  .card-hover {
+    @apply transition-all hover:shadow-md hover:-translate-y-0.5;
+  }
+
+  .sidebar-link {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-text transition-all hover:bg-sidebar-hover hover:text-foreground;
+  }
+
+  .sidebar-link-active {
+    @apply flex items-center gap-3 rounded-lg bg-sidebar-active px-3 py-2.5 text-sm font-medium text-sidebar-text-active transition-all;
+  }
+
+  .page-header {
+    @apply mb-6 flex items-center justify-between;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-foreground;
+  }
+
+  .page-subtitle {
+    @apply text-sm text-muted mt-0.5;
+  }
+
+  .table-header {
+    @apply bg-sidebar-hover text-left text-xs font-semibold uppercase tracking-wider text-muted;
+  }
+
+  .table-cell {
+    @apply border-b border-border px-4 py-3 text-sm text-text-secondary;
+  }
+}
