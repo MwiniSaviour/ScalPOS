@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
+import { Eye, EyeOff } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { APP_NAME } from "@/lib/constants"
 
@@ -10,8 +12,26 @@ export const dynamic = "force-dynamic"
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
+  const [urlError, setUrlError] = useState<string | null>(null)
+  const [dots, setDots] = useState<{ left: number; top: number }[]>([])
+
+  useEffect(() => {
+    setDots(
+      Array.from({ length: 40 }, () => ({
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+      }))
+    )
+  }, [])
   const { login, loading, error } = useAuth()
+  const searchParams = useSearchParams()
+
+  useEffect(() => {
+    const err = searchParams.get("error")
+    if (err) setUrlError(decodeURIComponent(err))
+  }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -22,13 +42,13 @@ export default function LoginPage() {
     <div className="relative flex min-h-screen items-center justify-center bg-background overflow-hidden">
       {/* Background dots pattern */}
       <div className="absolute inset-0 pointer-events-none">
-        {Array.from({ length: 40 }).map((_, i) => (
+        {dots.map((d, i) => (
           <div
             key={i}
             className="absolute h-1 w-1 rounded-full bg-primary/10"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: `${d.left}%`,
+              top: `${d.top}%`,
             }}
           />
         ))}
@@ -63,9 +83,9 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {error && (
+          {(error || urlError) && (
             <div className="mb-4 rounded-lg bg-danger-bg px-4 py-3 text-sm font-medium text-danger">
-              {error}
+              {error || urlError}
             </div>
           )}
 
@@ -99,15 +119,26 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
-                placeholder="••••••••"
-                required
-              />
+              <div className="relative">
+                <input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-4 py-3 pr-11 text-sm text-foreground placeholder:text-muted outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
+                  placeholder="••••••••"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  onTouchEnd={(e) => { e.preventDefault(); setShowPassword(!showPassword) }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {/* Remember me */}

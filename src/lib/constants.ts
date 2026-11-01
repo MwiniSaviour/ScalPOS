@@ -27,9 +27,15 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Suppliers", href: "/dashboard/suppliers", icon: "Truck" },
   { label: "Employees", href: "/dashboard/employees", icon: "UserCog", roles: ["admin"] },
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
+  { label: "Scanner", href: "/dashboard/scan", icon: "Scan" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },
   { label: "Payments", href: "/dashboard/payments", icon: "Receipt" },
 ]
+
+export const SCAN_MODES = [
+  { value: "receive", label: "Receive Stock", description: "Scan products to add stock" },
+  { value: "pos", label: "POS Scan", description: "Scan products to add to cart" },
+] as const
 
 export const ROLES = ["admin", "employee"] as const
 

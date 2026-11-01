@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useAuth } from "@/hooks/use-auth"
 
@@ -12,6 +12,16 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [localError, setLocalError] = useState<string | null>(null)
+  const [dots, setDots] = useState<{ left: number; top: number }[]>([])
+
+  useEffect(() => {
+    setDots(
+      Array.from({ length: 40 }, () => ({
+        left: Math.random() * 100,
+        top: Math.random() * 100,
+      }))
+    )
+  }, [])
   const { register, loading, error } = useAuth()
 
   async function handleSubmit(e: React.FormEvent) {
@@ -36,13 +46,13 @@ export default function RegisterPage() {
     <div className="relative flex min-h-screen items-center justify-center bg-background overflow-hidden">
       {/* Background dots pattern */}
       <div className="absolute inset-0 pointer-events-none">
-        {Array.from({ length: 40 }).map((_, i) => (
+        {dots.map((d, i) => (
           <div
             key={i}
             className="absolute h-1 w-1 rounded-full bg-primary/10"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
+              left: `${d.left}%`,
+              top: `${d.top}%`,
             }}
           />
         ))}

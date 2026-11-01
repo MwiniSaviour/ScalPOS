@@ -138,3 +138,24 @@ export interface CartItem {
   quantity: number
   stock: number
 }
+
+export type ScanMode = "receive" | "pos"
+
+export interface ScanSessionItem {
+  product_id: string
+  product_name: string
+  barcode: string
+  previous_stock: number
+  new_stock: number
+  quantity_added: number
+  scanned_at: string
+}
+
+export interface ScanSession {
+  id: string
+  mode: ScanMode
+  items: ScanSessionItem[]
+  started_at: string
+  completed_at: string | null
+  status: "active" | "completed"
+}

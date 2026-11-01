@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import {
   Search,
   Plus,
@@ -13,11 +13,15 @@ import {
   CreditCard,
   Banknote,
   Building2,
+  Scan,
+  Camera,
+  Barcode,
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { formatCurrency, generateInvoiceNo, cn } from "@/lib/utils"
 import { PAYMENT_METHODS } from "@/lib/constants"
 import type { Product, Customer, CartItem, Profile, Category } from "@/lib/types"
+import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
 
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -35,7 +39,29 @@ export default function PosPage() {
   const [discount, setDiscount] = useState(0)
   const [employee, setEmployee] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [showScanner, setShowScanner] = useState(false)
+  const [scanMessage, setScanMessage] = useState<string | null>(null)
+  const [productLookupError, setProductLookupError] = useState<string | null>(null)
+  const hwBufferRef = useRef("")
+  const hwTimerRef = useRef<NodeJS.Timeout | null>(null)
   const supabase = createClient()
+
+  const handleBarcodeScan = useCallback(async (barcode: string) => {
+    setScanMessage(null)
+    setProductLookupError(null)
+    const trimmed = barcode.trim()
+    if (!trimmed) return
+
+    const product = products.find(
+      (p) => p.barcode?.toLowerCase() === trimmed.toLowerCase()
+    )
+    if (product) {
+      addToCart(product)
+      setScanMessage(`Added: ${product.name}`)
+    } else {
+      setProductLookupError(`Product not found for barcode: ${trimmed}`)
+    }
+  }, [products])
 
   useEffect(() => {
     async function load() {
@@ -57,6 +83,26 @@ export default function PosPage() {
     }
     load()
   }, [supabase])
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Enter" && hwBufferRef.current.length > 3) {
+        handleBarcodeScan(hwBufferRef.current)
+        hwBufferRef.current = ""
+        if (hwTimerRef.current) clearTimeout(hwTimerRef.current)
+        return
+      }
+      if (e.key.length === 1) {
+        hwBufferRef.current += e.key
+        if (hwTimerRef.current) clearTimeout(hwTimerRef.current)
+        hwTimerRef.current = setTimeout(() => {
+          hwBufferRef.current = ""
+        }, 100)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [handleBarcodeScan])
 
   const filteredProducts = useMemo(
     () =>
@@ -218,15 +264,37 @@ export default function PosPage() {
       {/* Left: Products */}
       <div className="flex flex-1 flex-col border-r border-border">
         <div className="border-b border-border bg-card p-4">
-          <div className="relative mb-3">
+          {scanMessage && (
+            <div className="mb-2 rounded-lg bg-success-bg px-3 py-2 text-xs text-success flex items-center gap-2">
+              <Barcode size={14} />
+              {scanMessage}
+            </div>
+          )}
+          {productLookupError && (
+            <div className="mb-2 rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger flex items-center gap-2">
+              <Barcode size={14} />
+              {productLookupError}
+              <button onClick={() => setProductLookupError(null)} className="ml-auto">
+                <X size={12} />
+              </button>
+            </div>
+          )}
+          <div className="relative mb-3 flex gap-2">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
             <input
               placeholder="Search by name, SKU, or barcode..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="input-field pl-9"
+              className="input-field flex-1 pl-9"
               autoFocus
             />
+            <button
+              onClick={() => setShowScanner(true)}
+              className="btn-secondary shrink-0"
+              title="Scan barcode"
+            >
+              <Scan size={16} />
+            </button>
           </div>
           <div className="flex gap-2 overflow-x-auto pb-1">
             <button
@@ -479,6 +547,30 @@ export default function PosPage() {
           </button>
         </div>
       </div>
+
+      {/* Scanner Modal */}
+      {showScanner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Camera size={18} className="text-primary" />
+                <h2 className="text-lg font-bold text-foreground">Scan Barcode</h2>
+              </div>
+              <button onClick={() => setShowScanner(false)} className="btn-ghost p-1">
+                <X size={18} />
+              </button>
+            </div>
+            <BarcodeScanner
+              onScan={(barcode) => {
+                handleBarcodeScan(barcode)
+                setShowScanner(false)
+              }}
+              onError={(err) => setProductLookupError(err)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Receipt Modal */}
       {showReceipt && lastSale && (

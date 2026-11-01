@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronRight, LayoutGrid } from "lucide-react"
 import { NAV_ITEMS, APP_NAME } from "@/lib/constants"
-import { createClient } from "@/lib/supabase/client"
 import type { Profile } from "@/lib/types"
 import type { NavItem } from "@/lib/types"
 
@@ -32,44 +31,25 @@ function findBreadcrumb(
   return [{ label: "Dashboard" }]
 }
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname()
   const [profile, setProfile] = useState<Profile | null>(null)
-  const supabase = createClient()
 
   const breadcrumbs = findBreadcrumb(NAV_ITEMS, pathname)
 
   useEffect(() => {
     async function load() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
-        if (!user) return
-        const { data } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single()
-        if (data) {
-          setProfile(data)
-          console.log("Actual Supabase User Role:", data.role)
+        const res = await fetch("/auth/api/me")
+        if (!res.ok) return
+        const { user } = await res.json()
+        if (user) {
+          setProfile({ id: user.id, name: user.name, email: user.email, role: user.role } as Profile)
         }
       } catch {}
     }
     load()
-  }, [supabase])
-
-  // Add a function to check current user role
-  const checkUserRole = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
-    const { data } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single()
-    console.log("Current User Supabase Role:", data?.role)
-    return data?.role
-  }
+  }, [])
 
   function getGreeting() {
     const hour = new Date().getHours()
@@ -82,7 +62,10 @@ export function Header() {
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-8">
       {/* Left: Breadcrumb */}
       <div className="flex items-center gap-2">
-        <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover transition-all lg:hidden">
+        <button
+          onClick={onMenuClick}
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover transition-all lg:hidden"
+        >
           <LayoutGrid size={18} />
         </button>
         <nav className="flex items-center gap-1.5 text-sm">
