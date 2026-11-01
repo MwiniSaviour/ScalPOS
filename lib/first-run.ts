@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { PIN_KEY } from "./pin";
+import { ensureTrialStart } from "./trial";
 
 const ONBOARD_KEY = "nova-pos-onboarded";
 const STORE_KEY = "nova-pos-v1";
@@ -69,6 +70,8 @@ export function hasOnboarded(): boolean {
 export function markOnboarded(): void {
   if (typeof window === "undefined") return;
   try {
+    // The free trial starts when the shop is set up on this device.
+    ensureTrialStart();
     window.localStorage.setItem(ONBOARD_KEY, "1");
     window.dispatchEvent(new Event(ONBOARD_EVENT));
   } catch {}

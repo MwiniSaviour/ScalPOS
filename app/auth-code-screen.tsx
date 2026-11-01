@@ -61,6 +61,16 @@ export default function AuthCodeScreen() {
     emailSentRef.current = true;
     void (async () => {
       try {
+        // This page may be remounted while a sign-up is already waiting for
+        // its code. Recreating it would invalidate the code the user got.
+        const pending =
+          signUp.status === "missing_requirements" &&
+          signUp.unverifiedFields.includes("email_address") &&
+          (signUp.emailAddress ?? "").toLowerCase() === email.toLowerCase();
+        if (pending) {
+          setCool(30);
+          return;
+        }
         await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
         await signUp.prepareVerification({ strategy: "email_code" });
         setCool(30);
@@ -126,15 +136,28 @@ export default function AuthCodeScreen() {
   }
 
   async function resend() {
-    if (!signIn || cooling || busy) return;
+    if (cooling || busy) return;
     setBusy(true);
     setError(null);
     try {
       if (isNew) {
         if (!signUp) throw new Error("Sign-up is still loading. Try again.");
-        await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
-        await signUp.prepareVerification({ strategy: "email_code" });
+        const pending =
+          signUp.status === "missing_requirements" &&
+          (signUp.emailAddress ?? "").toLowerCase() === email.toLowerCase();
+        if (pending) {
+          try {
+            await signUp.prepareVerification({ strategy: "email_code" });
+          } catch {
+            await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
+            await signUp.prepareVerification({ strategy: "email_code" });
+          }
+        } else {
+          await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
+          await signUp.prepareVerification({ strategy: "email_code" });
+        }
       } else {
+        if (!signIn) throw new Error("Sign-in is still loading. Try again.");
         await signIn.create({ identifier: email, strategy: "email_code" });
       }
       setCool(30);
@@ -236,9 +259,24 @@ export default function AuthCodeScreen() {
               aria-label={`Digit ${i + 1}`}
               value={d}
               onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "").slice(-1);
+                const v = e.target.value.replace(/\D/g, "");
+                if (!v) {
+                  setDigit(i, "");
+                  return;
+                }
+                // Android/email autofill often drops the whole one-time code
+                // into the first box. Spread it across the remaining boxes.
+                if (v.length > 1) {
+                  setDigits((prev) => {
+                    const next = [...prev];
+                    for (let j = 0; j < v.length && i + j < 6; j++) next[i + j] = v[j];
+                    return next;
+                  });
+                  refs.current[Math.min(5, i + v.length - 1)]?.focus();
+                  return;
+                }
                 setDigit(i, v);
-                if (v && i < 5) refs.current[i + 1]?.focus();
+                if (i < 5) refs.current[i + 1]?.focus();
               }}
               onKeyDown={(e) => {
                 if (e.key !== "Backspace") return;

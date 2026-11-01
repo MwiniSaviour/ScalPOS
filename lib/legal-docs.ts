@@ -49,7 +49,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Subscriptions",
         body: [
-          "ScalPOS has two paid plans: Offline Single Owner at GHS 120 per year and Enterprise at GHS 360 per year. See the Subscription and Refund Policy for what each plan includes.",
+          "ScalPOS has two paid plans: Offline Single Owner at GHS 120 per year and Enterprise at GHS 360 per year. Every new shop gets a 7-day free trial; when the trial ends without an active plan, the app locks until you subscribe. See the Subscription and Refund Policy for what each plan includes.",
           "Plans are billed through Paystack, a payment service provider licensed under Ghana's Payment Systems and Services Act, 2019 (Act 987). You are charged once for 12 months and never automatically recharged — renewal is always manual. You can cancel at any time in the app or by emailing support@scalmint.com.",
         ],
       },
@@ -63,7 +63,7 @@ export const LEGAL_DOCS: LegalDoc[] = [
       {
         heading: "Deleting your account",
         body: [
-          "You can delete your account from the app or by email. Request deletion at https://pos.scalmint.com/data-deletion or email support@scalmint.com. When you do, your shop's data is removed from our cloud within 30 days.",
+          "You can delete your account yourself in the app: More → My account → Danger zone → Delete account. If you're the shop owner, this also deletes your shop's synced data; if other people are still on the shop, remove them or make one of them the owner first. You can also request deletion at https://pos.scalmint.com/data-deletion or email support@scalmint.com. Deletions are actioned immediately, and any provider backups are cleared within 30 days.",
           "Where the law requires records to be kept longer, we may keep the minimum needed, or keep billing records in anonymised form. Data on your local devices stays there until you erase it yourself.",
         ],
       },
@@ -195,6 +195,12 @@ export const LEGAL_DOCS: LegalDoc[] = [
         heading: "About this policy",
         body: [
           "This policy explains the two ScalPOS plans, how billing works, when you get a refund and how prices change. It is part of the ScalPOS Terms of Service.",
+        ],
+      },
+      {
+        heading: "Free trial and access",
+        body: [
+          "Every new shop gets a 7-day free trial with full access to the app, no card needed. When the trial ends, ScalPOS locks until an active plan is purchased. The app also locks if a plan expires and is not renewed. Your shop data stays on your device while the app is locked, and you can export a backup at any time.",
         ],
       },
       {

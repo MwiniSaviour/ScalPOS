@@ -363,13 +363,13 @@ export function InteractiveRegisterDemo({
             <div className="mt-3 rounded-xl border border-line2 bg-surface p-5 font-mono text-xs">
               <div className="border-b border-dashed border-line2 pb-3 text-center">
                 <p className="font-sans text-sm font-bold tracking-tight text-ink">
-                  BRIGHT CORNER STORES
+                  YOUR SHOP NAME
                 </p>
                 <p className="mt-0.5 text-[11px] text-ink3">
-                  12 Osu Badu Street, Airport West, Accra
+                  Your address · Accra, Ghana
                 </p>
                 <p className="tabnum text-[11px] text-ink3">
-                  Tel: +233 24 555 1020 · MoMo: 0245551020
+                  Tel: your number · MoMo: your number
                 </p>
               </div>
 

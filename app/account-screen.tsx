@@ -4,10 +4,14 @@ import { Avatar } from "@/components/ui/avatar";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import { ChevronLeft, ChevronRight, Camera, ImagePlus, Trash2 } from "lucide-react";
 import { processImageFile, saveImageBlob } from "@/lib/image-store";
 import { useImageSrc } from "@/lib/use-image-src";
 import { usePos } from "@/lib/store";
+import { deleteCloudAccount, wipeDeviceAccountData } from "@/lib/api/account";
+import { writeConnection } from "@/lib/api/bootstrap";
+import { useAuth, useUser } from "@clerk/clerk-react";
 import {
   roleLabel,
   rolePillStyle,
@@ -28,13 +32,19 @@ export default function AccountScreen() {
   const staff = useStaffList();
   const shopName = usePos((s) => s.settings.shopName);
   const toast = usePos((s) => s.toast);
+  const { isSignedIn, signOut } = useAuth();
+  const { user: authUser } = useUser();
 
   const [busy, setBusy] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const galleryInput = useRef<HTMLInputElement | null>(null);
   const cameraInput = useRef<HTMLInputElement | null>(null);
 
   const [name, setName] = useState(me?.name ?? "");
   const nameOk = name.trim().length > 0;
+  const deleteConfirmed = confirmText.trim().toUpperCase() === "DELETE";
 
   if (!me) return null;
 
@@ -64,6 +74,51 @@ export default function AccountScreen() {
     if (!nameOk || !nameDirty) return;
     upsertStaff({ ...me, name: name.trim() });
     toast("Name saved");
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!deleteConfirmed || deleting) return;
+    setDeleting(true);
+    try {
+      const result = await deleteCloudAccount();
+      const wipedShop = result.deletedOrgs > 0;
+      writeConnection(null);
+      if (wipedShop) await wipeDeviceAccountData();
+
+      let identityGone = result.clerkDeleted;
+      if (!identityGone && authUser) {
+        try {
+          await authUser.delete();
+          identityGone = true;
+        } catch {
+          /* self-delete may be disabled for this Clerk instance */
+        }
+      }
+      try {
+        await signOut();
+      } catch {
+        /* session may already be gone */
+      }
+
+      if (wipedShop) {
+        toast(
+          identityGone
+            ? "Your account and shop data were deleted"
+            : "Shop data deleted, but your sign-in could not be closed — contact support",
+          identityGone ? "ok" : "warn",
+        );
+        window.location.replace("/");
+      } else {
+        toast(
+          identityGone ? "Your account was deleted" : "You were removed from the shop",
+          "ok",
+        );
+        window.location.replace("/home");
+      }
+    } catch (err) {
+      toast(err instanceof Error ? err.message : "Could not delete your account", "error");
+      setDeleting(false);
+    }
   };
 
   return (
@@ -187,6 +242,83 @@ export default function AccountScreen() {
           </Link>
         </Card>
       </section>
+
+      {isSignedIn && (
+        <section className="mt-6">
+          <h2 className="text-[15px] font-medium text-danger">Danger zone</h2>
+          <Card className="mt-2.5 border-danger/30 p-4">
+            <p className="text-[13px]/5 text-ink3">
+              Permanently delete your ScalPOS account and the data synced to our cloud. This
+              can&rsquo;t be undone.
+            </p>
+            <Button
+              variant="danger"
+              className="mt-3"
+              icon={<Trash2 className="size-4" />}
+              onClick={() => {
+                setConfirmText("");
+                setDeleteOpen(true);
+              }}
+            >
+              Delete account
+            </Button>
+          </Card>
+        </section>
+      )}
+
+      <Sheet
+        open={deleteOpen}
+        onClose={() => {
+          if (!deleting) setDeleteOpen(false);
+        }}
+        height="auto"
+        title={<span className="text-danger">Delete account?</span>}
+        footer={
+          <div className="flex gap-2.5">
+            <Button
+              variant="secondary"
+              block
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              block
+              loading={deleting}
+              disabled={!deleteConfirmed}
+              onClick={() => void handleDeleteAccount()}
+            >
+              Delete account
+            </Button>
+          </div>
+        }
+      >
+        <div className="pb-4">
+          <p className="text-[14px]/6 text-ink2">
+            This permanently deletes your sign-in and the shop data synced to our cloud —
+            products, orders, customers, staff and settings.
+          </p>
+          <ul className="mt-2.5 list-disc space-y-1 pl-4 text-[13px]/5 text-ink3">
+            <li>If you own the shop, the local copy on this device is wiped too.</li>
+            <li>
+              If other people are still on your shop, remove them or make one of them the owner
+              first.
+            </li>
+            <li>Any data that only lives on another device is not affected.</li>
+          </ul>
+          <Input
+            className="mt-4"
+            label="Type DELETE to confirm"
+            placeholder="DELETE"
+            autoCapitalize="characters"
+            autoCorrect="off"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+          />
+        </div>
+      </Sheet>
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { getSubscription } from "@/lib/api/billing";
+import { recordSubscriptionState } from "@/lib/entitlement";
 import { AlertCircle, BadgeCheck, Clock, RefreshCw, Smartphone, XCircle } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useSyncExternalStore, useState } from "react";
@@ -52,6 +53,7 @@ export default function PaystackCallbackScreen() {
         for (let attempt = 0; attempt < 3; attempt++) {
           if (!alive) return;
           const s = await getSubscription(conn);
+          recordSubscriptionState(s, conn.org_id);
           if (s.status === "active") {
             active = true;
             break;

@@ -23,8 +23,9 @@ export default function DataDeletionScreen() {
           Delete your ScalPOS data
         </h1>
         <p className="mt-2 text-[15px]/6 text-ink3">
-          You can ask us to delete your ScalPOS account and the shop data synced to our cloud.
-          Requests are handled within 30 days.
+          The fastest way is in the app: <strong className="font-semibold text-ink">More → My
+          account → Danger zone → Delete account</strong>. If you can&rsquo;t open the app, email
+          us and we&rsquo;ll handle it within 30 days.
         </p>
 
         <section className="mt-8 rounded-card border border-line bg-surface p-4">
@@ -33,7 +34,7 @@ export default function DataDeletionScreen() {
               <Trash2 className="size-[18px]" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-[17px] font-semibold text-ink">How to request deletion</h2>
+              <h2 className="text-[17px] font-semibold text-ink">If you can&rsquo;t open the app</h2>
               <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-[14px]/6 text-ink3">
                 <li>Email us from the address linked to your ScalPOS account.</li>
                 <li>Use the subject line &ldquo;Data deletion request&rdquo;.</li>

@@ -232,7 +232,7 @@ export const TESTIMONIALS: TestimonialItem[] = [
       "Before ScalPOS, customers who bought on part-payment were written in a notebook that got torn or misplaced. In our first six weeks we recovered over ₵3,800 in outstanding balances, and evening cash counting dropped from 45 minutes to under 3.",
     name: "Ama Serwaa Mensah",
     role: "Owner",
-    shopName: "Bright Corner Provisions",
+    shopName: "Provisions shop",
     location: "Osu, Accra",
     metricLabel: "Credit recovered in 6 weeks",
     metricValue: "₵3,840",
@@ -302,7 +302,7 @@ export const FAQ_ITEMS: FaqItem[] = [
   {
     id: "faq-5",
     q: "How do the 7-day free trial and yearly Paystack billing work?",
-    a: "Single-device offline usage is free forever. When you connect your shop for cloud backup or multi-device team sync, you get a 7-day free trial. After the trial, plans are billed yearly via Paystack in Ghana cedis—Standard is ₵120/year (₵10/month) and Enterprise is ₵360/year (₵30/month). You can keep renewal on Manual (default) or enable Auto-renew.",
+    a: "Every new shop gets a 7-day free trial with the full app, no card needed. When the trial ends, ScalPOS locks until you pick a plan — Standard is ₵120/year (₵10/month) and Enterprise is ₵360/year (₵30/month), billed yearly via Paystack in Ghana cedis. The app keeps working offline once subscribed, and you can keep renewal on Manual (default) or enable Auto-renew.",
   },
   {
     id: "faq-6",
@@ -313,7 +313,6 @@ export const FAQ_ITEMS: FaqItem[] = [
 
 export type ComparisonRow = {
   feature: string;
-  starter: string | boolean;
   standard: string | boolean;
   enterprise: string | boolean;
 };
@@ -321,67 +320,56 @@ export type ComparisonRow = {
 export const PLAN_COMPARISON: ComparisonRow[] = [
   {
     feature: "Offline POS register, cart & discounts",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Cash, MTN MoMo, Card & split payments",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Camera barcode scanner & WebP product photos",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Bluetooth ESC/POS thermal & digital receipts",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Stock ledger, audit reasons & low-stock alerts",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Customer profiles & credit balance tracking",
-    starter: true,
     standard: true,
     enterprise: true,
   },
   {
     feature: "Backup & device restore",
-    starter: "Local JSON export",
     standard: "Automatic cloud backup",
     enterprise: "Real-time cloud backup",
   },
   {
     feature: "Staff accounts & role permissions",
-    starter: "1 Owner (local)",
     standard: "Single owner",
     enterprise: "Owner, Supervisor & Cashier",
   },
   {
     feature: "Multi-device sync & conflict resolution",
-    starter: false,
     standard: false,
     enterprise: true,
   },
   {
     feature: "Remote owner sale & low-stock notifications",
-    starter: false,
     standard: "On-device",
     enterprise: "Synced across owner devices",
   },
   {
     feature: "Counter & desktop access",
-    starter: "1 device",
     standard: "1 active device",
     enterprise: "Unlimited counters & desktop",
   },

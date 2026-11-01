@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button, IconButton } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
@@ -10,14 +10,9 @@ import { usePos } from "@/lib/store";
 import { createStaff, setCurrentStaff } from "@/lib/staff";
 import { markOnboarded, useHasOnboarded } from "@/lib/first-run";
 import { savePin, setSessionUnlocked } from "@/lib/pin";
-import { useSignUp } from "@clerk/clerk-react";
 import { ChevronLeft, Eye, EyeOff } from "lucide-react";
 
 const SHOP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const DRAWER_PASSWORD: string =
-  typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-    ? `${crypto.randomUUID()}${crypto.randomUUID()}`
-    : `${Date.now()}${Math.random()}`;
 
 export default function ShopCreateScreen() {
   const router = useRouter();
@@ -33,7 +28,6 @@ export default function ShopCreateScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const onboarded = useHasOnboarded();
-  const { signUp } = useSignUp();
   const [email, setEmail] = useState("");
 
   const shopNameOk = shopName.trim().length > 0;
@@ -79,11 +73,8 @@ export default function ShopCreateScreen() {
       toast("Shop created — protected with your PIN");
 
       if (emailTrim) {
-        // Optional: create a shop account now so cloud sync/billing can be
-        // linked from the email instead of only from the Settings flow.
-        if (!signUp) throw new Error("Sign-up is still loading. Try again.");
-        await signUp.create({ emailAddress: emailTrim, password: DRAWER_PASSWORD });
-        await signUp.prepareVerification({ strategy: "email_code" });
+        // The code screen owns sign-up creation and sends the single
+        // verification email, so this shop is never double-registered.
         router.push(`/auth/code?email=${encodeURIComponent(emailTrim)}&new=1&from=shop-create`);
         return;
       }
@@ -97,34 +88,13 @@ export default function ShopCreateScreen() {
   }
 
 
-  if (onboarded) {
-    return (
-      <div className="anim-fade flex min-h-dvh flex-col justify-center px-5 pb-[calc(var(--nova-sab)+24px)]">
-        <Card className="px-4 py-5">
-          <h2 className="text-[20px] font-bold tracking-[-0.02em] text-ink">
-            Shop already exists on this device
-          </h2>
-          <p className="mt-1.5 text-[14px] text-ink3">
-            You create one shop per device. Open your shop, or sign in to a different account to
-            link it.
-          </p>
-          <div className="mt-4 flex flex-col gap-2">
-            <Button block onClick={() => router.replace("/")} data-testid="gate-home">
-              Go to my shop
-            </Button>
-            <Button
-              variant="secondary"
-              block
-              onClick={() => router.push("/connect")}
-              data-testid="gate-connect"
-            >
-              Sign in to a different account
-            </Button>
-          </div>
-        </Card>
-      </div>
-    );
-  }
+  // An existing shop is detected silently: route straight into it instead of
+  // showing a "shop already exists" interstitial to first-time installers.
+  useEffect(() => {
+    if (onboarded) router.replace("/home");
+  }, [onboarded, router]);
+
+  if (onboarded) return null;
 
   return (
     <div className="anim-fade px-5 pt-4 pb-[calc(var(--nova-sab)+110px)]">
@@ -146,7 +116,7 @@ export default function ShopCreateScreen() {
             label="Shop name"
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}
-            placeholder="Bright Corner Stores"
+            placeholder="e.g. Community mini mart"
             error={!shopNameOk ? "Shop name is required" : undefined}
             leading={<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/10"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg></span>}
           />

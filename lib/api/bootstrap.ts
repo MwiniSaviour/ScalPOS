@@ -1,4 +1,5 @@
 import { getSupabase } from "@/lib/api/supabase";
+import { readTrialStart } from "@/lib/trial";
 
 const STORAGE_KEY = "nova-pos-sync-v1";
 
@@ -74,10 +75,14 @@ export async function bootstrapConnection(o: {
   action?: "create";
 }): Promise<SyncConnection> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const trialStart = readTrialStart();
   const res = await fetch(`${url}/functions/v1/bootstrap-org`, {
     method: "POST",
     headers: { Authorization: `Bearer ${o.access_token}`, "Content-Type": "application/json" },
-    body: JSON.stringify(o.action ? { action: o.action } : {}),
+    body: JSON.stringify({
+      ...(o.action ? { action: o.action } : {}),
+      ...(trialStart ? { trial_started_at: trialStart } : {}),
+    }),
   });
   const json = (await res.json().catch(() => ({}))) as { org_id?: string; error?: string; detail?: string };
   if (!res.ok || !json.org_id) {

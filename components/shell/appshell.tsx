@@ -12,6 +12,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { cn } from "@/lib/ui";
 import { initDeepLinking } from "@/lib/deep-link";
 import { PinGate } from "@/components/pin-gate";
+import { SubscriptionGate } from "./subscription-gate";
 import { appChrome } from "@/lib/appchrome";
 import { hasPin, sessionUnlocked, subscribeLock } from "@/lib/pin";
 
@@ -75,8 +76,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+136px)]")}>
-      <PinGate>{children}</PinGate>
-      <ChromeGate isLanding={false} />
+      <SubscriptionGate>
+        <PinGate>{children}</PinGate>
+        <ChromeGate isLanding={false} />
+      </SubscriptionGate>
     </div>
   );
 }

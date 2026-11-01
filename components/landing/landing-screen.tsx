@@ -25,40 +25,6 @@ import { RisingCurveInfographic } from "./rising-curve-hero";
 import { InteractiveRegisterDemo } from "./interactive-register-demo";
 import { OutcomesInfographic } from "./outcomes-infographic";
 
-function NovaBrandLogo({ className = "size-7" }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 100 100"
-      className={className}
-      aria-hidden="true"
-    >
-      <defs>
-        <linearGradient id="novaLogoGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#34d399" />
-          <stop offset="1" stopColor="#059669" />
-        </linearGradient>
-      </defs>
-      <rect width="100" height="100" rx="24" fill="#0a0e17" />
-      <rect
-        x="22"
-        y="26"
-        width="56"
-        height="16"
-        rx="5"
-        fill="url(#novaLogoGrad)"
-      />
-      <path
-        d="M30 50h40l-4 24a4 4 0 0 1-4 3.4H38a4 4 0 0 1-4-3.4Z"
-        fill="url(#novaLogoGrad)"
-        opacity=".9"
-      />
-      <circle cx="40" cy="66" r="3.4" fill="#0a0e17" />
-      <circle cx="60" cy="66" r="3.4" fill="#0a0e17" />
-    </svg>
-  );
-}
-
 export default function LandingScreen() {
   const router = useRouter();
   const theme = usePos((s) => s.settings.theme);
@@ -137,7 +103,7 @@ export default function LandingScreen() {
               href="/"
               className="press flex items-center gap-2 focus:outline-none"
             >
-              <NovaBrandLogo className="size-7 rounded-lg" />
+              <img src="/icon-512.png" alt="ScalPOS" className="size-7 rounded-lg" draggable={false} />
               <span className="text-[19px] font-bold tracking-tight text-white">
                 ScalPOS
               </span>
@@ -749,9 +715,9 @@ export default function LandingScreen() {
                 Simple yearly pricing in Ghana cedis
               </h2>
               <p className="mt-2 text-base text-ink2">
-                Single-device offline usage is free forever. Connected cloud
-                plans start with a 7-day free trial and bill yearly via
-                Paystack.
+                Every shop starts with a full 7-day free trial — no card
+                needed. After that, pick a plan to keep using ScalPOS. Plans
+                bill yearly via Paystack.
               </p>
             </div>
 
@@ -784,49 +750,8 @@ export default function LandingScreen() {
             </div>
           </div>
 
-          {/* 3 Clean Plan Columns */}
-          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {/* Offline Starter */}
-            <div className="flex flex-col justify-between rounded-2xl border border-line2 bg-surface p-7">
-              <div>
-                <h3 className="text-lg font-bold text-ink">Offline Starter</h3>
-                <p className="mt-1.5 text-sm text-ink2">
-                  For solo shop owners running a digital register on a single
-                  device without cloud sync.
-                </p>
-                <div className="mt-6 flex items-baseline gap-1.5">
-                  <span className="tabnum text-3xl font-extrabold tracking-tight text-ink">
-                    {fmtMoney(0)}
-                  </span>
-                  <span className="text-xs text-ink3">/ forever on device</span>
-                </div>
-
-                <ul className="mt-6 space-y-2.5 border-t border-line pt-6 text-sm text-ink2">
-                  {[
-                    "Offline POS register & cart discounts",
-                    "Unlimited products, categories & sales",
-                    "Cash, MTN MoMo, Card & credit ledger",
-                    "Camera barcode scanner & WebP photos",
-                    "Bluetooth ESC/POS thermal printing",
-                    "Local JSON backup export",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2.5">
-                      <Check className="mt-0.5 size-4 shrink-0 text-ink3" />
-                      <span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => launchApp("/sell")}
-                className="press mt-8 w-full rounded-xl border border-line2 bg-surface2 py-3 text-xs font-semibold text-ink hover:bg-surface3"
-              >
-                Use offline for free
-              </button>
-            </div>
-
+          {/* 2 Clean Plan Columns */}
+          <div className="mt-10 grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Standard Plan */}
             <div className="flex flex-col justify-between rounded-2xl border border-line2 bg-surface p-7">
               <div>
@@ -846,9 +771,9 @@ export default function LandingScreen() {
 
                 <ul className="mt-6 space-y-2.5 border-t border-line pt-6 text-sm text-ink2">
                   {[
-                    "Everything in Offline Starter",
+                    "Full offline POS register & cart discounts",
                     "Single owner cloud account",
-                    "Unlimited sales & offline register",
+                    "Unlimited products, sales & customers",
                     "Automatic cloud backup & restore",
                     "Paystack checkout (MoMo or Card)",
                     renewalMode === "manual"
@@ -943,11 +868,10 @@ export default function LandingScreen() {
 
             {showFullComparison && (
               <div className="anim-fade mt-4 overflow-x-auto rounded-2xl border border-line2 bg-surface">
-                <table className="w-full min-w-[600px] border-collapse text-left text-xs">
+                <table className="w-full min-w-[520px] border-collapse text-left text-xs">
                   <thead>
                     <tr className="border-b border-line bg-surface2/60 font-semibold text-ink2">
                       <th className="py-3.5 pl-5 pr-4">Feature</th>
-                      <th className="px-4 py-3.5">Offline Starter (₵0)</th>
                       <th className="px-4 py-3.5">Standard (₵120/yr)</th>
                       <th className="py-3.5 pl-4 pr-5">
                         Enterprise (₵360/yr)
@@ -960,7 +884,7 @@ export default function LandingScreen() {
                         <td className="py-3 pl-5 pr-4 font-medium text-ink">
                           {row.feature}
                         </td>
-                        {[row.starter, row.standard, row.enterprise].map(
+                        {[row.standard, row.enterprise].map(
                           (cell, idx) => (
                             <td key={idx} className="px-4 py-3 text-ink2">
                               {typeof cell === "boolean" ? (
@@ -1041,8 +965,9 @@ export default function LandingScreen() {
             Set up your shop register in minutes
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-slate-300 sm:text-base">
-            Start ringing up sales offline right away, or connect your shop for
-            a 7-day free trial of cloud backup and team sync.
+            Every shop starts with a 7-day free trial — the full register,
+            inventory, receipts and cloud backup. Pick a plan when the trial
+            ends to keep selling.
           </p>
 
           <form
@@ -1092,7 +1017,7 @@ export default function LandingScreen() {
           <div className="grid grid-cols-2 gap-8 md:grid-cols-5">
             <div className="col-span-2">
               <div className="flex items-center gap-2">
-                <NovaBrandLogo className="size-6 rounded-md" />
+                <img src="/icon-512.png" alt="ScalPOS" className="size-6 rounded-md" draggable={false} />
                 <span className="text-base font-bold tracking-tight text-ink">
                   ScalPOS
                 </span>

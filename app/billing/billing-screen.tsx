@@ -6,6 +6,7 @@ import { ScreenHeader } from "@/components/shell/screenheader";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { Chip } from "@/components/ui/chip";
 import { getSubscription, startCheckout, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
+import { recordSubscriptionState } from "@/lib/entitlement";
 import { dateShort } from "@/lib/format";
 import { toneClasses, cn } from "@/lib/ui";
 import { usePos } from "@/lib/store";
@@ -113,6 +114,7 @@ export default function BillingScreen() {
     try {
       const next = await getSubscription(conn);
       setState(next);
+      recordSubscriptionState(next, conn.org_id);
       toast(statusToast(next), next.status === "active" ? "ok" : "warn");
     } catch (e) {
       setError(errorText(e));
@@ -126,7 +128,10 @@ export default function BillingScreen() {
     let alive = true;
     getSubscription(conn)
       .then((s) => {
-        if (alive) setState(s);
+        if (alive) {
+          setState(s);
+          recordSubscriptionState(s, conn.org_id);
+        }
       })
       .catch((e: unknown) => {
         if (alive) setError(errorText(e));

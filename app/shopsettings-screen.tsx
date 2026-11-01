@@ -74,7 +74,7 @@ export default function ShopSettingsScreen() {
                 setShopName(e.target.value);
                 if (nameError) setNameError("");
               }}
-              placeholder="Bright Corner Stores"
+              placeholder="e.g. Community mini mart"
               error={nameError || undefined}
             />
             <Input

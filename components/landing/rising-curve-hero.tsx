@@ -233,10 +233,10 @@ export function RisingCurveInfographic({
             <div className="flex items-center gap-3 text-slate-400">
               <Clock className="size-4" />
               <span className="text-xs font-medium text-slate-300">
-                Bright Corner Stores
+                ScalPOS Register
               </span>
               <span className="hidden text-xs text-slate-500 md:inline">
-                · Osu Badu St, Accra
+                · Live shop view
               </span>
             </div>
 

@@ -4,7 +4,7 @@ import { ClerkGate } from "@/components/shell/clerk-gate";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "ScalPOS — Bright Corner Stores",
+  title: "ScalPOS — Point of sale for Ghanaian shops",
   description: "Offline-first point of sale for Ghanaian retail",
   applicationName: "ScalPOS",
   manifest: "/manifest.json",
