@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AffiliateRefCapture } from "@/components/affiliate-ref-capture";
 import { AppShell } from "@/components/shell/appshell";
 import { ClerkGate } from "@/components/shell/clerk-gate";
 import "./globals.css";
@@ -50,6 +51,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         </head>
         <body>
+          <AffiliateRefCapture />
           <AppShell>{children}</AppShell>
         </body>
       </html>

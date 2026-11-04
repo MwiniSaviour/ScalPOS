@@ -5,8 +5,16 @@ import { Card } from "@/components/ui/card";
 import { ScreenHeader } from "@/components/shell/screenheader";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { Chip } from "@/components/ui/chip";
+import { Input } from "@/components/ui/input";
 import { getSubscription, startCheckout, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
 import { recordSubscriptionState } from "@/lib/entitlement";
+import {
+  clearAffiliateRef,
+  normalizeAffiliateRef,
+  readAffiliateRef,
+  saveAffiliateRef,
+  subscribeAffiliateRef,
+} from "@/lib/affiliate";
 import { dateShort } from "@/lib/format";
 import { toneClasses, cn } from "@/lib/ui";
 import { usePos } from "@/lib/store";
@@ -106,6 +114,8 @@ export default function BillingScreen() {
   const [busy, setBusy] = useState<SubPlan | "refresh" | null>(null);
   const [renewal, setRenewal] = useState<Renewal>("manual");
   const [error, setError] = useState<string | null>(null);
+  const [affiliateCode, setAffiliateCode] = useState("");
+  const [affiliateError, setAffiliateError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!conn) return;
@@ -122,6 +132,12 @@ export default function BillingScreen() {
       setBusy(null);
     }
   }, [conn, toast]);
+
+  useEffect(() => {
+    const stored = readAffiliateRef();
+    if (stored) queueMicrotask(() => setAffiliateCode(stored));
+    return subscribeAffiliateRef((code) => setAffiliateCode(code ?? ""));
+  }, []);
 
   useEffect(() => {
     if (!conn) return;
@@ -146,10 +162,24 @@ export default function BillingScreen() {
 
   const subscribe = async (plan: SubPlan) => {
     if (!conn || busy) return;
+    const rawCode = affiliateCode.trim();
+    let code: string | null = null;
+    if (rawCode) {
+      code = normalizeAffiliateRef(rawCode);
+      if (!code) {
+        setAffiliateError("Referral code should look like SCAL-XXXXXXXX.");
+        return;
+      }
+      saveAffiliateRef(code);
+      setAffiliateCode(code);
+    } else {
+      clearAffiliateRef();
+    }
+    setAffiliateError(null);
     setBusy(plan);
     setError(null);
     try {
-      const payload = await startCheckout(conn, plan, renewal);
+      const payload = await startCheckout(conn, plan, renewal, code);
       sessionStorage.setItem("nova-pos-checkout-v1", JSON.stringify(payload));
       router.push(`/paystack/pay?ref=${encodeURIComponent(payload.reference)}`);
     } catch (e) {
@@ -325,6 +355,21 @@ export default function BillingScreen() {
               onSubscribe={() => void subscribe("enterprise")}
             />
           </div>
+          <Input
+            className="mt-4"
+            label="Referral code (optional)"
+            value={affiliateCode}
+            onChange={(e) => {
+              setAffiliateCode(e.target.value.toUpperCase());
+              setAffiliateError(null);
+            }}
+            placeholder="SCAL-XXXXXXXX"
+            hint={affiliateError ? undefined : "Referred by a ScalMint affiliate? Enter their code."}
+            error={affiliateError ?? undefined}
+            autoCapitalize="characters"
+            autoCorrect="off"
+            spellCheck={false}
+          />
           <p className="mt-4 text-[13px] leading-5 text-ink3">
             Payments handled by Paystack. By subscribing you agree to our{" "}
             <a

@@ -16,6 +16,11 @@ export function readCallbackQuery(deepLinkUrl: string): string | null {
   try {
     const u = new URL(deepLinkUrl);
     if (!/^novapos:$/i.test(u.protocol)) return null;
+    const path = u.pathname.replace(/\/+$/, "");
+    const isAuthCallback =
+      (u.host.toLowerCase() === "auth" && path === "/callback") ||
+      (u.host === "" && path === "/auth/callback");
+    if (!isAuthCallback) return null;
     const qs = u.search;
     if (qs && qs.length > 1) return qs.slice(1);
     const hash = u.hash;

@@ -17,8 +17,10 @@ import { getSupabase } from "@/lib/api/supabase";
 import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
-import type { Category, Customer, Order, Product, StockMove } from "@/lib/types";
+import type { Category, Customer, Order, Product, Settings, StockMove } from "@/lib/types";
+import { isDemoMode } from "@/lib/demo";
 import type { Op } from "./types";
+import { pullSettings } from "./settings";
 
 const IDMAP_KEY = "nova-pos-idmap-v1";
 const FIRST_PUSH_KEY = "nova-pos-first-push-v1";
@@ -74,6 +76,7 @@ type Store = {
   customers: Customer[];
   orders: Order[];
   stockMoves: StockMove[];
+  settings: Settings;
 };
 
 async function store(): Promise<Store> {
@@ -404,6 +407,7 @@ function mergeLocal<T extends { id: string } & Record<string, unknown>>(table: T
 // ---- pull ------------------------------------------------------------------
 
 export async function pullAll(conn: SyncConnection): Promise<number> {
+  if (isDemoMode()) return 0;
   const c = await sb();
   if (!c) return 0;
   let count = 0;
@@ -511,6 +515,13 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
     });
 
     window.localStorage.setItem(LAST_PULL_KEY, String(Date.now()));
+
+    // Shop settings are a one-row-per-shop document, not a synced table.
+    try {
+      await pullSettings(conn);
+    } catch (e) {
+      console.warn("sync: pull settings", e);
+    }
   } finally {
     APPLYING = false;
   }
@@ -606,7 +617,25 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
   return fp;
 }
 
+/** Settings is a singleton document, so it gets its own change fingerprint. */
+function settingsFingerprint(s: Settings): string {
+  return JSON.stringify([
+    s.shopName,
+    s.address,
+    s.phone,
+    s.ownerId,
+    s.momoNumber,
+    s.momoNetwork,
+    s.taxInclusive,
+    s.taxRate,
+    s.receiptFooter,
+    s.theme,
+    s.nextOrderNo,
+  ]);
+}
+
 export async function drainOutbox(): Promise<{ applied: number; failed: number }> {
+  if (isDemoMode()) return { applied: 0, failed: 0 };
   const { drain } = await import("./outbox");
   const res = await drain();
   return { applied: res.applied, failed: res.failed.length };
@@ -636,6 +665,7 @@ export async function disarmSync() {
  * Wire everything for one connection. Idempotent per org.
  */
 export async function armSync(conn: SyncConnection) {
+  if (isDemoMode()) return;
   if (armedOrgId === conn.org_id) return;
   await disarmSync();
   armedOrgId = conn.org_id;
@@ -672,11 +702,29 @@ export async function armSync(conn: SyncConnection) {
     console.warn("sync: first push queue", e);
   }
 
+  // 1b. shop settings ride a singleton document; queue one upsert per arm so
+  // edits made before settings were synced (or on another device) reach the
+  // cloud and a reinstall can restore them.
+  try {
+    const { enqueue } = await import("./outbox");
+    await enqueue({
+      op_id: crypto.randomUUID(),
+      table: "settings",
+      kind: "upsert",
+      row: { id: "settings" },
+      created_at: Date.now(),
+    } as unknown as Op);
+  } catch (e) {
+    console.warn("sync: settings queue", e);
+  }
+
   // 2. watch the store for diffs
   let prev = fingerprint(usePos.getState() as unknown as Store);
+  let prevSettings = settingsFingerprint((usePos.getState() as unknown as Store).settings);
   watcher = {
     unsub: (usePos.subscribe as unknown as (fn: (s: unknown) => void) => () => void)((raw) => {
       if (APPLYING) return;
+      if (isDemoMode()) return;
       const s = raw as unknown as Store;
       const next = fingerprint(s);
       void (async () => {
@@ -710,6 +758,19 @@ export async function armSync(conn: SyncConnection) {
               forgetId(readMap(), t, id);
             }
           }
+        }
+        const nextSettings = settingsFingerprint(s.settings);
+        if (nextSettings !== prevSettings) {
+          prevSettings = nextSettings;
+          try {
+            await enqueue({
+              op_id: crypto.randomUUID(),
+              table: "settings",
+              kind: "upsert",
+              row: { id: "settings" },
+              created_at: Date.now(),
+            } as unknown as Op);
+          } catch {}
         }
         prev = next;
       })();

@@ -7,6 +7,8 @@ const PRICES: Record<string, number> = {
   enterprise: 36000,
 };
 
+const AFFILIATE_CODE_RE = /^SCAL-[A-Z0-9]{8}$/;
+
 function randomSuffix(len = 10): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
   let out = "";
@@ -43,6 +45,12 @@ Deno.serve(async (req: Request) => {
     return json({ error: "plan must be standard or enterprise" }, 400);
   }
   const renewal = body?.renewal === "auto" ? "auto" : "manual";
+  const rawAffiliate =
+    typeof body?.affiliate_code === "string" ? body.affiliate_code.trim().toUpperCase() : "";
+  if (rawAffiliate && !AFFILIATE_CODE_RE.test(rawAffiliate)) {
+    return json({ error: "affiliate code must look like SCAL-XXXXXXXX" }, 400);
+  }
+  const affiliateCode = rawAffiliate;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -113,12 +121,21 @@ Deno.serve(async (req: Request) => {
         ? Deno.env.get("PAYSTACK_PLAN_ENTERPRISE")
         : Deno.env.get("PAYSTACK_PLAN_STANDARD")
       : undefined;
+  const metadata: Record<string, unknown> = {
+    org_id: membership.org_id,
+    plan,
+    sub_id: subId,
+  };
+  if (affiliateCode) {
+    metadata.affiliate_code = affiliateCode;
+    metadata.product_slug = "nova-pos";
+  }
   const payBody: Record<string, unknown> = {
     email: email,
     currency: "GHS",
     channels: ["mobile_money", "card", "bank_transfer"],
     reference,
-    metadata: { org_id: membership.org_id, plan, sub_id: subId },
+    metadata,
     callback_url: `${siteUrl}/paystack/callback`,
   };
   if (planCode) {

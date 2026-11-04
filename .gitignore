@@ -60,3 +60,6 @@ tsc*.log
 *.keystore
 android/key.properties
 keystore.properties
+
+# Termux build scratch
+.tmp/

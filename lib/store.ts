@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { defaultSettings } from "./seed";
+import { isDemoMode } from "./demo";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
@@ -175,7 +176,7 @@ export const usePos = create<PosState>()(
           ...s.products.map((p) => p.imageUrl),
           ...s.orders.flatMap((o) => o.items.map((i) => i.imageUrl)),
         ];
-        void pruneImages(refs);
+        if (!isDemoMode()) void pruneImages(refs);
       },
 
       addToCart: (pid, qty = 1) => {

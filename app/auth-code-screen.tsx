@@ -32,6 +32,7 @@ export default function AuthCodeScreen() {
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [consent, setConsent] = useState(false);
   const [cool, setCool] = useState(0);
   const cooling = cool > 0;
   const emailSentRef = useRef(false);
@@ -179,9 +180,19 @@ export default function AuthCodeScreen() {
           setError("Sign-up is still loading. Try again.");
           return;
         }
+        if (!consent) {
+          setError("Please agree to the Terms and Privacy Policy to create your account.");
+          return;
+        }
+        await signUp.update({ legalAccepted: true });
         const result = await signUp.attemptEmailAddressVerification({ code });
         if (result.status !== "complete") {
-          setError("Couldn't confirm the code — try again.");
+          const missing = result.missingFields.filter((f) => f !== "email_address");
+          setError(
+            missing.length > 0
+              ? `Sign-up isn't finished yet — missing: ${missing.join(", ")}.`
+              : "Couldn't confirm the code — try again.",
+          );
           return;
         }
         if (result.createdSessionId) {
@@ -302,12 +313,45 @@ export default function AuthCodeScreen() {
           size="lg"
           block
           loading={busy}
-          disabled={digits.some((d) => !d) || busy || !online || !email}
+          disabled={digits.some((d) => !d) || busy || !online || !email || (isNew && !consent)}
           onClick={verify}
           data-testid="code-verify"
         >
           Verify &amp; continue
         </Button>
+        {isNew && (
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 text-[13px]/5 text-ink3">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              aria-label="Agree to Terms and Privacy Policy"
+              data-testid="consent"
+              className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+            />
+            <span>
+              I agree to the{" "}
+              <a
+                href="https://pos.scalmint.com/legal"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                Terms
+              </a>{" "}
+              and{" "}
+              <a
+                href="https://pos.scalmint.com/legal"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-accent underline-offset-2 hover:underline"
+              >
+                Privacy Policy
+              </a>
+              .
+            </span>
+          </label>
+        )}
         <div className="mt-3 flex justify-between text-[14px]">
           <Button variant="ghost" size="sm" disabled={cooling || busy} onClick={resend}>
             {`Resend code${cool > 0 ? ` (${cool}s)` : ""}`}

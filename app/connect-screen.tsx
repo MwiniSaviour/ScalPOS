@@ -28,6 +28,7 @@ import {
 import { cn } from "@/lib/ui";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
+import { hasOnboarded, markOnboarded } from "@/lib/first-run";
 import { ChevronLeft, Cloud, CloudOff, LogOut, Mail, RefreshCw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -284,6 +285,7 @@ export default function ConnectScreen() {
   const [error, setError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState("");
   const autoConnectTried = useRef(false);
+  const finishLinkingDone = useRef(false);
   const userEmail = userResource?.primaryEmailAddress?.emailAddress ?? null;
 
   useEffect(() => {
@@ -344,6 +346,47 @@ export default function ConnectScreen() {
       })();
     }
   }, [signedIn, conn, online, sessionToken, sessionUserId]);
+
+  /**
+   * Linking this device from onboarding ("Sign in to link this device") used to
+   * leave the user on the connect screen even though the shop was reachable.
+   * They had to back out and hit "Create shop" again, because onboarding is
+   * only marked complete in the create flow. When a link succeeds and
+   * onboarding isn't finished yet, pull the shop into this device and finish.
+   */
+  useEffect(() => {
+    if (!conn || finishLinkingDone.current) return;
+    if (hasOnboarded()) return;
+    finishLinkingDone.current = true;
+    let cancelled = false;
+    void (async () => {
+      try {
+        await pullAll(conn);
+      } catch (e) {
+        console.warn("sync: pull during link", e);
+      }
+      if (cancelled) return;
+      // The sync tables don't carry settings; seed the shop name so the
+      // onboarding gate recognises a linked-but-empty shop as onboarded.
+      const store = usePos.getState();
+      if (!store.settings.shopName?.trim() && conn.org_name?.trim()) {
+        store.updateSettings({ shopName: conn.org_name.trim() });
+      }
+      try {
+        await armSync(conn);
+        await drainOutbox();
+      } catch (e) {
+        console.warn("sync: arm during link", e);
+      }
+      if (cancelled) return;
+      markOnboarded();
+      usePos.getState().toast("Shop linked — welcome aboard", "ok");
+      router.replace("/home");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conn, router]);
 
   async function startSignIn() {
     if (!online) return;

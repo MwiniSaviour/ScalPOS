@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/demo";
 import type { Op, Conflict } from "./types";
 
 const DB_NAME = "nova-pos-outbox-v1";
@@ -86,6 +87,7 @@ async function runTx<T>(
 }
 
 export async function enqueue(op: Op): Promise<void> {
+  if (isDemoMode()) return;
   const db = await openDb();
   if (!db) return;
   await new Promise<void>((resolve) => {
@@ -139,6 +141,11 @@ async function remove(opId: string): Promise<void> {
 }
 
 async function defaultApply(op: Op): Promise<void> {
+  if (op.table === "settings") {
+    const { pushSettings } = await import("./settings");
+    await pushSettings();
+    return;
+  }
   const engine = await import("./engine");
   const rowId = (op.row as { id?: string } | undefined)?.id ?? op.id ?? "";
   if (op.kind === "delete") {
@@ -151,6 +158,7 @@ async function defaultApply(op: Op): Promise<void> {
 export async function drain(
   apply?: (op: Op) => Promise<void>,
 ): Promise<{ applied: number; failed: Op[] }> {
+  if (isDemoMode()) return { applied: 0, failed: [] };
   const ops = await peek();
   const sorted = sortOps(ops);
   const applier = apply ?? defaultApply;

@@ -72,8 +72,11 @@ export async function startCheckout(
   conn: SyncConnection,
   plan: SubPlan,
   renewal: Renewal = "manual",
+  affiliateCode?: string | null,
 ): Promise<CheckoutPayload> {
-  const json = await edgePost(conn, "subscribe-init", { plan, renewal });
+  const body: Record<string, unknown> = { plan, renewal };
+  if (affiliateCode) body.affiliate_code = affiliateCode;
+  const json = await edgePost(conn, "subscribe-init", body);
   const public_key = typeof json.public_key === "string" ? json.public_key : "";
   const access_code = typeof json.access_code === "string" ? json.access_code : "";
   const reference = typeof json.reference === "string" ? json.reference : "";
