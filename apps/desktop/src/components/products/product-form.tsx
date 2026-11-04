@@ -1,10 +1,9 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { X } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { useCategories } from "@/hooks/use-products"
-import type { Product, Category } from "@/lib/types"
+import type { Product } from "@/lib/types"
 
 interface ProductFormProps {
   product?: Product | null
@@ -22,16 +21,7 @@ export function ProductForm({ product, onSave, onClose }: ProductFormProps) {
   const [categoryId, setCategoryId] = useState(product?.category_id || "")
   const [description, setDescription] = useState(product?.description || "")
   const [saving, setSaving] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
-  const supabase = createClient()
-
-  useEffect(() => {
-    async function load() {
-      const { data } = await supabase.from("categories").select("*").order("name")
-      if (data) setCategories(data)
-    }
-    load()
-  }, [supabase])
+  const { categories } = useCategories()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()

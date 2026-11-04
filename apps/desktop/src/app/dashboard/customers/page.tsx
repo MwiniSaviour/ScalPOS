@@ -1,56 +1,49 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Plus, Search, Download, Eye, Edit, Trash2, Package } from "lucide-react"
+import { Plus, Search, Download, Eye, Edit, Trash2, Package, X } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, formatDate, cn } from "@/lib/utils"
-import type { Customer, Sale } from "@/lib/types"
+import { fetchCustomers, createCustomer, updateCustomer, deleteCustomer, type CustomerInput } from "@/lib/api/data"
+import { formatCurrency, formatDate } from "@/lib/utils"
+import type { Customer } from "@/lib/types"
+
+const emptyForm: CustomerInput = { name: "", phone: "", address: "", note: "" }
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
-  const [salesCounts, setSalesCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
-  const supabase = createClient()
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<Customer | null>(null)
+  const [form, setForm] = useState<CustomerInput>(emptyForm)
+  const [saving, setSaving] = useState(false)
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from("customers")
-      .select("*")
-      .order("created_at", { ascending: false })
-    if (data) {
-      setCustomers(data)
-      const counts: Record<string, number> = {}
-      for (const c of data) {
-        const { count } = await supabase
-          .from("sales")
-          .select("*", { count: "exact", head: true })
-          .eq("customer_id", c.id)
-        counts[c.id] = count || 0
-      }
-      setSalesCounts(counts)
+    setError(null)
+    try {
+      setCustomers(await fetchCustomers())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load customers")
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
-  }, [supabase])
+  }, [])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { load() }, [load])
 
   const filtered = customers.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.email?.toLowerCase().includes(search.toLowerCase()) ||
       c.phone?.includes(search)
   )
 
-  // Stats
   const totalCustomers = customers.length
   const activeCustomers = customers.filter((c) => c.total_purchases > 0).length
   const totalRevenue = customers.reduce((sum, c) => sum + (c.total_purchases || 0), 0)
   const avgOrderValue = totalCustomers > 0 ? totalRevenue / totalCustomers : 0
 
-  // New this month
   const now = new Date()
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
   const newThisMonth = customers.filter((c) => new Date(c.created_at) >= startOfMonth).length
@@ -64,15 +57,45 @@ export default function CustomersPage() {
       .slice(0, 2)
   }
 
+  function openCreate() {
+    setEditing(null)
+    setForm(emptyForm)
+    setModalOpen(true)
+  }
+
+  function openEdit(c: Customer) {
+    setEditing(c)
+    setForm({ name: c.name, phone: c.phone ?? "", address: c.address ?? "", note: c.note ?? "" })
+    setModalOpen(true)
+  }
+
+  async function handleSave() {
+    if (!form.name.trim()) return
+    setSaving(true)
+    try {
+      if (editing) await updateCustomer(editing.id, form)
+      else await createCustomer(form)
+      setModalOpen(false)
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to save customer")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this customer?")) return
-    await supabase.from("customers").delete().eq("id", id)
-    fetch()
+    try {
+      await deleteCustomer(id)
+      await load()
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to delete customer")
+    }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="page-header">
         <div>
           <h1 className="page-title">Customer Management</h1>
@@ -83,20 +106,25 @@ export default function CustomersPage() {
             <Download size={16} />
             Export
           </button>
-          <button className="btn-primary">
+          <button className="btn-primary" onClick={openCreate}>
             <Plus size={16} />
             Create Customer
           </button>
         </div>
       </div>
 
-      {/* Stat Cards */}
+      {error && (
+        <div className="rounded-xl border border-danger-bg bg-danger-bg px-4 py-3 text-sm text-danger">
+          {error}
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Total Customers</p>
             <p className="mt-2 text-3xl font-bold text-foreground">{totalCustomers}</p>
-            <p className="mt-1 text-xs text-muted">No new customers</p>
+            <p className="mt-1 text-xs text-muted">{newThisMonth} new this month</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
             <Package size={20} className="text-muted" />
@@ -116,7 +144,7 @@ export default function CustomersPage() {
           <div>
             <p className="text-sm font-medium text-muted">New This Month</p>
             <p className="mt-2 text-3xl font-bold text-foreground">{newThisMonth}</p>
-            <p className="mt-1 text-xs text-muted">0% growth</p>
+            <p className="mt-1 text-xs text-muted">{totalCustomers > 0 ? Math.round((newThisMonth / totalCustomers) * 100) : 0}% growth</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
             <Package size={20} className="text-muted" />
@@ -134,13 +162,11 @@ export default function CustomersPage() {
         </div>
       </div>
 
-      {/* Customer Directory */}
       <div className="rounded-xl border border-border bg-card">
         <div className="border-b border-border p-4">
           <h2 className="text-lg font-bold text-foreground">Customer Directory</h2>
         </div>
 
-        {/* Search */}
         <div className="border-b border-border p-4">
           <div className="relative max-w-sm">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -153,7 +179,6 @@ export default function CustomersPage() {
           </div>
         </div>
 
-        {/* Customer List */}
         <div className="p-4 space-y-3">
           {loading ? (
             <div className="flex items-center justify-center py-20 text-muted">Loading...</div>
@@ -168,26 +193,20 @@ export default function CustomersPage() {
                 key={customer.id}
                 className="flex items-center gap-4 rounded-xl border border-border p-4 transition-all hover:border-primary/30 hover:shadow-sm"
               >
-                {/* Avatar */}
                 <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sidebar-hover text-lg font-bold text-muted">
                   {getInitials(customer.name)}
                 </div>
 
-                {/* Customer Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-foreground">{customer.name}</h3>
-                    <span className="inline-flex items-center rounded-full bg-success-bg px-2 py-0.5 text-xs font-medium text-success">
-                      Active
-                    </span>
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted">
-                    {customer.email && (
-                      <span className="flex items-center gap-1.5">
-                        <Package size={13} />
-                        {customer.email}
+                    {customer.total_purchases > 0 && (
+                      <span className="inline-flex items-center rounded-full bg-success-bg px-2 py-0.5 text-xs font-medium text-success">
+                        Active
                       </span>
                     )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted">
                     {customer.phone && (
                       <span className="flex items-center gap-1.5">
                         <Package size={13} />
@@ -196,13 +215,11 @@ export default function CustomersPage() {
                     )}
                   </div>
                   <div className="mt-1 flex items-center gap-3 text-sm text-muted">
-                    <span>{salesCounts[customer.id] || 0} orders</span>
                     <span>{formatCurrency(customer.total_purchases)} spent</span>
                     <span>Joined {formatDate(customer.created_at)}</span>
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div className="flex items-center gap-1">
                   <Link
                     href={`/dashboard/customers/${customer.id}`}
@@ -212,6 +229,7 @@ export default function CustomersPage() {
                     <Eye size={18} />
                   </Link>
                   <button
+                    onClick={() => openEdit(customer)}
                     className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover hover:text-foreground transition-all"
                     title="Edit"
                   >
@@ -230,6 +248,71 @@ export default function CustomersPage() {
           )}
         </div>
       </div>
+
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-bold text-foreground">
+                {editing ? "Edit Customer" : "Create Customer"}
+              </h2>
+              <button
+                onClick={() => setModalOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover hover:text-foreground"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="text-sm font-medium text-foreground">Name</label>
+                <input
+                  className="input-field mt-1"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="Customer name"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Phone</label>
+                <input
+                  className="input-field mt-1"
+                  value={form.phone ?? ""}
+                  onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                  placeholder="Phone number"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Address</label>
+                <input
+                  className="input-field mt-1"
+                  value={form.address ?? ""}
+                  onChange={(e) => setForm({ ...form, address: e.target.value })}
+                  placeholder="Address"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-foreground">Note</label>
+                <textarea
+                  className="input-field mt-1"
+                  rows={2}
+                  value={form.note ?? ""}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  placeholder="Notes"
+                />
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setModalOpen(false)}>
+                Cancel
+              </button>
+              <button className="btn-primary" onClick={handleSave} disabled={saving || !form.name.trim()}>
+                {saving ? "Saving..." : editing ? "Save Changes" : "Create Customer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

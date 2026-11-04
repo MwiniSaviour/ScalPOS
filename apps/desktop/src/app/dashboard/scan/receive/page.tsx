@@ -3,7 +3,7 @@
 import { useState, useCallback } from "react"
 import { Package, Plus, CheckCircle, AlertCircle, X, PackagePlus, ArrowLeft } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
+import { createProduct } from "@/lib/api/data"
 import { formatCurrency } from "@/lib/utils"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
 import { useBarcodeScan } from "@/hooks/use-barcode-scan"
@@ -19,7 +19,6 @@ export default function ReceiveStockPage() {
   const [createPrice, setCreatePrice] = useState("")
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const { scanBarcode, incrementStock } = useBarcodeScan()
-  const supabase = createClient()
 
   const handleScan = useCallback(async (barcode: string) => {
     setMessage(null)
@@ -46,31 +45,27 @@ export default function ReceiveStockPage() {
     e.preventDefault()
     if (!createName.trim() || !createSku.trim() || !createPrice) return
 
-    const { data } = await supabase
-      .from("products")
-      .insert({
-        name: createName.trim(),
-        sku: createSku.trim(),
-        barcode: notFoundBarcode,
-        price: parseFloat(createPrice),
-        stock: 0,
-      })
-      .select("*, category:categories(*)")
-      .single()
+    const created = await createProduct({
+      name: createName.trim(),
+      sku: createSku.trim(),
+      barcode: notFoundBarcode,
+      price: parseFloat(createPrice),
+      stock: 0,
+    })
 
-    if (data) {
+    if (created) {
       setShowCreateForm(false)
       setCreateName("")
       setCreateSku("")
       setCreatePrice("")
       setNotFoundBarcode(null)
 
-      const item = await incrementStock(data.id, 1)
+      const item = await incrementStock(created.id, 1)
       if (item) {
         setSessionItems((prev) => [item, ...prev])
       }
-      setFoundProduct(data as unknown as Product)
-      setMessage({ type: "success", text: `Created and added +1 ${data.name}` })
+      setFoundProduct(created)
+      setMessage({ type: "success", text: `Created and added +1 ${created.name}` })
     }
   }
 

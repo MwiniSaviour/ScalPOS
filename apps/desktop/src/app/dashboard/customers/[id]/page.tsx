@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { ArrowLeft, Mail, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Phone, MapPin, StickyNote } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
+import { fetchCustomer, fetchSales } from "@/lib/api/data"
 import { formatCurrency, formatDate } from "@/lib/utils"
 import type { Customer, Sale } from "@/lib/types"
 
@@ -13,28 +13,27 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [sales, setSales] = useState<Sale[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    let cancelled = false
     async function load() {
-      const { data: c } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("id", id)
-        .single()
-      if (c) setCustomer(c)
-
-      const { data: s } = await supabase
-        .from("sales")
-        .select("*, items:sale_items(*)")
-        .eq("customer_id", id)
-        .order("created_at", { ascending: false })
-      if (s) setSales(s as unknown as Sale[])
-
-      setLoading(false)
+      try {
+        const [c, allSales] = await Promise.all([fetchCustomer(id), fetchSales()])
+        if (cancelled) return
+        setCustomer(c)
+        setSales(allSales.filter((s) => s.customer_id === id))
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load")
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
     load()
-  }, [id, supabase])
+    return () => {
+      cancelled = true
+    }
+  }, [id])
 
   if (loading) {
     return (
@@ -42,6 +41,10 @@ export default function CustomerDetailPage() {
         Loading...
       </div>
     )
+  }
+
+  if (error) {
+    return <div className="py-20 text-center text-muted">{error}</div>
   }
 
   if (!customer) {
@@ -66,12 +69,6 @@ export default function CustomerDetailPage() {
           <div className="flex-1">
             <h1 className="text-2xl font-bold text-foreground">{customer.name}</h1>
             <div className="mt-2 space-y-1 text-sm text-muted">
-              {customer.email && (
-                <p className="flex items-center gap-2">
-                  <Mail size={15} />
-                  {customer.email}
-                </p>
-              )}
               {customer.phone && (
                 <p className="flex items-center gap-2">
                   <Phone size={15} />
@@ -82,6 +79,12 @@ export default function CustomerDetailPage() {
                 <p className="flex items-center gap-2">
                   <MapPin size={15} />
                   {customer.address}
+                </p>
+              )}
+              {customer.note && (
+                <p className="flex items-center gap-2">
+                  <StickyNote size={15} />
+                  {customer.note}
                 </p>
               )}
             </div>
@@ -121,7 +124,9 @@ export default function CustomerDetailPage() {
               sales.map((sale) => (
                 <tr key={sale.id} className="hover:bg-sidebar-hover transition-colors">
                   <td className="table-cell font-medium text-foreground">
-                    {sale.invoice_no}
+                    <Link href={`/dashboard/payments/${sale.id}`} className="hover:text-primary">
+                      {sale.invoice_no}
+                    </Link>
                   </td>
                   <td className="table-cell">{formatDate(sale.sale_date)}</td>
                   <td className="table-cell">{sale.items?.length || 0} items</td>
@@ -129,7 +134,9 @@ export default function CustomerDetailPage() {
                     {formatCurrency(sale.total)}
                   </td>
                   <td className="table-cell">
-                    <span className="badge-info">{sale.payment_method}</span>
+                    <span className={sale.payment_status === "paid" ? "badge-success" : "badge-warning"}>
+                      {sale.payment_status === "paid" ? "Paid" : "Pending"}
+                    </span>
                   </td>
                 </tr>
               ))

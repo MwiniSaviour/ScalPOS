@@ -2,14 +2,21 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import * as Icons from "lucide-react"
 import { cn } from "@/lib/utils"
 import { NAV_ITEMS, APP_NAME } from "@/lib/constants"
-import { useAuth } from "@/hooks/use-auth"
+import { useClerk, useUser } from "@clerk/clerk-react"
 import type { LucideIcon } from "lucide-react"
-import type { Profile, NavItem } from "@/lib/types"
+import type { NavItem } from "@/lib/types"
 import { ChevronDown } from "lucide-react"
+import { useOrg } from "@/lib/auth/org"
+
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
+  supervisor: "Supervisor",
+  cashier: "Cashier",
+}
 
 function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string }) {
   const Icon = Icons[item.icon as keyof typeof Icons] as LucideIcon
@@ -33,10 +40,7 @@ function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string 
           </span>
           <ChevronDown
             size={16}
-            className={cn(
-              "transition-transform",
-              expanded && "rotate-180"
-            )}
+            className={cn("transition-transform", expanded && "rotate-180")}
           />
         </button>
         {expanded && (
@@ -82,26 +86,24 @@ function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string 
 
 export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () => void }) {
   const pathname = usePathname()
-  const { logout } = useAuth()
-  const [profile, setProfile] = useState<Profile | null>(null)
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/auth/api/me")
-        if (!res.ok) return
-        const { user } = await res.json()
-        if (user) {
-          setProfile({ id: user.id, name: user.name, email: user.email, role: user.role } as Profile)
-        }
-      } catch {}
-    }
-    load()
-  }, [])
+  const router = useRouter()
+  const { signOut } = useClerk()
+  const { user } = useUser()
+  const { shop } = useOrg()
 
   useEffect(() => {
     onClose?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
+
+  const name =
+    user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User"
+  const role = shop?.role ?? "cashier"
+
+  async function handleSignOut() {
+    await signOut()
+    router.replace("/auth/login")
+  }
 
   return (
     <>
@@ -127,7 +129,8 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
           <ul className="space-y-1">
             {NAV_ITEMS.filter((item) => {
               if (!item.roles) return true
-              return item.roles.includes(profile?.role || "employee")
+              const mapped = role === "owner" ? "admin" : "employee"
+              return item.roles.includes(mapped)
             }).map((item) => (
               <NavItemComponent key={item.label} item={item} pathname={pathname} />
             ))}
@@ -137,16 +140,17 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         <div className="border-t border-border p-4">
           <div className="flex items-center gap-3 rounded-lg px-3 py-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-light text-sm font-medium text-primary">
-              {profile?.name?.charAt(0)?.toUpperCase() || "A"}
+              {name.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 truncate">
-              <p className="text-sm font-medium text-foreground">
-                {profile?.name || "User"}
+              <p className="text-sm font-medium text-foreground">{name}</p>
+              <p className="text-xs text-muted">
+                {ROLE_LABEL[role] ?? "Staff"}
+                {shop ? ` · ${shop.name}` : ""}
               </p>
-              <p className="text-xs text-muted">{profile?.email || ""}</p>
             </div>
             <button
-              onClick={logout}
+              onClick={() => void handleSignOut()}
               className="flex h-7 w-7 items-center justify-center rounded-md text-muted hover:bg-sidebar-hover hover:text-danger transition-all"
               title="Sign out"
             >

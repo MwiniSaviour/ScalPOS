@@ -10,22 +10,11 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts"
+import type { RevenuePoint } from "@/lib/types"
 
-const data = [
-  { date: "Jul 1", amount: 1200 },
-  { date: "Jul 2", amount: 1800 },
-  { date: "Jul 3", amount: 1400 },
-  { date: "Jul 4", amount: 2200 },
-  { date: "Jul 5", amount: 1600 },
-  { date: "Jul 6", amount: 2400 },
-  { date: "Jul 7", amount: 2100 },
-  { date: "Jul 8", amount: 2800 },
-  { date: "Jul 9", amount: 1900 },
-  { date: "Jul 10", amount: 2600 },
-]
-
-export function RevenueChart() {
+export function RevenueChart({ data }: { data: RevenuePoint[] }) {
   const [range, setRange] = useState<"7" | "30">("7")
+  const visible = data.slice(range === "7" ? -7 : -30)
 
   return (
     <div className="glass-panel p-6">
@@ -59,7 +48,7 @@ export function RevenueChart() {
       </div>
       <div className="h-72">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data}>
+          <AreaChart data={visible}>
             <defs>
               <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1} />
@@ -77,7 +66,7 @@ export function RevenueChart() {
               axisLine={false}
               tickLine={false}
               tick={{ fontSize: 12, fill: "#94a3b8" }}
-              tickFormatter={(v) => `$${v}`}
+              tickFormatter={(v) => `GH₵${v}`}
             />
             <Tooltip
               contentStyle={{

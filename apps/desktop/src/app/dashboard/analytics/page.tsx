@@ -16,7 +16,7 @@ import {
   Line,
 } from "recharts"
 import { Download, ShoppingCart, Package } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { fetchSales, fetchCustomers } from "@/lib/api/data"
 import { formatCurrency, formatDateTime } from "@/lib/utils"
 import type { Sale, SaleItem, Customer } from "@/lib/types"
 
@@ -28,7 +28,6 @@ export default function AnalyticsPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<"7" | "30" | "90">("7")
-  const supabase = createClient()
 
   useEffect(() => {
     async function load() {
@@ -36,31 +35,20 @@ export default function AnalyticsPage() {
       const since = new Date()
       since.setDate(since.getDate() - days)
 
-      const [sRes, cRes] = await Promise.all([
-        supabase
-          .from("sales")
-          .select("*")
-          .gte("created_at", since.toISOString())
-          .order("created_at"),
-        supabase
-          .from("customers")
-          .select("*"),
+      const [allSales, allCustomers] = await Promise.all([
+        fetchSales(),
+        fetchCustomers(),
       ])
-
-      const s = sRes.data
-      if (s) {
-        setSales(s)
-        const { data: i } = await supabase
-          .from("sale_items")
-          .select("*")
-          .in("sale_id", s.map((sale) => sale.id))
-        if (i) setItems(i)
-      }
-      if (cRes.data) setCustomers(cRes.data)
+      const scoped = allSales.filter(
+        (sale) => new Date(sale.created_at).getTime() >= since.getTime()
+      )
+      setCustomers(allCustomers)
+      setSales(scoped)
+      setItems(scoped.flatMap((sale) => sale.items ?? []))
       setLoading(false)
     }
     load()
-  }, [supabase, period])
+  }, [period])
 
   const revenueData = useMemo(() => {
     const grouped: Record<string, number> = {}

@@ -8,8 +8,9 @@ export const TAX_PERCENT = 0
 
 export const PAYMENT_METHODS = [
   { value: "cash", label: "Cash" },
+  { value: "momo", label: "Mobile Money" },
   { value: "card", label: "Card" },
-  { value: "transfer", label: "Bank Transfer" },
+  { value: "credit", label: "Credit" },
 ] as const
 
 export const NAV_ITEMS: NavItem[] = [
@@ -37,7 +38,13 @@ export const SCAN_MODES = [
   { value: "pos", label: "POS Scan", description: "Scan products to add to cart" },
 ] as const
 
-export const ROLES = ["admin", "employee"] as const
+export const ROLES = ["owner", "supervisor", "cashier"] as const
+
+export const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
+  owner: "Owner",
+  supervisor: "Supervisor",
+  cashier: "Cashier",
+}
 
 export const SORT_OPTIONS = [
   { value: "name", label: "Name" },

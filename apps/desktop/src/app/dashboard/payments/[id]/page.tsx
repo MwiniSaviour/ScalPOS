@@ -1,61 +1,72 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
-import { ArrowLeft, Printer } from "lucide-react"
+import { ArrowLeft, Printer, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, formatDateTime } from "@/lib/utils"
-import { PAYMENT_METHODS } from "@/lib/constants"
-import type { Sale, SaleItem, Customer, Profile } from "@/lib/types"
+import { fetchSale } from "@/lib/api/data"
+import { formatCurrency, formatDateTime, cn } from "@/lib/utils"
+import type { Sale, PaymentMethod } from "@/lib/types"
+
+const METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: "Cash",
+  momo: "Mobile Money",
+  card: "Card",
+  credit: "Credit",
+}
+
+const STATUS_BADGES: Record<string, string> = {
+  paid: "bg-success-bg text-success",
+  pending: "bg-warning-bg text-warning",
+  refunded: "bg-danger-bg text-danger",
+}
 
 export default function PaymentDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [sale, setSale] = useState<Sale | null>(null)
-  const [items, setItems] = useState<SaleItem[]>([])
-  const [customer, setCustomer] = useState<Customer | null>(null)
-  const [employee, setEmployee] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
+  const [error, setError] = useState("")
 
-  useEffect(() => {
-    async function load() {
-      const { data: s } = await supabase
-        .from("sales")
-        .select("*")
-        .eq("id", id)
-        .single()
-      if (!s) { setLoading(false); return }
-
-      setSale(s)
-
-      const { data: i } = await supabase
-        .from("sale_items")
-        .select("*")
-        .eq("sale_id", id)
-      if (i) setItems(i)
-
-      if (s.customer_id) {
-        const { data: c } = await supabase.from("customers").select("*").eq("id", s.customer_id).single()
-        if (c) setCustomer(c)
-      }
-      if (s.employee_id) {
-        const { data: e } = await supabase.from("profiles").select("*").eq("id", s.employee_id).single()
-        if (e) setEmployee(e)
-      }
-
+  const load = useCallback(async () => {
+    if (!id) return
+    try {
+      setLoading(true)
+      setError("")
+      const data = await fetchSale(id)
+      setSale(data)
+    } catch {
+      setError("Failed to load payment record. Check your connection.")
+    } finally {
       setLoading(false)
     }
+  }, [id])
+
+  useEffect(() => {
     load()
-  }, [id, supabase])
+  }, [load])
 
   if (loading) {
     return <div className="flex items-center justify-center py-20 text-muted">Loading...</div>
   }
 
+  if (error) {
+    return (
+      <div className="py-20 text-center">
+        <div className="mx-auto mb-4 flex max-w-sm items-center gap-3 rounded-xl border border-danger/20 bg-danger-bg px-4 py-3 text-sm text-danger">
+          <AlertCircle size={18} />
+          <span>{error}</span>
+        </div>
+        <button onClick={load} className="btn-secondary">Retry</button>
+      </div>
+    )
+  }
+
   if (!sale) {
     return <div className="py-20 text-center text-muted">Payment record not found</div>
   }
+
+  const customer = sale.customer ?? null
+  const items = sale.items ?? []
 
   return (
     <div>
@@ -73,7 +84,7 @@ export default function PaymentDetailPage() {
             <h1 className="text-2xl font-bold text-foreground">
               {sale.invoice_no}
             </h1>
-            <p className="text-sm text-muted">{formatDateTime(sale.created_at)}</p>
+            <p className="text-sm text-muted">{formatDateTime(sale.sale_date)}</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => window.print()} className="btn-secondary">
@@ -89,20 +100,29 @@ export default function PaymentDetailPage() {
             {customer ? (
               <>
                 <p className="font-medium text-foreground">{customer.name}</p>
-                <p className="text-sm text-muted">{customer.email}</p>
-                <p className="text-sm text-muted">{customer.phone}</p>
+                {customer.phone && <p className="text-sm text-muted">{customer.phone}</p>}
+                {customer.address && <p className="text-sm text-muted">{customer.address}</p>}
               </>
             ) : (
               <p className="text-sm text-muted">Walk-in customer</p>
             )}
           </div>
-          <div className="space-y-2 text-right">
+          <div className="space-y-2 sm:text-right">
             <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3>
             <p className="font-medium text-foreground">
-              Payment: <span className="badge-info">{PAYMENT_METHODS.find(p => p.value === sale.payment_method)?.label}</span>
+              Payment:{" "}
+              <span className="badge-info">{METHOD_LABELS[sale.payment_method] ?? sale.payment_method}</span>
             </p>
             <p className="text-sm text-muted">
-              Processed by: {employee?.name || "N/A"}
+              Status:{" "}
+              <span
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
+                  STATUS_BADGES[sale.payment_status] ?? "bg-muted-bg text-muted"
+                )}
+              >
+                {sale.payment_status}
+              </span>
             </p>
           </div>
         </div>
@@ -132,6 +152,12 @@ export default function PaymentDetailPage() {
                 <td colSpan={3} className="px-4 py-3 text-right text-sm text-muted">Subtotal</td>
                 <td className="px-4 py-3 text-right text-sm text-foreground">{formatCurrency(sale.subtotal)}</td>
               </tr>
+              {sale.tax > 0 && (
+                <tr>
+                  <td colSpan={3} className="px-4 py-3 text-right text-sm text-muted">Tax</td>
+                  <td className="px-4 py-3 text-right text-sm text-muted">{formatCurrency(sale.tax)}</td>
+                </tr>
+              )}
               {sale.discount > 0 && (
                 <tr>
                   <td colSpan={3} className="px-4 py-3 text-right text-sm text-muted">Discount</td>

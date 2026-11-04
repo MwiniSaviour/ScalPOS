@@ -17,10 +17,16 @@ import {
   Camera,
   Barcode,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { formatCurrency, generateInvoiceNo, cn } from "@/lib/utils"
+import { formatCurrency, cn } from "@/lib/utils"
 import { PAYMENT_METHODS } from "@/lib/constants"
-import type { Product, Customer, CartItem, Profile, Category } from "@/lib/types"
+import {
+  fetchProducts,
+  fetchCategories,
+  fetchCustomers,
+  createCustomer,
+  placeSale,
+} from "@/lib/api/data"
+import type { Product, Customer, CartItem, Category, Sale } from "@/lib/types"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
 
 export default function PosPage() {
@@ -34,55 +40,59 @@ export default function PosPage() {
   const [customerSearch, setCustomerSearch] = useState("")
   const [showCustomerSelect, setShowCustomerSelect] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
-  const [lastSale, setLastSale] = useState<any>(null)
+  const [lastSale, setLastSale] = useState<Sale | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discount, setDiscount] = useState(0)
-  const [employee, setEmployee] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [sending, setSending] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
   const [scanMessage, setScanMessage] = useState<string | null>(null)
   const [productLookupError, setProductLookupError] = useState<string | null>(null)
   const hwBufferRef = useRef("")
   const hwTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const supabase = createClient()
 
-  const handleBarcodeScan = useCallback(async (barcode: string) => {
-    setScanMessage(null)
-    setProductLookupError(null)
-    const trimmed = barcode.trim()
-    if (!trimmed) return
-
-    const product = products.find(
-      (p) => p.barcode?.toLowerCase() === trimmed.toLowerCase()
-    )
-    if (product) {
-      addToCart(product)
-      setScanMessage(`Added: ${product.name}`)
-    } else {
-      setProductLookupError(`Product not found for barcode: ${trimmed}`)
-    }
-  }, [products])
-
-  useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: prof } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-        if (prof) setEmployee(prof)
-      }
-
-      const [pRes, cRes, cuRes] = await Promise.all([
-        supabase.from("products").select("*, category:categories(*)").order("name"),
-        supabase.from("categories").select("*").order("name"),
-        supabase.from("customers").select("*").order("name"),
+  const load = useCallback(async () => {
+    try {
+      const [productsData, categoriesData, customersData] = await Promise.all([
+        fetchProducts(),
+        fetchCategories(),
+        fetchCustomers(),
       ])
-      if (pRes.data) setProducts(pRes.data as unknown as Product[])
-      if (cRes.data) setCategories(cRes.data)
-      if (cuRes.data) setCustomers(cuRes.data)
+      setProducts(productsData)
+      setCategories(categoriesData)
+      setCustomers(customersData)
+      setError(null)
+    } catch {
+      setError("Failed to load POS data. Check your connection.")
+    } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
     load()
-  }, [supabase])
+  }, [load])
+
+  const handleBarcodeScan = useCallback(
+    async (barcode: string) => {
+      setScanMessage(null)
+      setProductLookupError(null)
+      const trimmed = barcode.trim()
+      if (!trimmed) return
+
+      const product = products.find(
+        (p) => p.barcode?.toLowerCase() === trimmed.toLowerCase()
+      )
+      if (product) {
+        addToCart(product)
+        setScanMessage(`Added: ${product.name}`)
+      } else {
+        setProductLookupError(`Product not found for barcode: ${trimmed}`)
+      }
+    },
+    [products]
+  )
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -165,89 +175,64 @@ export default function PosPage() {
     setCart((prev) => prev.filter((i) => i.product_id !== productId))
   }
 
-  const { subtotal, tax, taxAmount, total } = useMemo(() => {
+  const { subtotal, discountAmount, total } = useMemo(() => {
     const sub = cart.reduce((s, i) => s + i.unit_price * i.quantity, 0)
     const disc = sub * (discount / 100)
-    const taxable = sub - disc
-    const t = 0
     return {
       subtotal: sub,
-      tax: t,
-      taxAmount: taxable * (t / 100),
-      total: taxable + taxable * (t / 100),
+      discountAmount: disc,
+      total: sub - disc,
     }
   }, [cart, discount])
 
   async function checkout() {
-    if (cart.length === 0) return
-
-    const invoiceNo = generateInvoiceNo()
-
-    const saleData = {
-      invoice_no: invoiceNo,
-      customer_id: selectedCustomer?.id || null,
-      employee_id: employee?.id || null,
-      subtotal,
-      tax: taxAmount,
-      discount: subtotal * (discount / 100),
-      total,
-      payment_method: paymentMethod,
-      payment_status: "paid",
-      sale_date: new Date().toISOString().split("T")[0],
+    if (cart.length === 0 || sending) return
+    setSending(true)
+    try {
+      const payments =
+        paymentMethod === "credit"
+          ? []
+          : [{ method: paymentMethod, amount: total }]
+      const sale = await placeSale({
+        customer_id: selectedCustomer?.id ?? null,
+        items: cart.map((item) => ({
+          product_id: item.product_id,
+          name: item.product_name,
+          image_path: item.image,
+          qty: item.quantity,
+          price: item.unit_price,
+        })),
+        payments,
+        subtotal,
+        discount: discountAmount,
+        tax: 0,
+        total,
+      })
+      setLastSale(sale)
+      setShowReceipt(true)
+      setCart([])
+      setDiscount(0)
+      setSelectedCustomer(null)
+      setError(null)
+      const fresh = await fetchProducts()
+      setProducts(fresh)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to complete sale.")
+    } finally {
+      setSending(false)
     }
-
-    const { data: sale } = await supabase
-      .from("sales")
-      .insert(saleData)
-      .select()
-      .single()
-
-    if (!sale) return
-
-    const itemsData = cart.map((item) => ({
-      sale_id: sale.id,
-      product_id: item.product_id,
-      product_name: item.product_name,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      subtotal: item.unit_price * item.quantity,
-    }))
-
-    await supabase.from("sale_items").insert(itemsData)
-
-    for (const item of cart) {
-      await supabase
-        .from("products")
-        .update({ stock: item.stock - item.quantity })
-        .eq("id", item.product_id)
-    }
-
-    if (selectedCustomer) {
-      await supabase
-        .from("customers")
-        .update({ total_purchases: selectedCustomer.total_purchases + total })
-        .eq("id", selectedCustomer.id)
-    }
-
-    setLastSale({ ...sale, items: itemsData, customer: selectedCustomer })
-    setShowReceipt(true)
-    setCart([])
-    setDiscount(0)
-    setSelectedCustomer(null)
   }
 
   async function createCustomerQuick() {
     if (!customerSearch.trim()) return
-    const { data } = await supabase
-      .from("customers")
-      .insert({ name: customerSearch.trim() })
-      .select()
-      .single()
-    if (data) {
-      setCustomers((prev) => [...prev, data])
-      setSelectedCustomer(data)
+    try {
+      const created = await createCustomer({ name: customerSearch.trim() })
+      setCustomers((prev) => [...prev, created])
+      setSelectedCustomer(created)
       setShowCustomerSelect(false)
       setCustomerSearch("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create customer.")
     }
   }
 
@@ -261,9 +246,17 @@ export default function PosPage() {
 
   return (
     <div className="flex h-[calc(100vh-8rem)] -mx-8 -mb-8">
-      {/* Left: Products */}
       <div className="flex flex-1 flex-col border-r border-border">
         <div className="border-b border-border bg-card p-4">
+          {error && (
+            <div className="mb-2 rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger flex items-center gap-2">
+              <X size={14} />
+              <span className="flex-1">{error}</span>
+              <button onClick={() => setError(null)} className="ml-auto">
+                <X size={12} />
+              </button>
+            </div>
+          )}
           {scanMessage && (
             <div className="mb-2 rounded-lg bg-success-bg px-3 py-2 text-xs text-success flex items-center gap-2">
               <Barcode size={14} />
@@ -331,10 +324,10 @@ export default function PosPage() {
               <button
                 key={product.id}
                 onClick={() => addToCart(product)}
-                disabled={product.stock === 0}
+                disabled={product.stock === 0 || !product.active}
                 className={cn(
                   "flex flex-col items-center rounded-xl border border-border bg-card p-3 text-center transition-all hover:border-primary hover:shadow-md active:scale-95",
-                  product.stock === 0 && "opacity-40 cursor-not-allowed"
+                  (product.stock === 0 || !product.active) && "opacity-40 cursor-not-allowed"
                 )}
               >
                 <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -363,14 +356,12 @@ export default function PosPage() {
         </div>
       </div>
 
-      {/* Right: Cart */}
       <div className="flex w-96 flex-col bg-card">
         <div className="border-b border-border p-4">
           <h2 className="text-base font-bold text-foreground">Current Sale</h2>
           <p className="text-xs text-muted">{cart.length} items in cart</p>
         </div>
 
-        {/* Customer selection */}
         <div className="relative border-b border-border p-4">
           {selectedCustomer ? (
             <div className="flex items-center justify-between rounded-lg bg-primary-light px-3 py-2">
@@ -432,7 +423,6 @@ export default function PosPage() {
           )}
         </div>
 
-        {/* Cart items */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {cart.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted">
@@ -493,7 +483,6 @@ export default function PosPage() {
           )}
         </div>
 
-        {/* Totals */}
         <div className="border-t border-border p-4 space-y-3">
           <div className="flex items-center justify-between text-sm">
             <span className="text-muted">Subtotal</span>
@@ -515,7 +504,6 @@ export default function PosPage() {
             <span className="text-xl font-bold text-primary">{formatCurrency(total)}</span>
           </div>
 
-          {/* Payment methods */}
           <div className="flex gap-2">
             {PAYMENT_METHODS.map((pm) => {
               const Icon = pm.value === "cash" ? Banknote : pm.value === "card" ? CreditCard : Building2
@@ -537,18 +525,27 @@ export default function PosPage() {
             })}
           </div>
 
+          {paymentMethod === "credit" && (
+            <p className="text-xs text-muted">
+              Credit sale will be saved as unpaid.
+            </p>
+          )}
+
           <button
             onClick={checkout}
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || sending}
             className="btn-primary w-full py-3 text-sm"
           >
             <CreditCard size={18} />
-            Complete Sale — {formatCurrency(total)}
+            {sending
+              ? "Saving..."
+              : creditLabel(paymentMethod) +
+                " " +
+                formatCurrency(total)}
           </button>
         </div>
       </div>
 
-      {/* Scanner Modal */}
       {showScanner && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
           <div className="mx-4 w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-xl">
@@ -572,7 +569,6 @@ export default function PosPage() {
         </div>
       )}
 
-      {/* Receipt Modal */}
       {showReceipt && lastSale && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-xl">
@@ -597,11 +593,19 @@ export default function PosPage() {
               )}
               <div className="flex justify-between">
                 <span className="text-muted">Payment</span>
-                <span className="badge-info">{PAYMENT_METHODS.find(p => p.value === lastSale.payment_method)?.label}</span>
+                <span className="badge-info">
+                  {creditLabel(lastSale.payment_method)}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Status</span>
+                <span className={lastSale.payment_status === "paid" ? "badge-success" : "badge-warning"}>
+                  {lastSale.payment_status === "paid" ? "Paid" : "Unpaid"}
+                </span>
               </div>
               <div className="border-t border-border pt-2">
-                {lastSale.items?.map((item: any, i: number) => (
-                  <div key={i} className="flex justify-between text-xs">
+                {lastSale.items?.map((item) => (
+                  <div key={item.id} className="flex justify-between text-xs">
                     <span className="text-foreground">
                       {item.product_name} x{item.quantity}
                     </span>
@@ -635,4 +639,9 @@ export default function PosPage() {
       )}
     </div>
   )
+}
+
+function creditLabel(method: string): string {
+  if (method === "credit") return "Credit — unpaid sale"
+  return PAYMENT_METHODS.find((p) => p.value === method)?.label ?? method
 }

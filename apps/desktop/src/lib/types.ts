@@ -1,6 +1,6 @@
 export type Role = "admin" | "employee"
 
-export type PaymentMethod = "cash" | "card" | "transfer"
+export type PaymentMethod = "cash" | "momo" | "card" | "credit"
 
 export type PaymentStatus = "paid" | "pending"
 
@@ -17,6 +17,7 @@ export interface Profile {
 export interface Category {
   id: string
   name: string
+  color: string | null
   description: string | null
   image: string | null
   created_at: string
@@ -35,6 +36,9 @@ export interface Product {
   category?: Category
   image: string | null
   description: string | null
+  unit: string
+  low_stock_at: number
+  active: boolean
   created_at: string
   updated_at: string
 }
@@ -45,6 +49,7 @@ export interface Customer {
   email: string | null
   phone: string | null
   address: string | null
+  note: string | null
   created_at: string
   total_purchases: number
 }
@@ -94,6 +99,30 @@ export interface Expense {
   category: string | null
   date: string
   created_at: string
+}
+
+export interface Staff {
+  id: string
+  name: string
+  role: "owner" | "supervisor" | "cashier"
+  phone: string | null
+  photo_path: string | null
+  active: boolean
+  created_at: string
+}
+
+export interface ShopSettings {
+  shop_name: string
+  address: string | null
+  phone: string | null
+  owner_name: string | null
+  momo_number: string | null
+  momo_network: string | null
+  tax_inclusive: boolean
+  tax_rate: number
+  receipt_footer: string | null
+  theme: string | null
+  next_order_no: number
 }
 
 export interface DashboardStats {

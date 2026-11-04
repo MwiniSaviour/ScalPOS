@@ -2,29 +2,32 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Plus, Search, Edit2, Trash2 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
+import { fetchSuppliers, upsertSupplier, deleteSupplier } from "@/lib/api/data"
+import { SupplierInput } from "@/lib/api/data"
 import type { Supplier } from "@/lib/types"
 import { SupplierForm } from "./supplier-form"
 
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Supplier | null>(null)
-  const supabase = createClient()
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from("suppliers")
-      .select("*")
-      .order("name")
-    if (data) setSuppliers(data)
-    setLoading(false)
-  }, [supabase])
+    try {
+      setSuppliers(await fetchSuppliers())
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load suppliers")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { load() }, [load])
 
   const filtered = suppliers.filter(
     (s) =>
@@ -34,20 +37,23 @@ export default function SuppliersPage() {
   )
 
   async function handleSave(data: Partial<Supplier>) {
-    if (editing) {
-      await supabase.from("suppliers").update(data).eq("id", editing.id)
-    } else {
-      await supabase.from("suppliers").insert(data)
+    const input: SupplierInput = {
+      name: data.name ?? "",
+      contact_person: data.contact_person ?? null,
+      email: data.email ?? null,
+      phone: data.phone ?? null,
+      address: data.address ?? null,
     }
+    await upsertSupplier(editing ? editing.id : null, input)
     setShowForm(false)
     setEditing(null)
-    fetch()
+    load()
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this supplier?")) return
-    await supabase.from("suppliers").delete().eq("id", id)
-    fetch()
+    await deleteSupplier(id)
+    load()
   }
 
   return (
@@ -92,6 +98,12 @@ export default function SuppliersPage() {
               <tr>
                 <td colSpan={5} className="px-4 py-12 text-center text-muted">
                   Loading...
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={5} className="px-4 py-12 text-center text-danger">
+                  {error}
                 </td>
               </tr>
             ) : filtered.length === 0 ? (

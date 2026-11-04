@@ -10,7 +10,7 @@ import { formatCurrency, cn } from "@/lib/utils"
 import type { Product } from "@/lib/types"
 
 export default function ProductsPage() {
-  const { products, loading, fetchProducts, createProduct, updateProduct, deleteProduct } = useProducts()
+  const { products, loading, addProduct, editProduct, removeProduct } = useProducts()
   const { categories } = useCategories()
   const [view, setView] = useState<"grid" | "list">("list")
   const [search, setSearch] = useState("")
@@ -41,14 +41,14 @@ export default function ProductsPage() {
   const handleSave = useCallback(
     async (data: Partial<Product>) => {
       if (editing) {
-        await updateProduct(editing.id, data)
+        await editProduct(editing.id, data)
       } else {
-        await createProduct(data)
+        await addProduct(data)
       }
       setShowForm(false)
       setEditing(null)
     },
-    [editing, createProduct, updateProduct]
+    [editing, addProduct, editProduct]
   )
 
   const handleEdit = useCallback((product: Product) => {
@@ -59,10 +59,10 @@ export default function ProductsPage() {
   const handleDelete = useCallback(
     async (id: string) => {
       if (confirm("Delete this product?")) {
-        await deleteProduct(id)
+        await removeProduct(id)
       }
     },
-    [deleteProduct]
+    [removeProduct]
   )
 
   return (

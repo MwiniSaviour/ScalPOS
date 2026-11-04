@@ -2,9 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Plus, Download, Eye, Edit2, Trash2, Package, X } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
-import { cn } from "@/lib/utils"
+import {
+  fetchCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  fetchProducts,
+  type CategoryInput,
+} from "@/lib/api/data"
 import type { Category } from "@/lib/types"
+
+const CATEGORY_COLORS = ["#059669", "#2563EB", "#F59E0B", "#EF4444", "#8B5CF6", "#0EA5E9", "#EC4899", "#6B7280"]
 
 function CategoryModal({
   category,
@@ -12,17 +20,17 @@ function CategoryModal({
   onClose,
 }: {
   category?: Category | null
-  onSave: (data: Partial<Category>) => Promise<void>
+  onSave: (data: CategoryInput) => Promise<void>
   onClose: () => void
 }) {
   const [name, setName] = useState(category?.name || "")
-  const [description, setDescription] = useState(category?.description || "")
+  const [color, setColor] = useState(category?.color || "#059669")
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
-    await onSave({ name, description: description || null })
+    await onSave({ name, color })
     setSaving(false)
   }
 
@@ -48,13 +56,19 @@ function CategoryModal({
             />
           </div>
           <div>
-            <label className="label">Description</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="input-field min-h-[60px] resize-none"
-              rows={2}
-            />
+            <label className="label">Color</label>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORY_COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className="h-8 w-8 rounded-full border-2 transition-all"
+                  style={{ backgroundColor: c, borderColor: color === c ? "#1F2937" : "transparent" }}
+                  aria-label={`Set color ${c}`}
+                />
+              ))}
+            </div>
           </div>
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">
@@ -75,53 +89,57 @@ export default function CategoriesPage() {
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Category | null>(null)
+  const [error, setError] = useState<string | null>(null)
   const [productCounts, setProductCounts] = useState<Record<string, number>>({})
-  const supabase = createClient()
 
-  const fetch = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
-      .from("categories")
-      .select("*")
-      .order("name")
-    if (data) {
-      setCategories(data)
+    setError(null)
+    try {
+      const [cats, prods] = await Promise.all([fetchCategories(), fetchProducts()])
+      setCategories(cats)
       const counts: Record<string, number> = {}
-      for (const cat of data) {
-        const { count } = await supabase
-          .from("products")
-          .select("*", { count: "exact", head: true })
-          .eq("category_id", cat.id)
-        counts[cat.id] = count || 0
+      for (const p of prods) {
+        if (p.category_id) counts[p.category_id] = (counts[p.category_id] || 0) + 1
       }
       setProductCounts(counts)
+    } catch {
+      setError("Failed to load categories. Check your connection.")
     }
     setLoading(false)
-  }, [supabase])
+  }, [])
 
-  useEffect(() => { fetch() }, [fetch])
+  useEffect(() => { load() }, [load])
 
   // Stats
   const totalCategories = categories.length
   const activeCategories = categories.length
-  const parentCategories = categories.filter((c) => !c.description?.includes("sub:")).length
-  const subCategories = totalCategories - parentCategories
+  const productsTotal = Object.values(productCounts).reduce((s, n) => s + n, 0)
+  const unusedCategories = categories.filter((c) => !productCounts[c.id]).length
 
-  async function handleSave(data: Partial<Category>) {
-    if (editing) {
-      await supabase.from("categories").update(data).eq("id", editing.id)
-    } else {
-      await supabase.from("categories").insert(data)
+  async function handleSave(data: CategoryInput) {
+    try {
+      if (editing) {
+        await updateCategory(editing.id, data)
+      } else {
+        await createCategory(data)
+      }
+      setShowForm(false)
+      setEditing(null)
+      load()
+    } catch {
+      alert("Could not save the category. Try again.")
     }
-    setShowForm(false)
-    setEditing(null)
-    fetch()
   }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this category?")) return
-    await supabase.from("categories").delete().eq("id", id)
-    fetch()
+    try {
+      await deleteCategory(id)
+      load()
+    } catch {
+      alert("Could not delete the category. It may still be assigned to products.")
+    }
   }
 
   return (
@@ -171,9 +189,9 @@ export default function CategoriesPage() {
         </div>
         <div className="stat-card flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-muted">Parent Categories</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{parentCategories}</p>
-            <p className="mt-1 text-xs text-muted">Main categories</p>
+            <p className="text-sm font-medium text-muted">Products Tagged</p>
+            <p className="mt-2 text-3xl font-bold text-foreground">{productsTotal}</p>
+            <p className="mt-1 text-xs text-muted">Across all categories</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
             <Package size={20} className="text-muted" />
@@ -181,9 +199,9 @@ export default function CategoriesPage() {
         </div>
         <div className="stat-card flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-muted">Sub Categories</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{subCategories}</p>
-            <p className="mt-1 text-xs text-muted">Child categories</p>
+            <p className="text-sm font-medium text-muted">Unused Categories</p>
+            <p className="mt-2 text-3xl font-bold text-foreground">{unusedCategories}</p>
+            <p className="mt-1 text-xs text-muted">No products assigned</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
             <Package size={20} className="text-muted" />
@@ -211,17 +229,12 @@ export default function CategoriesPage() {
                 key={cat.id}
                 className="flex items-center gap-4 rounded-xl border border-border p-4 transition-all hover:border-primary/30 hover:shadow-sm"
               >
-                {/* Category Image */}
-                <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-sidebar-hover overflow-hidden">
-                  {cat.image ? (
-                    <img
-                      src={cat.image}
-                      alt={cat.name}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <Package size={24} className="text-muted" />
-                  )}
+                {/* Category Color */}
+                <div
+                  className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg"
+                  style={{ backgroundColor: cat.color || "#6B7280" }}
+                >
+                  <Package size={24} className="text-white" />
                 </div>
 
                 {/* Category Info */}

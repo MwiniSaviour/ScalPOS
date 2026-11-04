@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next"
+import { Providers } from "@/components/providers"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 
@@ -47,7 +48,9 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.ts" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </head>
-      <body className="min-h-screen antialiased">{children}</body>
+      <body className="min-h-screen antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   )
 }

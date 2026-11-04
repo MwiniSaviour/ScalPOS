@@ -1,16 +1,15 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 import { ChevronRight, LayoutGrid } from "lucide-react"
-import { NAV_ITEMS, APP_NAME } from "@/lib/constants"
-import type { Profile } from "@/lib/types"
+import { useUser } from "@clerk/clerk-react"
+import { NAV_ITEMS } from "@/lib/constants"
 import type { NavItem } from "@/lib/types"
+import { useOrg } from "@/lib/auth/org"
 
 function findBreadcrumb(
   items: NavItem[],
-  pathname: string,
-  parentLabel?: string
+  pathname: string
 ): { label: string; parent?: string }[] {
   for (const item of items) {
     if (item.children) {
@@ -18,10 +17,7 @@ function findBreadcrumb(
         (c) => pathname === c.href || pathname.startsWith(c.href + "/")
       )
       if (child) {
-        return [
-          { label: item.label },
-          { label: child.label },
-        ]
+        return [{ label: item.label }, { label: child.label }]
       }
     }
     if (pathname === item.href || pathname.startsWith(item.href + "/")) {
@@ -31,25 +27,18 @@ function findBreadcrumb(
   return [{ label: "Dashboard" }]
 }
 
+const ROLE_LABEL: Record<string, string> = {
+  owner: "Owner",
+  supervisor: "Supervisor",
+  cashier: "Cashier",
+}
+
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname()
-  const [profile, setProfile] = useState<Profile | null>(null)
-
+  const { user } = useUser()
+  const { shop } = useOrg()
   const breadcrumbs = findBreadcrumb(NAV_ITEMS, pathname)
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch("/auth/api/me")
-        if (!res.ok) return
-        const { user } = await res.json()
-        if (user) {
-          setProfile({ id: user.id, name: user.name, email: user.email, role: user.role } as Profile)
-        }
-      } catch {}
-    }
-    load()
-  }, [])
+  const name = user?.fullName || user?.firstName || user?.primaryEmailAddress?.emailAddress || "User"
 
   function getGreeting() {
     const hour = new Date().getHours()
@@ -60,7 +49,6 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-8">
-      {/* Left: Breadcrumb */}
       <div className="flex items-center gap-2">
         <button
           onClick={onMenuClick}
@@ -86,16 +74,17 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </nav>
       </div>
 
-      {/* Right: User info */}
       <div className="flex items-center gap-3">
         <div className="text-right">
           <p className="text-sm font-medium text-foreground">
-            {getGreeting()}, {profile?.name?.split(" ")[0] || "User"}
+            {getGreeting()}, {name.split(" ")[0]}
           </p>
-          <p className="text-xs text-muted">{profile?.role === "admin" ? "Administrator" : "Staff Member"}</p>
+          <p className="text-xs text-muted">
+            {shop ? `${shop.name} · ${ROLE_LABEL[shop.role] ?? "Staff"}` : "No shop"}
+          </p>
         </div>
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
-          {profile?.name?.charAt(0)?.toUpperCase() || "U"}
+          {name.charAt(0).toUpperCase()}
         </div>
       </div>
     </header>
