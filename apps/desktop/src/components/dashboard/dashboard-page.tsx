@@ -1,13 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { DollarSign, Package, Users, AlertTriangle } from "lucide-react"
+import { useCallback, useEffect, useState } from "react"
+import { AlertTriangle, ChevronRight, Package, Users, Wallet } from "lucide-react"
+import Link from "next/link"
+import { cn, formatCedi } from "@/lib/utils"
+import { dueOf, isOnCredit } from "@/lib/orders-ui"
+import { useRealtime } from "@/lib/api/realtime"
 import { StatCard } from "./stat-card"
 import { RevenueChart } from "./revenue-chart"
 import { TopProducts } from "./top-products"
 import { RecentSales } from "./recent-sales"
 import { fetchSales, fetchProducts, fetchCustomers } from "@/lib/api/data"
-import { formatCurrency } from "@/lib/utils"
 import type { Sale, Product, Customer, RevenuePoint, TopProduct } from "@/lib/types"
 
 const MONTHS = [
@@ -32,30 +35,30 @@ export function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const [s, p, c] = await Promise.all([
-          fetchSales(),
-          fetchProducts(),
-          fetchCustomers(),
-        ])
-        if (cancelled) return
-        setSales(s)
-        setProducts(p)
-        setCustomers(c)
-      } catch {
-        if (!cancelled) setError(true)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
+  const load = useCallback(async () => {
+    try {
+      const [s, p, c] = await Promise.all([
+        fetchSales(),
+        fetchProducts(),
+        fetchCustomers(),
+      ])
+      setSales(s)
+      setProducts(p)
+      setCustomers(c)
+      setError(false)
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
+  }, [load])
+
+  useRealtime(load)
 
   const now = new Date()
   const todayStart = startOfDay(now)
@@ -75,11 +78,13 @@ export function DashboardPage() {
     0
   )
   let revenueChange: string | undefined
+  let revenueChangeDetail: string | undefined
   let revenueChangeType: "up" | "down" = "up"
   if (yesterdayRevenue > 0) {
     const pct = Math.round(((todayRevenue - yesterdayRevenue) / yesterdayRevenue) * 100)
     revenueChangeType = pct >= 0 ? "up" : "down"
-    revenueChange = `${Math.abs(pct)}% from yesterday`
+    revenueChange = `${Math.abs(pct)}%`
+    revenueChangeDetail = `vs ${formatCedi(yesterdayRevenue)} yesterday`
   } else if (todayRevenue > 0) {
     revenueChange = "First sales today"
   }
@@ -91,6 +96,9 @@ export function DashboardPage() {
     (c) => c.created_at && new Date(c.created_at) >= monthStart
   ).length
   const lowStockCount = products.filter((p) => p.stock <= p.low_stock_at).length
+  const creditOrders = sales.filter(isOnCredit)
+  const customersOnCredit = creditOrders.length
+  const creditTotal = creditOrders.reduce((a, s) => a + dueOf(s), 0)
 
   const totalsByKey = new Map<string, number>()
   for (const s of sales) {
@@ -147,11 +155,10 @@ export function DashboardPage() {
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="Today's Revenue"
-          value={formatCurrency(todayRevenue)}
+          value={formatCedi(todayRevenue)}
           change={revenueChange}
+          changeDetail={revenueChangeDetail}
           changeType={revenueChangeType}
-          icon={DollarSign}
-          iconBg="bg-success-bg"
         />
         <StatCard
           title="Total Products"
@@ -159,7 +166,7 @@ export function DashboardPage() {
           change={`${newProducts} new this month`}
           changeType="up"
           icon={Package}
-          iconBg="bg-info-bg"
+          iconBg="bg-primary-light"
         />
         <StatCard
           title="Total Customers"
@@ -169,12 +176,71 @@ export function DashboardPage() {
           icon={Users}
           iconBg="bg-primary-light"
         />
-        <StatCard
-          title="Low Stock Alerts"
-          value={String(lowStockCount)}
-          icon={AlertTriangle}
-          iconBg="bg-danger-bg"
-        />
+        <div className="glass-panel flex flex-col p-5">
+          <p className="text-sm font-medium text-muted">Needs attention</p>
+          {lowStockCount === 0 && customersOnCredit === 0 ? (
+            <p className="mt-3 text-sm font-semibold text-success">All clear</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              <Link
+                href="/dashboard/products?stock=low"
+                className={cn(
+                  "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+                  lowStockCount > 0
+                    ? "border-danger/20 bg-danger-bg hover:bg-danger-bg/70"
+                    : "border-border bg-sidebar-hover hover:bg-border/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                    lowStockCount > 0 ? "bg-danger/15 text-danger" : "bg-muted-bg text-muted",
+                  )}
+                >
+                  <AlertTriangle size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {lowStockCount} low stock
+                  </span>
+                  <span className="block text-[11px] text-muted">
+                    {lowStockCount > 0 ? "Items need restocking" : "Stock levels healthy"}
+                  </span>
+                </span>
+                <ChevronRight size={14} className="shrink-0 text-muted" />
+              </Link>
+              <Link
+                href="/dashboard/orders?filter=unpaid"
+                className={cn(
+                  "flex items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors",
+                  customersOnCredit > 0
+                    ? "border-warning/25 bg-warning-bg hover:bg-warning-bg/70"
+                    : "border-border bg-sidebar-hover hover:bg-border/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+                    customersOnCredit > 0 ? "bg-warning/15 text-warning" : "bg-muted-bg text-muted",
+                  )}
+                >
+                  <Wallet size={16} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {customersOnCredit} on credit
+                  </span>
+                  <span className="block text-[11px] text-muted">
+                    {customersOnCredit > 0
+                      ? `${formatCedi(creditTotal)} outstanding`
+                      : "No outstanding balances"}
+                  </span>
+                </span>
+                <ChevronRight size={14} className="shrink-0 text-muted" />
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-7">

@@ -19,12 +19,15 @@ import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import type { Category, Customer, Order, Product, Settings, StockMove } from "@/lib/types";
 import { isDemoMode } from "@/lib/demo";
+import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "@/lib/image-refs";
+import { getImageBlob, isLocalImageRef } from "@/lib/image-store";
 import type { Op } from "./types";
 import { pullSettings } from "./settings";
 
 const IDMAP_KEY = "nova-pos-idmap-v1";
 const FIRST_PUSH_KEY = "nova-pos-first-push-v1";
 const LAST_PULL_KEY = "nova-pos-last-pull";
+
 const PULL_INTERVAL = 30_000;
 
 const TABLES = ["categories", "products", "customers", "orders", "order_items", "stock_moves"] as const;
@@ -67,6 +70,66 @@ const ms = (v: unknown): number | null => {
 };
 const iso = (t: number | null | undefined): string | null =>
   typeof t === "number" && Number.isFinite(t) ? new Date(t).toISOString() : null;
+
+// ---- product images ---------------------------------------------------------
+
+const IMG_EXT = (type: string): string => {
+  if (type.includes("png")) return "png";
+  if (type.includes("gif")) return "gif";
+  if (type.includes("jpeg")) return "jpeg";
+  return "webp";
+};
+
+function hexTo(hash: ArrayBuffer): string {
+  return [...new Uint8Array(hash).subarray(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Upload the locally-stored blob behind an "idb:" ref to the private
+ * "product-images" bucket and return the cloud ref for it. The content hash is
+ * baked into the object path so resolvers on other devices can verify a cached
+ * copy against it. Throws so the outbox op retries when storage refuses the
+ * write (offline, or a role without upload rights) — better to retry than
+ * publish dead local refs. Returns "" when the blob is no longer stored here.
+ */
+async function imageRefForRemote(
+  c: NonNullable<Awaited<ReturnType<typeof sb>>>,
+  org: string,
+  folder: string,
+  key: string,
+  ref: string,
+): Promise<string> {
+  if (!ref) return "";
+  if (!isLocalImageRef(ref)) return ref;
+  const blob = await getImageBlob(ref);
+  if (!blob) return "";
+  const hash = hexTo(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+  const path = `${org}/${folder}/${key}/${hash}.${IMG_EXT(blob.type)}`;
+  const { error } = await c
+    .storage.from("product-images")
+    .upload(path, blob, { contentType: blob.type, upsert: true });
+  if (error) throw new Error(`image upload: ${error.message}`);
+  const cloudRef = CLOUD_IMAGE_PREFIX + path;
+  rememberCloudImage(cloudRef, ref);
+  return cloudRef;
+}
+
+/** Point the local product row at the cloud ref so later ops stay consistent. */
+async function adoptLocalImageUrl(id: string, cloudRef: string) {
+  const usePos = (await import("@/lib/store")).usePos;
+  APPLYING = true;
+  try {
+    usePos.setState((s: Store) => {
+      const i = s.products.findIndex((p) => p.id === id);
+      if (i < 0 || s.products[i].imageUrl === cloudRef) return s;
+      const next = s.products.slice();
+      next[i] = { ...next[i], imageUrl: cloudRef };
+      return { ...s, products: next } as unknown as typeof s;
+    });
+  } finally {
+    APPLYING = false;
+  }
+}
 
 type RemoteRow = Record<string, unknown>;
 
@@ -139,6 +202,10 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         catId = readMap().categories[x.categoryId];
       }
     }
+    const imagePath: string =
+      x.imageUrl && isLocalImageRef(x.imageUrl)
+        ? await imageRefForRemote(c, org_id, "products", x.id, x.imageUrl)
+        : (x.imageUrl ?? "");
     await put(table, {
       ...(map.products[x.id] ? { id: map.products[x.id] } : {}),
       org_id,
@@ -152,13 +219,14 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       unit: x.unit,
       sku: x.sku,
       barcode: x.barcode,
-      image_path: x.imageUrl,
+      image_path: imagePath,
       description: x.description,
       active: x.active,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
     });
+    if (imagePath && imagePath !== x.imageUrl) void adoptLocalImageUrl(x.id, imagePath);
     return;
   }
 
@@ -241,6 +309,10 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
     for (let i = 0; i < x.items.length; i++) {
       const it = x.items[i];
       const itLocal = `${x.id}#${i}`;
+      const itImagePath: string =
+        it.imageUrl && isLocalImageRef(it.imageUrl)
+          ? await imageRefForRemote(c, org_id, "items", itLocal, it.imageUrl)
+          : (it.imageUrl ?? "");
       await put("order_items", {
         ...(map.order_items[itLocal] ? { id: map.order_items[itLocal] } : {}),
         org_id,
@@ -248,7 +320,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         local_id: itLocal,
         product_id: map.products[it.productId] ?? (revProductIds[it.productId] ? it.productId : null),
         name: it.name,
-        image_path: it.imageUrl,
+        image_path: itImagePath,
         qty: it.qty,
         price: it.price,
         cost: it.cost,
@@ -572,7 +644,8 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
           return { ...s, categories: putAt(s.categories, catLocal(row)) } as unknown as typeof s;
         }
         case "orders": {
-          const local = ordLocal(row, map, []) as Order;
+          const current = s.orders.find((x) => x.id === String(row.local_id ?? ""));
+          const local = ordLocal(row, map, current?.items ?? []) as Order;
           return { ...s, orders: putAt(s.orders, local) } as unknown as typeof s;
         }
         case "stock_moves": {
@@ -716,6 +789,38 @@ export async function armSync(conn: SyncConnection) {
     } as unknown as Op);
   } catch (e) {
     console.warn("sync: settings queue", e);
+  }
+
+  // 1c. every arm: products (and their order snapshots) still carrying "idb:"
+  // refs locally — whether pushed by older builds or made before the upload
+  // succeeded — are requeued so the images migrate into the bucket. The
+  // conditions make this a no-op once everything is migrated.
+  try {
+    const s = await store();
+    const mp = readMap();
+    const { enqueue } = await import("./outbox");
+    for (const x of s.products) {
+      if (!isLocalImageRef(x.imageUrl) || !mp.products[x.id]) continue;
+      await enqueue({
+        op_id: crypto.randomUUID(),
+        table: "products",
+        kind: "upsert",
+        row: { id: x.id },
+        created_at: Date.now(),
+      } as unknown as Op);
+    }
+    for (const o of s.orders) {
+      if (!o.items.some((it) => isLocalImageRef(it.imageUrl)) || !mp.orders[o.id]) continue;
+      await enqueue({
+        op_id: crypto.randomUUID(),
+        table: "orders",
+        kind: "upsert",
+        row: { id: o.id },
+        created_at: Date.now(),
+      } as unknown as Op);
+    }
+  } catch (e) {
+    console.warn("sync: image migrate queue", e);
   }
 
   // 2. watch the store for diffs

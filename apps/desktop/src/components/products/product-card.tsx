@@ -1,24 +1,26 @@
 import { Package } from "lucide-react"
 import { cn, formatCurrency, getStockStatus } from "@/lib/utils"
+import { useImageSrc } from "@/lib/api/image"
 import type { Product } from "@/lib/types"
 
 interface ProductCardProps {
   product: Product
-  onEdit: (product: Product) => void
+  onView: (product: Product) => void
 }
 
-export function ProductCard({ product, onEdit }: ProductCardProps) {
+export function ProductCard({ product, onView }: ProductCardProps) {
   const stock = getStockStatus(product.stock)
+  const src = useImageSrc(product.image)
 
   return (
     <div
       className="glass-panel p-4 card-hover cursor-pointer"
-      onClick={() => onEdit(product)}
+      onClick={() => onView(product)}
     >
       <div className="mb-3 flex aspect-square items-center justify-center rounded-lg bg-sidebar-hover">
-        {product.image ? (
+        {src ? (
           <img
-            src={product.image}
+            src={src}
             alt={product.name}
             className="h-full w-full rounded-lg object-cover"
           />

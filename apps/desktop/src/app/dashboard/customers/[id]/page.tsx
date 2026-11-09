@@ -124,7 +124,7 @@ export default function CustomerDetailPage() {
               sales.map((sale) => (
                 <tr key={sale.id} className="hover:bg-sidebar-hover transition-colors">
                   <td className="table-cell font-medium text-foreground">
-                    <Link href={`/dashboard/payments/${sale.id}`} className="hover:text-primary">
+                    <Link href={`/dashboard/orders/${sale.id}`} className="hover:text-primary">
                       {sale.invoice_no}
                     </Link>
                   </td>

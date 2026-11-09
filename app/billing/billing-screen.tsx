@@ -6,7 +6,7 @@ import { ScreenHeader } from "@/components/shell/screenheader";
 import { readConnection, type SyncConnection } from "@/lib/api/bootstrap";
 import { Chip } from "@/components/ui/chip";
 import { Input } from "@/components/ui/input";
-import { getSubscription, startCheckout, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
+import { getSubscription, startCheckout, BillingAuthError, type Renewal, type SubPlan, type SubscriptionState } from "@/lib/api/billing";
 import { recordSubscriptionState } from "@/lib/entitlement";
 import {
   clearAffiliateRef,
@@ -114,6 +114,7 @@ export default function BillingScreen() {
   const [busy, setBusy] = useState<SubPlan | "refresh" | null>(null);
   const [renewal, setRenewal] = useState<Renewal>("manual");
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [affiliateCode, setAffiliateCode] = useState("");
   const [affiliateError, setAffiliateError] = useState<string | null>(null);
 
@@ -121,13 +122,18 @@ export default function BillingScreen() {
     if (!conn) return;
     setBusy("refresh");
     setError(null);
+    setSessionExpired(false);
     try {
       const next = await getSubscription(conn);
       setState(next);
       recordSubscriptionState(next, conn.org_id);
       toast(statusToast(next), next.status === "active" ? "ok" : "warn");
     } catch (e) {
-      setError(errorText(e));
+      if (e instanceof BillingAuthError) {
+        setSessionExpired(true);
+      } else {
+        setError(errorText(e));
+      }
     } finally {
       setBusy(null);
     }
@@ -150,7 +156,12 @@ export default function BillingScreen() {
         }
       })
       .catch((e: unknown) => {
-        if (alive) setError(errorText(e));
+        if (!alive) return;
+        if (e instanceof BillingAuthError) {
+          setSessionExpired(true);
+        } else {
+          setError(errorText(e));
+        }
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -183,7 +194,11 @@ export default function BillingScreen() {
       sessionStorage.setItem("nova-pos-checkout-v1", JSON.stringify(payload));
       router.push(`/paystack/pay?ref=${encodeURIComponent(payload.reference)}`);
     } catch (e) {
-      toast(errorText(e), "error");
+      if (e instanceof BillingAuthError) {
+        setSessionExpired(true);
+      } else {
+        toast(errorText(e), "error");
+      }
     } finally {
       setBusy(null);
     }
@@ -209,6 +224,24 @@ export default function BillingScreen() {
       );
     }
     const s = state;
+    if (sessionExpired) {
+      return (
+        <div data-testid="billing-status" className="flex w-full items-center gap-3">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-danger/10 text-danger">
+            <ShieldAlert className="size-[18px]" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-[15px] font-semibold text-danger">Session expired</span>
+            <span className="block text-[14px] text-ink3">
+              Your sign-in expired — reconnect to check your plan and keep syncing.
+            </span>
+          </span>
+          <Button variant="secondary" size="sm" onClick={() => router.push("/connect")}>
+            Reconnect
+          </Button>
+        </div>
+      );
+    }
     if (s && s.status === "active") {
       return (
         <div data-testid="billing-status" className="flex w-full items-center gap-3">
@@ -335,7 +368,7 @@ export default function BillingScreen() {
               price="GHS 120/year"
               bullets={["Single owner", "Unlimited sales", "Offline register"]}
               busy={busy === "standard"}
-              disabled={!conn || busy !== null}
+              disabled={!conn || busy !== null || sessionExpired}
               current={state?.status === "active" && state?.plan === "standard"}
               onSubscribe={() => void subscribe("standard")}
             />
@@ -350,7 +383,7 @@ export default function BillingScreen() {
                 "Desktop access",
               ]}
               busy={busy === "enterprise"}
-              disabled={!conn || busy !== null}
+              disabled={!conn || busy !== null || sessionExpired}
               current={state?.status === "active" && state?.plan === "enterprise"}
               onSubscribe={() => void subscribe("enterprise")}
             />

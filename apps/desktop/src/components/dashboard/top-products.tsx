@@ -54,7 +54,7 @@ export function TopProducts({ data }: { data: TopProduct[] }) {
                   fontSize: "13px",
                 }}
               />
-              <Bar dataKey="revenue" fill="#4f46e5" radius={[0, 4, 4, 0]} barSize={20} />
+              <Bar dataKey="revenue" fill="#047857" radius={[0, 4, 4, 0]} barSize={20} />
             </BarChart>
           </ResponsiveContainer>
         </div>

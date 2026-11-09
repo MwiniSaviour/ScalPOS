@@ -23,11 +23,32 @@ import {
   fetchProducts,
   fetchCategories,
   fetchCustomers,
+  fetchSettings,
   createCustomer,
   placeSale,
 } from "@/lib/api/data"
-import type { Product, Customer, CartItem, Category, Sale } from "@/lib/types"
+import type { Product, Customer, CartItem, Category, Sale, ShopSettings } from "@/lib/types"
+import { useImageSrc } from "@/lib/api/image"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
+import { OrderReceipt } from "@/components/orders/receipt"
+import { useRealtime } from "@/lib/api/realtime"
+
+function PosImage({
+  image,
+  alt,
+  iconSize,
+}: {
+  image: string | null
+  alt: string
+  iconSize: number
+}) {
+  const src = useImageSrc(image)
+  return src ? (
+    <img src={src} alt={alt} className="h-full w-full rounded-lg object-cover" />
+  ) : (
+    <Package size={iconSize} className="text-muted" />
+  )
+}
 
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([])
@@ -41,6 +62,7 @@ export default function PosPage() {
   const [showCustomerSelect, setShowCustomerSelect] = useState(false)
   const [showReceipt, setShowReceipt] = useState(false)
   const [lastSale, setLastSale] = useState<Sale | null>(null)
+  const [posSettings, setPosSettings] = useState<ShopSettings | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discount, setDiscount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -71,8 +93,18 @@ export default function PosPage() {
   }, [])
 
   useEffect(() => {
-    load()
+    const t0 = setTimeout(() => {
+      void fetchSettings().then(setPosSettings).catch(() => {})
+    }, 0)
+    return () => clearTimeout(t0)
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
   }, [load])
+
+  useRealtime(load)
 
   const handleBarcodeScan = useCallback(
     async (barcode: string) => {
@@ -125,6 +157,11 @@ export default function PosPage() {
         return matchSearch && matchCat
       }),
     [products, search, catFilter]
+  )
+
+  const cartQtyById = useMemo(
+    () => Object.fromEntries(cart.map((i) => [i.product_id, i.quantity])),
+    [cart]
   )
 
   const filteredCustomers = customers.filter(
@@ -320,38 +357,46 @@ export default function PosPage() {
 
         <div className="flex-1 overflow-y-auto p-4">
           <div className="grid grid-cols-3 gap-3 xl:grid-cols-4 2xl:grid-cols-5">
-            {filteredProducts.map((product) => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product)}
-                disabled={product.stock === 0 || !product.active}
-                className={cn(
-                  "flex flex-col items-center rounded-xl border border-border bg-card p-3 text-center transition-all hover:border-primary hover:shadow-md active:scale-95",
-                  (product.stock === 0 || !product.active) && "opacity-40 cursor-not-allowed"
-                )}
-              >
-                <div className="mb-2 flex h-16 w-16 items-center justify-center rounded-lg bg-sidebar-hover">
-                  {product.image ? (
-                    <img
-                      src={product.image}
-                      alt={product.name}
-                      className="h-full w-full rounded-lg object-cover"
-                    />
-                  ) : (
-                    <Package size={24} className="text-muted" />
+            {filteredProducts.map((product) => {
+              const inCart = cartQtyById[product.id] ?? 0
+              return (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product)}
+                  disabled={product.stock === 0 || !product.active}
+                  className={cn(
+                    "relative flex flex-col items-center rounded-xl border bg-card p-3 text-center transition-all hover:shadow-md active:scale-95",
+                    inCart > 0
+                      ? "border-primary bg-primary-light ring-2 ring-primary/20"
+                      : "border-border hover:border-primary",
+                    (product.stock === 0 || !product.active) && "opacity-40 cursor-not-allowed"
                   )}
-                </div>
-                <p className="w-full truncate text-xs font-medium text-foreground">
-                  {product.name}
-                </p>
-                <p className="mt-0.5 text-sm font-bold text-primary">
-                  {formatCurrency(product.price)}
-                </p>
-                <p className="text-[10px] text-muted">
-                  {product.stock > 0 ? `${product.stock} left` : "Out of stock"}
-                </p>
-              </button>
-            ))}
+                >
+                  {inCart > 0 ? (
+                    <span className="absolute -right-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-white shadow-sm">
+                      {inCart}
+                    </span>
+                  ) : null}
+                  <div
+                    className={cn(
+                      "mb-2 flex h-16 w-16 items-center justify-center rounded-lg",
+                      inCart > 0 ? "bg-primary/10" : "bg-sidebar-hover"
+                    )}
+                  >
+                    <PosImage image={product.image} alt={product.name} iconSize={24} />
+                  </div>
+                  <p className="w-full truncate text-xs font-medium text-foreground">
+                    {product.name}
+                  </p>
+                  <p className="mt-0.5 text-sm font-bold text-primary">
+                    {formatCurrency(product.price)}
+                  </p>
+                  <p className="text-[10px] text-muted">
+                    {product.stock > 0 ? `${product.stock} left` : "Out of stock"}
+                  </p>
+                </button>
+              )
+            })}
           </div>
         </div>
       </div>
@@ -437,11 +482,7 @@ export default function PosPage() {
                 className="flex items-center gap-3 rounded-lg border border-border p-3"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-sidebar-hover">
-                  {item.image ? (
-                    <img src={item.image} alt={item.product_name} className="h-full w-full rounded-lg object-cover" />
-                  ) : (
-                    <Package size={18} className="text-muted" />
-                  )}
+                  <PosImage image={item.image} alt={item.product_name} iconSize={18} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">
@@ -570,8 +611,8 @@ export default function PosPage() {
       )}
 
       {showReceipt && lastSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 print:hidden">
+          <div className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
             <div className="mb-4 text-center">
               <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-success-bg">
                 <Package size={24} className="text-success" />
@@ -580,46 +621,9 @@ export default function PosPage() {
               <p className="text-xs text-muted">{lastSale.invoice_no}</p>
             </div>
 
-            <div className="mb-4 space-y-2 rounded-lg bg-sidebar-hover p-4 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted">Date</span>
-                <span className="text-foreground">{new Date().toLocaleDateString()}</span>
-              </div>
-              {lastSale.customer && (
-                <div className="flex justify-between">
-                  <span className="text-muted">Customer</span>
-                  <span className="text-foreground">{lastSale.customer.name}</span>
-                </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-muted">Payment</span>
-                <span className="badge-info">
-                  {creditLabel(lastSale.payment_method)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Status</span>
-                <span className={lastSale.payment_status === "paid" ? "badge-success" : "badge-warning"}>
-                  {lastSale.payment_status === "paid" ? "Paid" : "Unpaid"}
-                </span>
-              </div>
-              <div className="border-t border-border pt-2">
-                {lastSale.items?.map((item) => (
-                  <div key={item.id} className="flex justify-between text-xs">
-                    <span className="text-foreground">
-                      {item.product_name} x{item.quantity}
-                    </span>
-                    <span className="text-foreground">{formatCurrency(item.subtotal)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex justify-between border-t border-border pt-2 font-bold">
-                <span className="text-foreground">Total</span>
-                <span className="text-primary">{formatCurrency(lastSale.total)}</span>
-              </div>
-            </div>
+            <OrderReceipt sale={lastSale} settings={posSettings} className="rounded-xl border border-border" />
 
-            <div className="flex gap-3">
+            <div className="mt-4 flex gap-3">
               <button
                 onClick={() => window.print()}
                 className="btn-secondary flex-1"

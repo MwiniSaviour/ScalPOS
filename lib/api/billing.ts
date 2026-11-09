@@ -16,9 +16,16 @@ function supabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
 }
 
+export class BillingAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BillingAuthError";
+  }
+}
+
 async function edgePost(conn: SyncConnection, fn: string, body: Record<string, unknown> = {}): Promise<Record<string, unknown>> {
   const token = (await freshToken(true)) ?? conn.access_token ?? "";
-  if (!token) throw new Error("signed out — reconnect first");
+  if (!token) throw new BillingAuthError("You're signed out. Reconnect to continue.");
   let res: Response;
   try {
     res = await fetch(`${supabaseUrl()}/functions/v1/${fn}`, {
@@ -36,7 +43,10 @@ async function edgePost(conn: SyncConnection, fn: string, body: Record<string, u
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     const raw = typeof json.error === "string" ? json.error : `${fn} failed (${res.status})`;
-    throw new Error(res.status === 401 ? `${raw} — open Connect and reconnect` : raw);
+    if (res.status === 401) {
+      throw new BillingAuthError("Your sign-in expired. Reconnect to continue syncing.");
+    }
+    throw new Error(raw);
   }
   return json;
 }

@@ -1,4 +1,4 @@
-const CACHE_NAME = "shopmanager-v2"
+const CACHE_NAME = "scalpos-v2"
 
 self.addEventListener("install", (event) => {
   self.skipWaiting()

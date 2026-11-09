@@ -1,18 +1,28 @@
 import { Package, Eye, Edit, Trash2 } from "lucide-react"
-import { formatCurrency, getStockStatus, cn } from "@/lib/utils"
+import { formatCurrency, cn } from "@/lib/utils"
+import { useImageSrc } from "@/lib/api/image"
 import type { Product } from "@/lib/types"
 
 interface ProductTableProps {
   products: Product[]
+  onView: (product: Product) => void
   onEdit: (product: Product) => void
   onDelete: (id: string) => void
 }
 
-export function ProductTable({ products, onEdit, onDelete }: ProductTableProps) {
+function ProductCellImage({ image, name }: { image: string | null; name: string }) {
+  const src = useImageSrc(image)
+  return src ? (
+    <img src={src} alt={name} className="h-full w-full object-cover" />
+  ) : (
+    <Package size={24} className="text-muted" />
+  )
+}
+
+export function ProductTable({ products, onView, onEdit, onDelete }: ProductTableProps) {
   return (
     <div className="space-y-3">
       {products.map((product) => {
-        const stock = getStockStatus(product.stock)
         return (
           <div
             key={product.id}
@@ -20,15 +30,7 @@ export function ProductTable({ products, onEdit, onDelete }: ProductTableProps) 
           >
             {/* Product Image */}
             <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-sidebar-hover overflow-hidden">
-              {product.image ? (
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <Package size={24} className="text-muted" />
-              )}
+              <ProductCellImage image={product.image} name={product.name} />
             </div>
 
             {/* Product Info */}
@@ -57,7 +59,7 @@ export function ProductTable({ products, onEdit, onDelete }: ProductTableProps) 
             {/* Actions */}
             <div className="flex items-center gap-1">
               <button
-                onClick={() => onEdit(product)}
+                onClick={() => onView(product)}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:bg-sidebar-hover hover:text-foreground transition-all"
                 title="View"
               >

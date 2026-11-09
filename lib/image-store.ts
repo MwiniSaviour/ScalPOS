@@ -8,6 +8,12 @@
  * Everything else ("/products/x.jpg", https://…, data:…) is passed through untouched.
  */
 
+import {
+  isCloudImageRef,
+  readImageMap,
+  writeImageMap,
+} from "./image-refs";
+
 const DB_NAME = "nova-pos-images";
 const DB_VERSION = 1;
 const STORE = "images";
@@ -107,14 +113,31 @@ export async function clearAllImages(): Promise<void> {
 /**
  * Delete photos no longer referenced by any product or order line.
  * Orders snapshot the image reference, so a photo must survive product deletion.
+ * Cloud refs ("sb-product-images:…") keep their local origin blob through the
+ * ref map, so mapped blobs stay as long as their cloud ref is referenced.
  */
 export async function pruneImages(referenced: string[]): Promise<void> {
-  const keep = new Set(referenced.filter(isLocalImageRef).map((r) => r.slice(IMAGE_PREFIX.length)));
+  const imgMap = readImageMap();
+  const keep = new Set<string>();
+  for (const ref of referenced) {
+    if (isLocalImageRef(ref)) {
+      keep.add(ref.slice(IMAGE_PREFIX.length));
+    } else if (isCloudImageRef(ref)) {
+      const mapped = imgMap[ref];
+      if (isLocalImageRef(mapped)) keep.add(mapped.slice(IMAGE_PREFIX.length));
+    }
+  }
   const ids = await tx<IDBValidKey[]>("readonly", (store) => store.getAllKeys());
   if (!ids) return;
   const stale = (ids as IDBValidKey[]).map((k) => String(k)).filter((id) => !keep.has(id));
   for (const id of stale) {
     await tx("readwrite", (store) => store.delete(id));
+    const ref = IMAGE_PREFIX + id;
+    const dropped = Object.entries(imgMap).filter(([, v]) => v === ref);
+    if (dropped.length) {
+      for (const [k] of dropped) delete imgMap[k];
+      writeImageMap(imgMap);
+    }
   }
 }
 

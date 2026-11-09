@@ -14,11 +14,14 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "ShopManager",
-  description: "Smart shop management system for local businesses",
+  title: "ScalPOS",
+  description: "Point of sale for Ghanaian shops",
+  icons: {
+    icon: "/icon-512.png",
+  },
   appleWebApp: {
     capable: true,
-    title: "ShopManager",
+    title: "ScalPOS",
     statusBarStyle: "black-translucent",
   },
   other: {
@@ -27,7 +30,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#047857",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

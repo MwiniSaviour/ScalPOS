@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/data"
 import type { ProductInput, CategoryInput } from "@/lib/api/data"
 import type { Product, Category } from "@/lib/types"
+import { useRealtime } from "@/lib/api/realtime"
 
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([])
@@ -34,8 +35,11 @@ export function useProducts() {
   }, [])
 
   useEffect(() => {
-    load()
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
   }, [load])
+
+  useRealtime(load)
 
   async function addProduct(input: Partial<ProductInput>) {
     const created = await createProduct(input as ProductInput)
@@ -81,8 +85,11 @@ export function useCategories() {
   }, [])
 
   useEffect(() => {
-    load()
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
   }, [load])
+
+  useRealtime(load)
 
   async function addCategory(input: Partial<CategoryInput>) {
     const created = await createCategory(input as CategoryInput)

@@ -33,10 +33,9 @@ export default function EmployeesPage() {
   const [editing, setEditing] = useState<Staff | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
-    setError(null)
     try {
       setStaff(await fetchStaff())
+      setError(null)
     } catch {
       setError("Failed to load employees. Check your connection.")
     } finally {
@@ -45,7 +44,8 @@ export default function EmployeesPage() {
   }, [])
 
   useEffect(() => {
-    void load()
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
   }, [load])
 
   const filtered = staff.filter(

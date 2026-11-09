@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { PWASetup } from "../scanner/pwa-setup"
+import { NewSaleFab } from "./new-sale-fab"
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -16,6 +17,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>
+      <NewSaleFab />
     </div>
   )
 }

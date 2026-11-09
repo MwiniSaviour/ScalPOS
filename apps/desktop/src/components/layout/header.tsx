@@ -6,6 +6,7 @@ import { useUser } from "@clerk/clerk-react"
 import { NAV_ITEMS } from "@/lib/constants"
 import type { NavItem } from "@/lib/types"
 import { useOrg } from "@/lib/auth/org"
+import { ProfileMenu } from "@/components/layout/profile-menu"
 
 function findBreadcrumb(
   items: NavItem[],
@@ -83,9 +84,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             {shop ? `${shop.name} · ${ROLE_LABEL[shop.role] ?? "Staff"}` : "No shop"}
           </p>
         </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-sm font-bold text-white">
-          {name.charAt(0).toUpperCase()}
-        </div>
+        <ProfileMenu />
       </div>
     </header>
   )

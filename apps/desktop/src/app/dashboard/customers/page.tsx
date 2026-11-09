@@ -1,5 +1,7 @@
 "use client"
 
+import { useRealtime } from "@/lib/api/realtime"
+
 import { useState, useEffect, useCallback } from "react"
 import { Plus, Search, Download, Eye, Edit, Trash2, Package, X } from "lucide-react"
 import Link from "next/link"
@@ -31,7 +33,12 @@ export default function CustomersPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
+  }, [load])
+
+  useRealtime(load)
 
   const filtered = customers.filter(
     (c) =>

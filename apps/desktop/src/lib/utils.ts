@@ -12,6 +12,14 @@ export function formatCurrency(amount: number): string {
   }).format(amount)
 }
 
+export function formatCedi(amount: number): string {
+  const formatted = new Intl.NumberFormat("en-GH", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+  return `₵${formatted}`
+}
+
 export function formatDate(date: string | Date): string {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
 } from "react"
-import { useAuth } from "@clerk/clerk-react"
+import { useAuth, useClerk } from "@clerk/clerk-react"
 import { createClient } from "@supabase/supabase-js"
 import { bootstrapOrg } from "@/lib/supabase/client"
 
@@ -41,18 +41,6 @@ export function getOrgRole(): Shop["role"] {
   return activeShop?.role ?? "cashier"
 }
 
-function sameUser(userId: string | null | undefined): boolean {
-  if (!userId || typeof window === "undefined") return false
-  try {
-    const raw = window.localStorage.getItem(CACHE_KEY)
-    if (!raw) return false
-    const parsed = JSON.parse(raw) as { user_id?: string; shop?: Shop } | null
-    return parsed?.user_id === userId && Boolean(parsed.shop?.id)
-  } catch {
-    return false
-  }
-}
-
 function readCache(userId: string | null | undefined): Shop | null {
   if (!userId || typeof window === "undefined") return null
   try {
@@ -70,19 +58,21 @@ function writeCache(userId: string, shop: Shop) {
   window.localStorage.setItem(CACHE_KEY, JSON.stringify({ user_id: userId, shop }))
 }
 
-function clearCache() {
-  window.localStorage.removeItem(CACHE_KEY)
-}
-
 const OrgContext = createContext<OrgContextValue | null>(null)
 
 export function OrgProvider({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth()
+  const { signOut } = useClerk()
   const [shop, setShop] = useState<Shop | null>(() => {
     if (typeof window === "undefined") return null
-    return readCache(userId)
+    const cached = readCache(userId)
+    if (cached) activeShop = cached
+    return cached
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === "undefined") return true
+    return !readCache(userId)
+  })
   const [error, setError] = useState<string | null>(null)
   const [needsShop, setNeedsShop] = useState(false)
   const [nonce, setNonce] = useState(0)
@@ -140,27 +130,9 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   )
 
   useEffect(() => {
-    if (!isLoaded) return
-    if (!isSignedIn || !userId) {
-      activeShop = null
-      setShop(null)
-      setLoading(false)
-      setNeedsShop(false)
-      setError(null)
-      clearCache()
-      return
-    }
-
-    const cached = readCache(userId)
-    if (cached) {
-      activeShop = cached
-      setShop(cached)
-      setLoading(false)
-    } else if (sameUser(userId) === false) {
-      setLoading(true)
-    }
-    void connect(false)
-    return
+    if (!isLoaded || !isSignedIn || !userId) return
+    const t = setTimeout(() => void connect(false), 0)
+    return () => clearTimeout(t)
   }, [connect, isLoaded, isSignedIn, userId, nonce])
 
   const createShop = useCallback(async () => {
@@ -179,6 +151,54 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     () => ({ shop, loading, error, needsShop, createShop, retry }),
     [shop, loading, error, needsShop, createShop, retry],
   )
+
+  if (!shop) {
+    if (error) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background p-6">
+          <div className="glass-panel w-full max-w-md space-y-4 p-6">
+            <div>
+              <h1 className="text-lg font-bold text-foreground">Can&apos;t open your shop</h1>
+              <p className="mt-1 text-sm text-muted">{error}</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={retry} disabled={loading} className="btn-primary flex-1">
+                {loading ? "Retrying…" : "Try again"}
+              </button>
+              <button onClick={() => void signOut()} className="btn-secondary flex-1">
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+    if (needsShop) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background p-6">
+          <div className="glass-panel w-full max-w-md space-y-4 p-6">
+            <div>
+              <h1 className="text-lg font-bold text-foreground">No shop yet</h1>
+              <p className="mt-1 text-sm text-muted">
+                Your account isn&apos;t linked to a shop. Create one to start selling.
+              </p>
+            </div>
+            <button onClick={() => void createShop()} disabled={loading} className="btn-primary w-full">
+              {loading ? "Creating…" : "Create my shop"}
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-9 w-9 animate-spin rounded-full border-2 border-border border-t-primary" />
+          <p className="text-sm text-muted">Connecting to your shop…</p>
+        </div>
+      </div>
+    )
+  }
 
   return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>
 }

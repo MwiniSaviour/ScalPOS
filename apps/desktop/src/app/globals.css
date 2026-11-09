@@ -3,14 +3,14 @@
 @theme inline {
   --color-background: #f8f9fc;
   --color-foreground: #1a1a2e;
-  --color-primary: #4f46e5;
-  --color-primary-hover: #4338ca;
-  --color-primary-light: #eef2ff;
+  --color-primary: #047857;
+  --color-primary-hover: #065f46;
+  --color-primary-light: #e6f4ee;
   --color-sidebar: #ffffff;
   --color-sidebar-hover: #f1f5f9;
-  --color-sidebar-active: #eef2ff;
+  --color-sidebar-active: #ecf5f1;
   --color-sidebar-text: #64748b;
-  --color-sidebar-text-active: #4f46e5;
+  --color-sidebar-text-active: #047857;
   --color-card: #ffffff;
   --color-card-hover: #fafbfc;
   --color-border: #e2e8f0;
@@ -114,5 +114,25 @@ body {
 
   .table-cell {
     @apply border-b border-border px-4 py-3 text-sm text-text-secondary;
+  }
+}
+
+@media print {
+  @page {
+    margin: 10mm;
+  }
+  body.nova-print-receipt * {
+    visibility: hidden !important;
+  }
+  body.nova-print-receipt .receipt-print-root,
+  body.nova-print-receipt .receipt-print-root * {
+    visibility: visible !important;
+  }
+  body.nova-print-receipt .receipt-print-root {
+    display: block !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
   }
 }

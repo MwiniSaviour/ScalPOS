@@ -1,5 +1,7 @@
 export type Role = "admin" | "employee"
 
+export type OrderStatus = "pending" | "completed" | "refunded"
+export type OrderPayStatus = "unpaid" | "partial" | "paid" | "refunded"
 export type PaymentMethod = "cash" | "momo" | "card" | "credit"
 
 export type PaymentStatus = "paid" | "pending"
@@ -87,6 +89,9 @@ export interface Sale {
   total: number
   payment_method: PaymentMethod
   payment_status: PaymentStatus
+  status: OrderStatus
+  pay_status: OrderPayStatus
+  payments: { method: PaymentMethod; amount: number }[]
   sale_date: string
   created_at: string
   items?: SaleItem[]
@@ -109,6 +114,17 @@ export interface Staff {
   photo_path: string | null
   active: boolean
   created_at: string
+}
+
+export type StockMoveReason = "purchase" | "sale" | "adjust" | "damage" | "return" | "count" | "opening"
+
+export interface StockMove {
+  id: string
+  product_id: string
+  qty: number
+  reason: StockMoveReason
+  ref: string | null
+  occurred_at: string
 }
 
 export interface ShopSettings {

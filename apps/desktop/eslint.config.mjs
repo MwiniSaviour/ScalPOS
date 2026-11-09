@@ -5,6 +5,18 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    files: [
+      "src/components/products/product-card.tsx",
+      "src/components/products/product-table.tsx",
+      "src/components/products/product-detail.tsx",
+      "src/components/products/product-form.tsx",
+      "src/app/dashboard/pos/page.tsx",
+    ],
+    rules: {
+      "@next/next/no-img-element": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

@@ -1,6 +1,6 @@
 import type { NavItem } from "./types"
 
-export const APP_NAME = "ShopManager"
+export const APP_NAME = "ScalPOS"
 
 export const STOCK_THRESHOLD = 10
 
@@ -16,7 +16,7 @@ export const PAYMENT_METHODS = [
 export const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/dashboard", icon: "LayoutDashboard" },
   {
-    label: "Product Management",
+    label: "Inventory",
     href: "/dashboard/products",
     icon: "Package",
     children: [
@@ -28,9 +28,9 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "Suppliers", href: "/dashboard/suppliers", icon: "Truck" },
   { label: "Employees", href: "/dashboard/employees", icon: "UserCog", roles: ["admin"] },
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
-  { label: "Scanner", href: "/dashboard/scan", icon: "Scan" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },
-  { label: "Payments", href: "/dashboard/payments", icon: "Receipt" },
+  { label: "Orders", href: "/dashboard/orders", icon: "ShoppingCart" },
+  { label: "More", href: "/dashboard/more", icon: "MoreHorizontal" },
 ]
 
 export const SCAN_MODES = [

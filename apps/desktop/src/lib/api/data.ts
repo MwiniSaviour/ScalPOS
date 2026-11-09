@@ -1,19 +1,114 @@
 import type {
   Category,
   Customer,
+  OrderPayStatus,
+  OrderStatus,
   PaymentMethod,
-  PaymentStatus,
   Product,
   Sale,
   SaleItem,
   ShopSettings,
   Staff,
+  StockMove,
   Supplier,
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { getOrgId } from "@/lib/auth/org"
 
-type Row = Record<string, any>
+type Row = Record<string, unknown>
+
+type CategoryRef = { id: string; name: string; color: string | null }
+
+type ProductRow = {
+  id: string
+  name: string
+  sku: string | null
+  barcode: string | null
+  price: number | string
+  cost: number | string | null
+  stock: number | string
+  category_id: string | null
+  category?: CategoryRef | CategoryRef[] | null
+  image_path: string | null
+  description: string | null
+  unit: string | null
+  low_stock_at: number | string | null
+  active: boolean | null
+  created_at: string
+  updated_at: string
+}
+
+type CategoryRow = { id: string; name: string; color: string | null; created_at: string }
+
+type CustomerRow = {
+  id: string
+  name: string
+  phone: string | null
+  address: string | null
+  note: string | null
+  created_at: string
+}
+
+type SupplierRow = {
+  id: string
+  name: string
+  contact_person: string | null
+  email: string | null
+  phone: string | null
+  address: string | null
+  created_at: string
+}
+
+type StaffRow = {
+  id: string
+  name: string
+  role?: string | null
+  phone: string | null
+  photo_path: string | null
+  active: boolean | null
+  created_at: string
+}
+
+type SaleItemRow = {
+  id: string
+  order_id: string
+  product_id: string | null
+  name: string | null
+  qty: number | string
+  price: number | string
+}
+
+type PaymentRow = { method?: string; amount?: number | string }
+
+type SaleRow = {
+  id: string
+  local_id: string | null
+  customer_id: string | null
+  subtotal: number | string | null
+  tax: number | string | null
+  discount: number | string | null
+  total: number | string | null
+  payments: PaymentRow[] | null
+  pay_status: string | null
+  status: string | null
+  completed_at: string | null
+  created_at: string
+  customer?: CustomerRow | CustomerRow[] | null
+}
+
+type SettingsRow = {
+  shop_name: string | null
+  address: string | null
+  phone: string | null
+  owner_name: string | null
+  momo_number: string | null
+  momo_network: string | null
+  tax_inclusive: boolean | null
+  tax_rate: number | string | null
+  receipt_footer: string | null
+  theme: string | null
+  next_order_no: number | string | null
+}
 
 function check<T>(data: unknown, error: { message: string } | null): T {
   if (error) throw new Error(error.message)
@@ -21,7 +116,15 @@ function check<T>(data: unknown, error: { message: string } | null): T {
 }
 
 export function makeLocalId(): string {
-  return crypto.randomUUID()
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  crypto.getRandomValues(bytes)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
 function db(): NonNullable<ReturnType<typeof getSupabase>> {
@@ -80,7 +183,7 @@ export interface StaffInput {
 
 export const PRODUCT_SELECT = "*, category:categories(id,name,color)"
 
-function mapRow(row: Row): Product {
+function mapRow(row: ProductRow): Product {
   const cat = row.category
   const category = Array.isArray(cat) ? cat[0] : cat
   return {
@@ -112,7 +215,7 @@ function mapRow(row: Row): Product {
   }
 }
 
-export function mapCategory(row: Row): Category {
+export function mapCategory(row: CategoryRow): Category {
   return {
     id: row.id,
     name: row.name,
@@ -123,7 +226,7 @@ export function mapCategory(row: Row): Category {
   }
 }
 
-export function mapCustomer(row: Row, totalPurchases = 0): Customer {
+export function mapCustomer(row: CustomerRow, totalPurchases = 0): Customer {
   return {
     id: row.id,
     name: row.name,
@@ -136,7 +239,7 @@ export function mapCustomer(row: Row, totalPurchases = 0): Customer {
   }
 }
 
-export function mapSupplier(row: Row): Supplier {
+export function mapSupplier(row: SupplierRow): Supplier {
   return {
     id: row.id,
     name: row.name,
@@ -148,11 +251,11 @@ export function mapSupplier(row: Row): Supplier {
   }
 }
 
-export function mapStaff(row: Row): Staff {
+export function mapStaff(row: StaffRow): Staff {
   return {
     id: row.id,
     name: row.name,
-    role: row.role ?? "cashier",
+    role: row.role === "owner" || row.role === "supervisor" ? row.role : "cashier",
     phone: row.phone ?? null,
     photo_path: row.photo_path ?? null,
     active: row.active !== false,
@@ -160,7 +263,7 @@ export function mapStaff(row: Row): Staff {
   }
 }
 
-function mapSaleItem(row: Row): SaleItem {
+function mapSaleItem(row: SaleItemRow): SaleItem {
   const qty = Number(row.qty ?? 0)
   const price = Number(row.price ?? 0)
   return {
@@ -174,10 +277,17 @@ function mapSaleItem(row: Row): SaleItem {
   }
 }
 
-export function mapSale(row: Row, items?: SaleItem[]): Sale {
-  const payments = Array.isArray(row.payments) ? (row.payments as Row[]) : []
-  const method = (payments[0]?.method ?? "cash") as PaymentMethod
-  const payStatus: PaymentStatus = row.pay_status === "paid" ? "paid" : "pending"
+export function mapSale(row: SaleRow, items?: SaleItem[]): Sale {
+  const payments = Array.isArray(row.payments)
+    ? row.payments.map((p) => ({
+        method: (p.method ?? "cash") as PaymentMethod,
+        amount: Number(p.amount ?? 0),
+      }))
+    : []
+  const method = payments[0]?.method ?? "cash"
+  const payStatus = (row.pay_status === "paid" || row.pay_status === "partial"
+    || row.pay_status === "unpaid" || row.pay_status === "refunded"
+    ? row.pay_status : "pending") as OrderPayStatus
   return {
     id: row.id,
     invoice_no: row.local_id ?? "",
@@ -188,7 +298,10 @@ export function mapSale(row: Row, items?: SaleItem[]): Sale {
     discount: Number(row.discount ?? 0),
     total: Number(row.total ?? 0),
     payment_method: method,
-    payment_status: payStatus,
+    payment_status: row.pay_status === "paid" ? "paid" : "pending",
+    status: (row.status === "completed" || row.status === "refunded" ? row.status : "pending") as OrderStatus,
+    pay_status: payStatus,
+    payments,
     sale_date: row.completed_at ?? row.created_at,
     created_at: row.created_at,
     items: items,
@@ -199,7 +312,7 @@ function orderSelect(): string {
   return "*, customer:customers(id,name,phone,address,note,created_at)"
 }
 
-function mapOrderWithCustomer(row: Row, items?: SaleItem[]): Sale {
+function mapOrderWithCustomer(row: SaleRow, items?: SaleItem[]): Sale {
   const sale = mapSale(row, items)
   const cust = row.customer
   const customer = Array.isArray(cust) ? cust[0] : cust
@@ -219,7 +332,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
     .in("order_id", orderIds)
     .order("position", { ascending: true })
   if (error) throw new Error(error.message)
-  for (const row of data as Row[]) {
+  for (const row of data as SaleItemRow[]) {
     const list = map.get(row.order_id) ?? []
     list.push(mapSaleItem(row))
     map.set(row.order_id, list)
@@ -234,7 +347,7 @@ export async function fetchCategories(): Promise<Category[]> {
     .eq("org_id", orgId())
     .is("deleted_at", null)
     .order("name")
-  const rows = check<Row[]>(data, error)
+  const rows = check<CategoryRow[]>(data, error)
   return rows.map(mapCategory)
 }
 
@@ -245,7 +358,7 @@ export async function fetchProducts(): Promise<Product[]> {
     .eq("org_id", orgId())
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
-  const rows = check<Row[]>(data, error)
+  const rows = check<ProductRow[]>(data, error)
   return rows.map(mapRow)
 }
 
@@ -257,7 +370,7 @@ export async function fetchProduct(id: string): Promise<Product | null> {
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle()
-  const row = check<Row | null>(data, error)
+  const row = check<ProductRow | null>(data, error)
   return row ? mapRow(row) : null
 }
 
@@ -279,7 +392,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     active: input.active !== false,
   }
   const { data, error } = await db().from("products").insert(payload).select(PRODUCT_SELECT).single()
-  const row = check<Row>(data, error)
+  const row = check<ProductRow>(data, error)
   const stock = input.stock ?? 0
   if (stock > 0) {
     await adjustStock(row.id, stock, "opening")
@@ -310,7 +423,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
       .eq("id", id)
       .select(PRODUCT_SELECT)
       .single()
-    const row = check<Row>(data, error)
+    const row = check<ProductRow>(data, error)
     return mapRow(row)
   }
   const existing = await fetchProduct(id)
@@ -329,6 +442,27 @@ export async function adjustStock(productId: string, delta: number, reason: stri
   check(null, error as unknown as { message: string } | null)
 }
 
+export async function fetchStockMoves(productId: string): Promise<StockMove[]> {
+  const { data, error } = await db()
+    .from("stock_moves")
+    .select("id,product_id,qty,reason,ref,occurred_at")
+    .eq("org_id", orgId())
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .order("occurred_at", { ascending: false })
+  const rows = check<Row[]>(data, error)
+  return rows.map((r) => ({
+    id: String(r.id),
+    product_id: String(r.product_id),
+    qty: Number(r.qty ?? 0),
+    reason: (["purchase", "sale", "adjust", "damage", "return", "count", "opening"].includes(String(r.reason))
+      ? r.reason
+      : "adjust") as StockMove["reason"],
+    ref: typeof r.ref === "string" ? r.ref : null,
+    occurred_at: String(r.occurred_at ?? r.created_at ?? new Date().toISOString()),
+  }))
+}
+
 export async function deleteProduct(id: string): Promise<void> {
   const { error } = await db()
     .from("products")
@@ -344,7 +478,7 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
     .insert({ org_id: orgId(), local_id: makeLocalId(), name: input.name, color: input.color ?? null })
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<CategoryRow>(data, error)
   return mapCategory(row)
 }
 
@@ -359,7 +493,7 @@ export async function updateCategory(id: string, input: Partial<CategoryInput>):
     .eq("id", id)
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<CategoryRow>(data, error)
   return mapCategory(row)
 }
 
@@ -386,8 +520,8 @@ export async function fetchCustomers(): Promise<Customer[]> {
     .eq("org_id", orgId())
     .is("deleted_at", null)
     .order("name")
-  const rows = check<Row[]>(data, error)
-  const totals = await customerOrderTotals(rows.map((r) => r.id as string))
+  const rows = check<CustomerRow[]>(data, error)
+  const totals = await customerOrderTotals(rows.map((r) => r.id))
   return rows.map((r) => mapCustomer(r, totals.get(r.id as string) ?? 0))
 }
 
@@ -400,7 +534,7 @@ async function customerOrderTotals(customerIds: string[]): Promise<Map<string, n
     .eq("org_id", orgId())
     .in("customer_id", customerIds)
   if (error) throw new Error(error.message)
-  for (const row of data as Row[]) {
+  for (const row of data as { customer_id: string; total: number | string | null; status: string | null }[]) {
     if (row.status === "refunded") continue
     totals.set(row.customer_id, (totals.get(row.customer_id) ?? 0) + Number(row.total ?? 0))
   }
@@ -415,7 +549,7 @@ export async function fetchCustomer(id: string): Promise<Customer | null> {
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle()
-  const row = check<Row | null>(data, error)
+  const row = check<CustomerRow | null>(data, error)
   if (!row) return null
   const totals = await customerOrderTotals([id])
   return mapCustomer(row, totals.get(id) ?? 0)
@@ -434,7 +568,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
     })
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<CustomerRow>(data, error)
   return mapCustomer(row, 0)
 }
 
@@ -451,7 +585,7 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>):
     .eq("id", id)
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<CustomerRow>(data, error)
   return mapCustomer(row, 0)
 }
 
@@ -482,7 +616,7 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
     .select("next_order_no")
     .eq("org_id", orgId())
     .maybeSingle()
-  const settings = check<Row | null>(settingsRow, settingsError as unknown as { message: string } | null)
+  const settings = check<{ next_order_no?: number | string } | null>(settingsRow, settingsError as unknown as { message: string } | null)
   const nextNo = Number(settings?.next_order_no ?? 1)
   const localId = buildOrderLocalId(nextNo)
   const { data, error } = await client.rpc("place_order_tx", {
@@ -497,19 +631,19 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
     p_next_order_no: nextNo + 1,
   })
   if (error) throw new Error(error.message)
-  const result = data as Row
-  let fetched: Row | null = null
+  const result = data as { order?: { id?: string } }
+  let fetched: SaleRow | null = null
   const select = orderSelect()
   if (result?.order?.id) {
     const res = await client.from("orders").select(select).eq("id", result.order.id).maybeSingle()
-    fetched = check<Row | null>(res.data, res.error as unknown as { message: string } | null)
+    fetched = check<SaleRow | null>(res.data, res.error as unknown as { message: string } | null)
   } else {
     const res = await client.from("orders").select(select).eq("local_id", localId).maybeSingle()
-    fetched = check<Row | null>(res.data, res.error as unknown as { message: string } | null)
+    fetched = check<SaleRow | null>(res.data, res.error as unknown as { message: string } | null)
   }
   if (!fetched) throw new Error("Order was placed but could not be read back")
-  const items = await itemsForOrders([fetched.id as string])
-  return mapOrderWithCustomer(fetched, items.get(fetched.id as string) ?? [])
+  const items = await itemsForOrders([fetched.id])
+  return mapOrderWithCustomer(fetched, items.get(fetched.id) ?? [])
 }
 
 export function buildOrderLocalId(nextNo: number): string {
@@ -528,9 +662,9 @@ export async function fetchSales(): Promise<Sale[]> {
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(200)
-  const rows = check<Row[]>(data, error)
-  const items = await itemsForOrders(rows.map((r) => r.id as string))
-  return rows.map((r) => mapOrderWithCustomer(r, items.get(r.id as string) ?? []))
+  const rows = check<SaleRow[]>(data, error)
+  const items = await itemsForOrders(rows.map((r) => r.id))
+  return rows.map((r) => mapOrderWithCustomer(r, items.get(r.id) ?? []))
 }
 
 export async function fetchSale(id: string): Promise<Sale | null> {
@@ -541,7 +675,7 @@ export async function fetchSale(id: string): Promise<Sale | null> {
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle()
-  const row = check<Row | null>(data, error)
+  const row = check<SaleRow | null>(data, error)
   if (!row) return null
   const items = await itemsForOrders([id])
   return mapOrderWithCustomer(row, items.get(id) ?? [])
@@ -555,20 +689,47 @@ export async function fetchSaleByLocalId(localId: string): Promise<Sale | null> 
     .eq("local_id", localId)
     .is("deleted_at", null)
     .maybeSingle()
-  const row = check<Row | null>(data, error)
+  const row = check<SaleRow | null>(data, error)
   if (!row) return null
-  const items = await itemsForOrders([row.id as string])
-  return mapOrderWithCustomer(row, items.get(row.id as string) ?? [])
+  const items = await itemsForOrders([row.id])
+  return mapOrderWithCustomer(row, items.get(row.id) ?? [])
+}
+
+export async function recordOrderPayment(
+  orderId: string,
+  payment: { method: PaymentMethod; amount: number },
+): Promise<Sale> {
+  const { data, error } = await db().from("orders").select("*").eq("id", orderId).maybeSingle()
+  const row = check<SaleRow | null>(data, error)
+  if (!row) throw new Error("Order not found")
+  const prev = Array.isArray(row.payments) ? row.payments : []
+  const payments = [...prev, payment]
+  const total = Number(row.total ?? 0)
+  const paid = payments.reduce((s, p) => s + (p.method === "credit" ? 0 : Number(p.amount ?? 0)), 0)
+  const due = Math.max(total - paid, 0)
+  const pay_status: OrderPayStatus = due <= 0.005 ? "paid" : paid > 0 ? "partial" : "unpaid"
+  const status: OrderStatus =
+    row.status === "refunded" ? "refunded" : due <= 0.005 ? "completed" : "pending"
+  const { data: updated, error: updErr } = await db()
+    .from("orders")
+    .update({ payments, pay_status, status })
+    .eq("id", orderId)
+    .eq("org_id", orgId())
+    .select("*")
+    .single()
+  const urow = check<SaleRow>(updated, updErr)
+  const items = await itemsForOrders([orderId])
+  return mapOrderWithCustomer(urow, items.get(orderId) ?? [])
 }
 
 export async function fetchSettings(): Promise<ShopSettings | null> {
   const { data, error } = await db().from("settings").select("*").eq("org_id", orgId()).maybeSingle()
-  const row = check<Row | null>(data, error as unknown as { message: string } | null)
+  const row = check<SettingsRow | null>(data, error as unknown as { message: string } | null)
   if (!row) return null
   return mapSettings(row)
 }
 
-export function mapSettings(row: Row): ShopSettings {
+export function mapSettings(row: SettingsRow): ShopSettings {
   return {
     shop_name: row.shop_name ?? "",
     address: row.address ?? null,
@@ -588,7 +749,7 @@ export async function updateSettings(input: Partial<ShopSettings>): Promise<Shop
   const patch: Row = { ...input }
   delete patch.next_order_no
   const { data, error } = await db().from("settings").update(patch).eq("org_id", orgId()).select("*").single()
-  const row = check<Row>(data, error)
+  const row = check<SettingsRow>(data, error)
   return mapSettings(row)
 }
 
@@ -599,7 +760,7 @@ export async function fetchStaff(): Promise<Staff[]> {
     .eq("org_id", orgId())
     .is("deleted_at", null)
     .order("created_at")
-  const rows = check<Row[]>(data, error)
+  const rows = check<StaffRow[]>(data, error)
   return rows.map(mapStaff)
 }
 
@@ -619,7 +780,7 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
       .eq("id", id)
       .select("*")
       .single()
-    const row = check<Row>(data, error)
+    const row = check<StaffRow>(data, error)
     return mapStaff(row)
   }
   const { data, error } = await db()
@@ -627,7 +788,7 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
     .insert({ org_id: orgId(), ...payload })
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<StaffRow>(data, error)
   return mapStaff(row)
 }
 
@@ -647,7 +808,7 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
     .eq("org_id", orgId())
     .is("deleted_at", null)
     .order("name")
-  const rows = check<Row[]>(data, error)
+  const rows = check<SupplierRow[]>(data, error)
   return rows.map(mapSupplier)
 }
 
@@ -667,7 +828,7 @@ export async function upsertSupplier(id: string | null, input: SupplierInput): P
       .eq("id", id)
       .select("*")
       .single()
-    const row = check<Row>(data, error)
+    const row = check<SupplierRow>(data, error)
     return mapSupplier(row)
   }
   const { data, error } = await db()
@@ -675,7 +836,7 @@ export async function upsertSupplier(id: string | null, input: SupplierInput): P
     .insert({ org_id: orgId(), ...payload })
     .select("*")
     .single()
-  const row = check<Row>(data, error)
+  const row = check<SupplierRow>(data, error)
   return mapSupplier(row)
 }
 
@@ -697,6 +858,6 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
     .eq("barcode", barcode.trim())
     .is("deleted_at", null)
     .maybeSingle()
-  const row = check<Row | null>(data, error)
+  const row = check<ProductRow | null>(data, error)
   return row ? mapRow(row) : null
 }

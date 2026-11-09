@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter } from "next/navigation"
 import * as Icons from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -119,9 +120,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         } lg:translate-x-0`}
       >
         <div className="flex h-16 items-center gap-2.5 border-b border-border px-6">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-white">
-            S
-          </div>
+          <Image src="/brandmark.png" alt="ScalPOS logo" width={32} height={32} unoptimized className="h-8 w-8 rounded-lg" />
           <span className="text-lg font-bold text-foreground">{APP_NAME}</span>
         </div>
 

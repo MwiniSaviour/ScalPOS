@@ -16,7 +16,6 @@ export default function SuppliersPage() {
   const [editing, setEditing] = useState<Supplier | null>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
     try {
       setSuppliers(await fetchSuppliers())
       setError(null)
@@ -27,7 +26,10 @@ export default function SuppliersPage() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    const t = setTimeout(() => void load(), 0)
+    return () => clearTimeout(t)
+  }, [load])
 
   const filtered = suppliers.filter(
     (s) =>
