@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyClerkToken } from "./clerk.ts";
 import { preflight, json } from "./cors.ts";
 
@@ -23,6 +24,47 @@ function b64urlDecode(s: string): string {
   const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
   const b64 = (s + pad).replace(/-/g, "+").replace(/_/g, "/");
   return atob(b64);
+}
+
+const TRIAL_MS = 7 * 24 * 60 * 60 * 1000;
+
+async function orgEntitled(
+  admin: SupabaseClient,
+  orgId: string,
+  testerEmail: string,
+): Promise<boolean> {
+  const { data: sub } = await admin
+    .from("subscriptions")
+    .select("id")
+    .eq("org_id", orgId)
+    .eq("plan", "enterprise")
+    .eq("status", "active")
+    .limit(1);
+  if (sub && sub.length > 0) return true;
+
+  try {
+    const { data: tester } = await admin
+      .from("testers")
+      .select("email")
+      .eq("email", testerEmail)
+      .gt("expires_at", new Date().toISOString())
+      .limit(1);
+    if (tester && tester.length > 0) return true;
+  } catch {
+    // testers table absent until 0011 lands: treat as no match
+  }
+
+  const { data: org } = await admin
+    .from("orgs")
+    .select("created_at, trial_started_at")
+    .eq("id", orgId)
+    .limit(1);
+  if (org && org.length > 0) {
+    const row = org[0] as { created_at: string | null; trial_started_at: string | null };
+    const anchor = row.trial_started_at ?? row.created_at;
+    if (anchor && Date.now() - new Date(anchor).getTime() < TRIAL_MS) return true;
+  }
+  return false;
 }
 
 Deno.serve(async (req: Request) => {
@@ -80,6 +122,12 @@ Deno.serve(async (req: Request) => {
     .limit(1);
   if (existing && existing.length > 0) {
     return json({ org_id: payload.org_id, role: existing[0].role, joined: false }, 200);
+  }
+
+  // cloud/team features are gated: trialing, active enterprise, or tester only
+  const entitled = await orgEntitled(admin, payload.org_id, (user.email ?? "").toLowerCase());
+  if (!entitled) {
+    return json({ error: "enterprise_required" }, 403);
   }
 
   const { error: memErr } = await admin
