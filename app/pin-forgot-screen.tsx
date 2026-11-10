@@ -1,14 +1,30 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import PinRecoveryForm from "@/components/pin-recovery-form";
 import { Card } from "@/components/ui/card";
 import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
 import { Input } from "@/components/ui/input";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
-import { setSessionUnlocked, usePinLock } from "@/lib/pin";
+import {
+  readRecovery,
+  setSessionUnlocked,
+  usePinLock,
+  verifyRecoveryAnswer,
+  type StoredRecovery,
+} from "@/lib/pin";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+
+type Stage = "answer" | "code" | "newpin" | "newrecovery";
+
+const TITLE: Record<Stage, string> = {
+  answer: "Answer your question",
+  code: "Check your email",
+  newpin: "Choose a new PIN",
+  newrecovery: "Add a recovery question",
+};
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
 
@@ -21,8 +37,10 @@ function errMessage(e: unknown): string {
 }
 
 /**
- * Forgotten PIN recovery. The PIN is a device lock; resetting it requires
- * proving identity with a 6-digit code sent to the account email.
+ * Forgotten PIN recovery. The primary path is offline: answer the security
+ * question saved when the PIN was set up. The secondary path — for users
+ * signed in on this device — proves identity with a 6-digit code sent to the
+ * account email.
  */
 export default function PinForgotScreen() {
   const router = useRouter();
@@ -32,7 +50,10 @@ export default function PinForgotScreen() {
   const { signIn } = useSignIn();
   const { user } = useUser();
   const { setPin } = usePinLock();
-  const [stage, setStage] = useState<"code" | "newpin">("code");
+  const [stage, setStage] = useState<Stage>(() => (readRecovery() ? "answer" : "code"));
+  const [recovery] = useState<StoredRecovery | null>(() => readRecovery());
+  const [answer, setAnswer] = useState("");
+  const wrongRef = useRef(0);
   const [digits, setDigits] = useState<string[]>(EMPTY_DIGITS);
   const refs = useRef<(HTMLInputElement | null)[]>([]);
   const [pin, setPinValue] = useState("");
@@ -51,7 +72,7 @@ export default function PinForgotScreen() {
   }, [cooling]);
 
   useEffect(() => {
-    if (!isSignedIn || !signIn || !email || codeSentRef.current) return;
+    if (stage !== "code" || !isSignedIn || !signIn || !email || codeSentRef.current) return;
     codeSentRef.current = true;
     void (async () => {
       try {
@@ -61,7 +82,7 @@ export default function PinForgotScreen() {
         setError(errMessage(e));
       }
     })();
-  }, [isSignedIn, signIn, email]);
+  }, [stage, isSignedIn, signIn, email]);
 
   async function reSend() {
     if (!signIn || cooling || busy) return;
@@ -70,6 +91,32 @@ export default function PinForgotScreen() {
     try {
       await signIn.create({ identifier: email, strategy: "email_code" });
       setCool(30);
+    } catch (e) {
+      setError(errMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function verifyAnswer() {
+    if (!recovery || cooling || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const ok = await verifyRecoveryAnswer(answer);
+      if (ok) {
+        setAnswer("");
+        setStage("newpin");
+        return;
+      }
+      wrongRef.current += 1;
+      if (wrongRef.current >= 3) {
+        wrongRef.current = 0;
+        setCool(30);
+        setError("Too many tries. Try again in 30 seconds, or use the email code below.");
+      } else {
+        setError("That answer doesn't match — try again.");
+      }
     } catch (e) {
       setError(errMessage(e));
     } finally {
@@ -117,6 +164,12 @@ export default function PinForgotScreen() {
     }
   }
 
+  function finishReset() {
+    setSessionUnlocked(true);
+    toast("PIN reset", "ok");
+    router.replace("/home");
+  }
+
   async function savePin() {
     setError(null);
     if (pin.trim().length < 4) {
@@ -129,17 +182,21 @@ export default function PinForgotScreen() {
     }
     try {
       await setPin(pin.trim());
-      setSessionUnlocked(true);
-      toast("PIN reset", "ok");
-      router.replace("/home");
+      setPinValue("");
+      setConfirmValue("");
+      if (!readRecovery()) {
+        setStage("newrecovery");
+        return;
+      }
+      finishReset();
     } catch (e) {
       setError(errMessage(e));
     }
   }
 
-  if (!isLoaded) return <div className="min-h-dvh" />;
+  if (!isLoaded && stage !== "answer") return <div className="min-h-dvh" />;
 
-  if (!isSignedIn) {
+  if (!isSignedIn && stage !== "answer") {
     return (
       <div className="anim-fade flex min-h-dvh flex-col px-5 pt-10">
         <h1 className="text-[26px]/7 font-bold text-ink">Reset your PIN</h1>
@@ -157,10 +214,47 @@ export default function PinForgotScreen() {
 
   return (
     <div className="anim-fade flex min-h-dvh flex-col px-5 pt-10">
-      <h1 className="text-[26px]/7 font-bold text-ink">
-        {stage === "code" ? "Check your email" : "Choose a new PIN"}
-      </h1>
-      {stage === "code" ? (
+      <h1 className="text-[26px]/7 font-bold text-ink">{TITLE[stage]}</h1>
+      {stage === "answer" ? (
+        <>
+          <p className="mt-1 text-[15px] text-ink3">
+            The question you saved when you set up this PIN.
+          </p>
+          <Card className="mt-6 px-4 py-4">
+            <Input
+              label={recovery?.question ?? ""}
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Your answer"
+              maxLength={80}
+              autoFocus
+              data-testid="pin-answer"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void verifyAnswer();
+              }}
+            />
+          </Card>
+          <Button
+            className="mt-4 h-12 rounded-full"
+            size="lg"
+            block
+            loading={busy}
+            disabled={cooling || busy}
+            onClick={verifyAnswer}
+            data-testid="pin-forgot-answer-save"
+          >
+            {cooling ? `Try again in ${cool}s` : "Continue"}
+          </Button>
+          <div className="mt-3 flex justify-between text-[14px]">
+            <Button variant="ghost" size="sm" onClick={() => router.replace("/pin")} data-testid="pin-forgot-back">
+              Back to PIN
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setStage("code")} data-testid="pin-forgot-use-email">
+              Use email code instead
+            </Button>
+          </div>
+        </>
+      ) : stage === "code" ? (
         <>
           <p className="mt-1 text-[15px] text-ink3">
             Sent a 6-digit code to {email}. Enter it to reset the PIN.
@@ -221,10 +315,10 @@ export default function PinForgotScreen() {
             </div>
           </div>
         </>
-      ) : (
+      ) : stage === "newpin" ? (
         <>
           <p className="mt-1 text-[15px] text-ink3">
-            Identity confirmed. Set a fresh PIN for {email}.
+            Identity confirmed. Set a fresh PIN{email ? ` for ${email}` : ""}.
           </p>
           <Card className="mt-6 px-4 py-4">
             <Input
@@ -254,6 +348,15 @@ export default function PinForgotScreen() {
           <Button className="mt-4 h-12 rounded-full" size="lg" block loading={busy} onClick={savePin} data-testid="pin-forgot-save">
             Save new PIN
           </Button>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-[15px] text-ink3">
+            Your PIN was reset. Add a recovery question so you can do this again without a code.
+          </p>
+          <Card className="mt-6 w-full px-4 py-4">
+            <PinRecoveryForm onSaved={finishReset} />
+          </Card>
         </>
       )}
       {error && <p className="mt-2.5 text-[14px] text-danger">{error}</p>}

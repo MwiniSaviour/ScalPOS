@@ -19,6 +19,8 @@ import { useState, useCallback } from "react";
 export const PIN_KEY = "nova-pos-pin-v1";
 /** Legacy key from builds that kept the unlock flag in sessionStorage. */
 export const SESSION_KEY = "nova-pos-pin-unlocked";
+/** Offline PIN recovery: security question whose answer is hashed on device. */
+export const PIN_RECOVERY_KEY = "nova-pos-pin-recovery-v1";
 
 /**
  * Unlock state is deliberately in-memory only. sessionStorage survives
@@ -50,6 +52,14 @@ export interface StoredPin {
   updatedAt: number;
 }
 
+/** Offline recovery question: the ANSWER is hashed, the question is stored as-is. */
+export interface StoredRecovery {
+  question: string;
+  hash: string; // sha256(salt + normalizedAnswer)
+  salt: string; // 16 hex chars
+  updatedAt: number;
+}
+
 function readStore(): StoredPin | null {
   if (typeof window === "undefined") return null;
   try {
@@ -71,6 +81,7 @@ function writeStore(pin: StoredPin): void {
 export function clearPinStore(): void {
   try {
     window.localStorage.removeItem(PIN_KEY);
+    window.localStorage.removeItem(PIN_RECOVERY_KEY);
   } catch {
     /* best effort */
   }
@@ -79,6 +90,69 @@ export function clearPinStore(): void {
 /** True when a PIN hash has ever been saved on this device. */
 export function hasPin(): boolean {
   return readStore() !== null;
+}
+
+function readRecoveryStore(): StoredRecovery | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PIN_RECOVERY_KEY);
+    return raw ? (JSON.parse(raw) as StoredRecovery) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Current recovery question, or null when none was ever saved. */
+export function readRecovery(): StoredRecovery | null {
+  return readRecoveryStore();
+}
+
+/** True when a recovery question has ever been saved on this device. */
+export function hasRecovery(): boolean {
+  return readRecoveryStore() !== null;
+}
+
+/**
+ * Normalize a recovery answer before hashing and comparing. The question is
+ * asked back to the user verbatim, so matching is lenient by design: case and
+ * runs of whitespace do not change the answer.
+ */
+function normalizeAnswer(input: string): string {
+  return input.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Save the recovery question + hashed answer. Overwrites any previous
+ * recovery. Returns null when either field is empty (caller should treat
+ * that as "not saved" and not advance the flow).
+ */
+export async function saveRecovery(
+  question: string,
+  answer: string,
+): Promise<StoredRecovery | null> {
+  const q = question.trim();
+  const a = normalizeAnswer(answer);
+  if (!q || !a) return null;
+  const salt = randomSalt();
+  const hash = await sha256Hex(salt + a);
+  const next: StoredRecovery = { question: q, salt, hash, updatedAt: Date.now() };
+  try {
+    window.localStorage.setItem(PIN_RECOVERY_KEY, JSON.stringify(next));
+  } catch {
+    return null;
+  }
+  return next;
+}
+
+/**
+ * Verify an entered answer against the stored hash. Case and whitespace runs
+ * are ignored. False when no recovery is stored.
+ */
+export async function verifyRecoveryAnswer(input: string): Promise<boolean> {
+  const store = readRecoveryStore();
+  if (!store) return false;
+  const computed = await sha256Hex(store.salt + normalizeAnswer(input));
+  return computed === store.hash;
 }
 
 function getCrypto(): Crypto | null {

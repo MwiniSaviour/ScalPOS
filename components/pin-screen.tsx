@@ -5,15 +5,26 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import PinRecoveryForm from "@/components/pin-recovery-form";
 import { usePos } from "@/lib/store";
-import { setSessionUnlocked, usePinLock, sessionUnlocked } from "@/lib/pin";
-import { Lock, ClockCheck, Eye, EyeOff } from "lucide-react";
+import {
+  hasPin,
+  readRecovery,
+  setSessionUnlocked,
+  sessionUnlocked,
+  usePinLock,
+  verifyPin,
+} from "@/lib/pin";
+import { Lock, ClockCheck, ShieldCheck, Eye, EyeOff } from "lucide-react";
+
+type Stage = "unlock" | "set" | "setRecovery" | "addRecovery";
 
 export default function PinScreen({ inline = false }: { inline?: boolean }) {
   const router = useRouter();
 
   const shopName = usePos((s) => s.settings.shopName);
-  const { unlocked, attemptPin, setPin, hasPin } = usePinLock();
+  const { unlocked, attemptPin, setPin } = usePinLock();
+  const [stage, setStage] = useState<Stage>(() => (hasPin() ? "unlock" : "set"));
   const [pin, setPinValue] = useState("");
   const [confirm, setConfirmValue] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -30,8 +41,17 @@ export default function PinScreen({ inline = false }: { inline?: boolean }) {
   async function onAttempt() {
     setError(null);
     if (!pin.trim()) return;
-    const ok = await attemptPin(pin.trim());
-    if (!ok) setError("That PIN wasn't recognised.");
+    const ok = await verifyPin(pin.trim());
+    if (!ok) {
+      setError("That PIN wasn't recognised.");
+      return;
+    }
+    if (!readRecovery()) {
+      setPinValue("");
+      setStage("addRecovery");
+      return;
+    }
+    await attemptPin(pin.trim());
   }
 
   async function onSet() {
@@ -46,16 +66,39 @@ export default function PinScreen({ inline = false }: { inline?: boolean }) {
     }
     try {
       await setPin(pin.trim());
-      setSessionUnlocked(true);
-      router.replace("/");
+      setPinValue("");
+      setConfirmValue("");
+      setStage("setRecovery");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your PIN.");
     }
   }
 
-  const isPined = hasPin();
+  async function onRecoverySaved() {
+    setSessionUnlocked(true);
+    if (!inline) router.replace("/");
+  }
 
-  if (isPined) {
+  if (stage === "setRecovery" || stage === "addRecovery") {
+    const copy =
+      stage === "setRecovery"
+        ? "Last step — answer a question only you know, so you can reset your PIN without email."
+        : "Before you continue — answer a question only you know, so you can reset your PIN without email.";
+    return (
+      <div className="anim-fade flex min-h-dvh flex-col items-center px-5 py-10 text-center">
+        <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-accent/10">
+          <ShieldCheck className="size-6 text-accent" />
+        </div>
+        <h1 className="mt-5 text-[26px]/7 font-bold text-ink">Add a recovery question</h1>
+        <p className="mt-1 text-[15px] text-ink3">{copy}</p>
+        <Card className="mt-6 w-full px-4 py-4">
+          <PinRecoveryForm onSaved={onRecoverySaved} />
+        </Card>
+      </div>
+    );
+  }
+
+  if (stage === "unlock") {
     return (
       <div className="anim-fade flex min-h-dvh flex-col items-center px-5 py-10 text-center">
         <div className="flex size-14 shrink-0 items-center justify-center rounded-full bg-accent/10">
@@ -151,5 +194,3 @@ export default function PinScreen({ inline = false }: { inline?: boolean }) {
     </div>
   );
 }
-
-
