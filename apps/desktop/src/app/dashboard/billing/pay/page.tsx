@@ -20,7 +20,9 @@ type PaystackInstance = {
   resumeTransaction: (options: PaystackResumeOptions) => void
 }
 
-type PaystackConstructor = new (publicKey: string) => PaystackInstance
+// Paystack inline.js exposes PaystackPop as a plain object (not a class):
+// call PaystackPop.resumeTransaction({...}) directly.
+type PaystackConstructor = PaystackInstance
 
 type Payload = { public_key: string; access_code: string; reference: string }
 
@@ -88,8 +90,7 @@ export default function PayPage() {
         const PaystackPop = await ensurePaystack()
         if (!alive) return
         setPhase("open")
-        const checkout = new PaystackPop(payload.public_key)
-        checkout.resumeTransaction({
+        PaystackPop.resumeTransaction({
           accessCode: payload.access_code,
           onSuccess: () => {
             router.replace(`/dashboard/billing/callback?reference=${encodeURIComponent(payload.reference)}`)
