@@ -11,6 +11,7 @@ import {
   type SyncConnection,
 } from "@/lib/api/bootstrap";
 import { useSettings, usePos } from "@/lib/store";
+import { useEntitlement, planAllowsEnterprise } from "@/lib/entitlement";
 import { isDemoMode, enableDemo, exitDemo } from "@/lib/demo";
 import { listConflicts } from "@/lib/sync/outbox";
 import {
@@ -50,6 +51,9 @@ export default function MoreScreen() {
   const settings = useSettings();
   const toast = usePos((s) => s.toast);
   const { signOut } = useAuth();
+  const status = useEntitlement((s) => s.status);
+  const plan = useEntitlement((s) => s.plan);
+  const enterprise = planAllowsEnterprise(status, plan);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demo] = useState(() => isDemoMode());
   const [signoutOpen, setSignoutOpen] = useState(false);
@@ -235,18 +239,19 @@ export default function MoreScreen() {
         </Card>
       </section>
 
-      {/* team */}
-      <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Team</h2>
-        <Card inset className="mt-2.5">
-          <RowLink
-            href="/staff"
-            icon={<UsersRound className="size-[18px]" />}
-            label="Staff &amp; roles"
-            sub="Members and permissions"
-          />
-        </Card>
-      </section>
+      {enterprise && (
+        <section className="mt-6">
+          <h2 className="text-[15px] font-medium text-ink2">Team</h2>
+          <Card inset className="mt-2.5">
+            <RowLink
+              href="/staff"
+              icon={<UsersRound className="size-[18px]" />}
+              label="Staff &amp; roles"
+              sub="Members and permissions"
+            />
+          </Card>
+        </section>
+      )}
 
       {/* data */}
       <section className="mt-6">
