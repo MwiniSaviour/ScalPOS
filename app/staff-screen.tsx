@@ -11,6 +11,7 @@ import { processImageFile, saveImageBlob } from "@/lib/image-store";
 import { readConnection } from "@/lib/api/bootstrap";
 import { inviteMember } from "@/lib/api/team";
 import { usePos } from "@/lib/store";
+import { planAllowsEnterprise, useEntitlement } from "@/lib/entitlement";
 import {
   createStaff,
   setCurrentStaff,
@@ -35,8 +36,12 @@ export default function StaffScreen() {
   const me = useCurrentStaff();
   const staff = useStaffList();
   const toast = usePos((s) => s.toast);
+  const ready = useEntitlement((s) => s.ready);
+  const status = useEntitlement((s) => s.status);
+  const plan = useEntitlement((s) => s.plan);
 
   const isOwner = me?.role === "owner";
+  const enterprise = planAllowsEnterprise(status, plan);
   const [editing, setEditing] = useState<{ staff: Staff | null } | null>(null);
 
   const activeCount = useMemo(() => staff.filter((s) => s.active).length, [staff]);
@@ -53,6 +58,36 @@ export default function StaffScreen() {
     }
     setCurrentStaff(s.id);
     toast(`Signed in as ${s.name}`);
+  }
+
+  if (!ready) return null;
+
+  if (!enterprise) {
+    return (
+      <div className="anim-fade px-5 pt-4 pb-10">
+        <header className="flex items-center gap-1">
+          <IconButton label="Back" onClick={() => router.back()} className="-ml-2 shrink-0 text-ink">
+            <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
+          </IconButton>
+          <h1 className="min-w-0 flex-1 truncate text-[26px]/7 font-bold tracking-[-0.02em] text-ink">
+            Staff &amp; roles
+          </h1>
+        </header>
+        <Card className="mt-5 p-5">
+          <div className="flex size-11 items-center justify-center rounded-2xl bg-warn-soft text-warn">
+            <TriangleAlert className="size-[22px]" />
+          </div>
+          <h2 className="mt-4 text-[19px]/6 font-bold text-ink">Staff accounts need Enterprise</h2>
+          <p className="mt-1.5 text-[14px] leading-5 text-ink3">
+            The Standard plan covers a single owner on this device. Upgrade to add supervisors and
+            cashiers, assign roles, and invite teammates to their own devices.
+          </p>
+          <Button className="mt-4" block onClick={() => router.push("/billing")}>
+            View plans
+          </Button>
+        </Card>
+      </div>
+    );
   }
 
   return (

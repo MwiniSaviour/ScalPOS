@@ -141,8 +141,8 @@ export async function pruneImages(referenced: string[]): Promise<void> {
   }
 }
 
-const MAX_EDGE = 512;
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_EDGE = 1024;
+const MAX_BYTES = 15 * 1024 * 1024;
 
 function readImageSize(file: File): Promise<{ w: number; h: number }> {
   return new Promise((resolve) => {
@@ -177,7 +177,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
  */
 export async function processImageFile(file: File): Promise<Blob> {
   if (!file.type.startsWith("image/")) throw new Error("That file is not an image");
-  if (file.size > MAX_BYTES) throw new Error("That photo is too large (max 4 MB)");
+  if (file.size > MAX_BYTES) throw new Error("That photo is too large (max 15 MB)");
 
   const { w, h } = await readImageSize(file);
   const scale = Math.min(1, MAX_EDGE / Math.max(w, h));

@@ -13,6 +13,7 @@ const DEVICE_KEYS = [
   "nova-pos-v1",
   "nova-pos-pin-v1",
   "nova-pos-pin-unlocked",
+  "nova-pos-pin-recovery-v1",
   "nova-pos-onboarded",
   "nova-pos-theme",
   "nova-pos-sync-v1",

@@ -23,6 +23,7 @@ type CachedSubscription = {
 type EntitlementState = {
   ready: boolean;
   status: AccessStatus;
+  plan: SubscriptionState["plan"];
   expiresAt: number | null;
   checkedAt: number;
   refreshing: boolean;
@@ -107,9 +108,9 @@ function evaluate(
   return { status: "locked", expiresAt: trialEnd };
 }
 
-function initialState(): Pick<EntitlementState, "ready" | "status" | "expiresAt" | "checkedAt"> {
+function initialState(): Pick<EntitlementState, "ready" | "status" | "plan" | "expiresAt" | "checkedAt"> {
   if (typeof window === "undefined") {
-    return { ready: false, status: "unknown", expiresAt: null, checkedAt: 0 };
+    return { ready: false, status: "unknown", plan: null, expiresAt: null, checkedAt: 0 };
   }
   bootstrapTrial();
   const cached = readCache();
@@ -117,9 +118,20 @@ function initialState(): Pick<EntitlementState, "ready" | "status" | "expiresAt"
   return {
     ready: true,
     status: next.status,
+    plan: cached?.plan ?? null,
     expiresAt: next.expiresAt,
     checkedAt: cached?.fetchedAt ?? 0,
   };
+}
+
+/** Enterprise-only capabilities. Trials include the full app for 7 days. */
+export function planAllowsEnterprise(status: AccessStatus, plan: SubscriptionState["plan"]): boolean {
+  return status === "trialing" || (status === "active" && plan === "enterprise");
+}
+
+export function cloudAccessAllowed(): boolean {
+  const { status, plan } = useEntitlement.getState();
+  return planAllowsEnterprise(status, plan);
 }
 
 export const useEntitlement = create<EntitlementState>((set, get) => ({
@@ -133,6 +145,7 @@ export const useEntitlement = create<EntitlementState>((set, get) => ({
     set({
       ready: true,
       status: next.status,
+      plan: cached?.plan ?? null,
       expiresAt: next.expiresAt,
       checkedAt: cached?.fetchedAt ?? get().checkedAt,
     });

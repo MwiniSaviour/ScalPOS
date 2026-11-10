@@ -19,6 +19,7 @@ import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import type { Category, Customer, Order, Product, Settings, StockMove } from "@/lib/types";
 import { isDemoMode } from "@/lib/demo";
+import { cloudAccessAllowed } from "@/lib/entitlement";
 import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "@/lib/image-refs";
 import { getImageBlob, isLocalImageRef } from "@/lib/image-store";
 import type { Op } from "./types";
@@ -90,7 +91,8 @@ function hexTo(hash: ArrayBuffer): string {
  * baked into the object path so resolvers on other devices can verify a cached
  * copy against it. Throws so the outbox op retries when storage refuses the
  * write (offline, or a role without upload rights) — better to retry than
- * publish dead local refs. Returns "" when the blob is no longer stored here.
+ * publish dead local refs. Returns null when the blob is no longer stored here
+ * so the caller leaves any previously uploaded ref untouched.
  */
 async function imageRefForRemote(
   c: NonNullable<Awaited<ReturnType<typeof sb>>>,
@@ -98,11 +100,11 @@ async function imageRefForRemote(
   folder: string,
   key: string,
   ref: string,
-): Promise<string> {
+): Promise<string | null> {
   if (!ref) return "";
   if (!isLocalImageRef(ref)) return ref;
   const blob = await getImageBlob(ref);
-  if (!blob) return "";
+  if (!blob) return null;
   const hash = hexTo(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
   const path = `${org}/${folder}/${key}/${hash}.${IMG_EXT(blob.type)}`;
   const { error } = await c
@@ -153,6 +155,7 @@ async function sb(): Promise<ReturnType<typeof getSupabase>> {
 // ---- push ------------------------------------------------------------------
 
 export async function pushLocalRow(table: Table, localId: string): Promise<void> {
+  if (!cloudAccessAllowed()) throw new Error("Cloud sync requires the Enterprise plan");
   const conn = readConnection();
   if (!conn?.org_id) throw new Error("not connected");
   const c = await sb();
@@ -202,7 +205,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         catId = readMap().categories[x.categoryId];
       }
     }
-    const imagePath: string =
+    const imagePath: string | null =
       x.imageUrl && isLocalImageRef(x.imageUrl)
         ? await imageRefForRemote(c, org_id, "products", x.id, x.imageUrl)
         : (x.imageUrl ?? "");
@@ -219,7 +222,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       unit: x.unit,
       sku: x.sku,
       barcode: x.barcode,
-      image_path: imagePath,
+      ...(imagePath === null ? {} : { image_path: imagePath }),
       description: x.description,
       active: x.active,
       created_at: iso(x.createdAt) ?? undefined,
@@ -309,7 +312,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
     for (let i = 0; i < x.items.length; i++) {
       const it = x.items[i];
       const itLocal = `${x.id}#${i}`;
-      const itImagePath: string =
+      const itImagePath: string | null =
         it.imageUrl && isLocalImageRef(it.imageUrl)
           ? await imageRefForRemote(c, org_id, "items", itLocal, it.imageUrl)
           : (it.imageUrl ?? "");
@@ -320,7 +323,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         local_id: itLocal,
         product_id: map.products[it.productId] ?? (revProductIds[it.productId] ? it.productId : null),
         name: it.name,
-        image_path: itImagePath,
+        ...(itImagePath === null ? {} : { image_path: itImagePath }),
         qty: it.qty,
         price: it.price,
         cost: it.cost,
@@ -334,6 +337,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
 }
 
 export async function softDeleteRemote(table: Table, localId: string): Promise<void> {
+  if (!cloudAccessAllowed()) return;
   const c = await sb();
   if (!c) throw new Error("server not ready");
   const remote = readMap()[table]?.[localId];
@@ -480,6 +484,7 @@ function mergeLocal<T extends { id: string } & Record<string, unknown>>(table: T
 
 export async function pullAll(conn: SyncConnection): Promise<number> {
   if (isDemoMode()) return 0;
+  if (!cloudAccessAllowed()) return 0;
   const c = await sb();
   if (!c) return 0;
   let count = 0;
@@ -586,6 +591,15 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
       return { ...s, categories, products, customers, orders, stockMoves } as unknown as typeof s;
     });
 
+    // Warm the local cache for portable images in the background so other
+    // devices' photos render immediately (and offline) after a pull.
+    const imageRefs: string[] = [];
+    for (const r of rows.products ?? []) imageRefs.push(String(r.image_path ?? ""));
+    for (const r of rows.order_items ?? []) imageRefs.push(String(r.image_path ?? ""));
+    void import("@/lib/cloud-images")
+      .then((m) => m.warmCloudImages(imageRefs))
+      .catch(() => {});
+
     window.localStorage.setItem(LAST_PULL_KEY, String(Date.now()));
 
     // Shop settings are a one-row-per-shop document, not a synced table.
@@ -603,6 +617,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
 // ---- realtime --------------------------------------------------------------
 
 export async function onRemoteChange(conn: SyncConnection, change: { table: string; eventType: string; new: RemoteRow | null; old: RemoteRow | null }) {
+  if (!cloudAccessAllowed()) return;
   if (!TABLES.includes(change.table as Table)) return;
   const table = change.table as Table;
   const row = change.new;
@@ -658,6 +673,12 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
   } finally {
     APPLYING = false;
   }
+
+  if (typeof row.image_path === "string" && row.image_path.startsWith(CLOUD_IMAGE_PREFIX)) {
+    void import("@/lib/cloud-images")
+      .then((m) => m.cacheCloudImage(row.image_path as string))
+      .catch(() => {});
+  }
 }
 
 // ---- watcher & arm ---------------------------------------------------------
@@ -709,6 +730,7 @@ function settingsFingerprint(s: Settings): string {
 
 export async function drainOutbox(): Promise<{ applied: number; failed: number }> {
   if (isDemoMode()) return { applied: 0, failed: 0 };
+  if (!cloudAccessAllowed()) return { applied: 0, failed: 0 };
   const { drain } = await import("./outbox");
   const res = await drain();
   return { applied: res.applied, failed: res.failed.length };
@@ -739,6 +761,10 @@ export async function disarmSync() {
  */
 export async function armSync(conn: SyncConnection) {
   if (isDemoMode()) return;
+  if (!cloudAccessAllowed()) {
+    await disarmSync();
+    return;
+  }
   if (armedOrgId === conn.org_id) return;
   await disarmSync();
   armedOrgId = conn.org_id;
