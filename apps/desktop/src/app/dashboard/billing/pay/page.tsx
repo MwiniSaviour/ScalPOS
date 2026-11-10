@@ -51,17 +51,21 @@ function ensurePaystack(): Promise<PaystackConstructor> {
   if (existing) return Promise.resolve(existing)
   if (paystackLoad) return paystackLoad
   paystackLoad = new Promise((resolve, reject) => {
+    const fail = () => {
+      paystackLoad = null
+      for (const tag of document.querySelectorAll("script[data-paystack-inline]")) tag.remove()
+      reject(new Error("Couldn't load Paystack. Check your connection and try again."))
+    }
     const script = document.createElement("script")
     script.src = "https://js.paystack.co/v1/inline.js"
     script.async = true
     script.setAttribute("data-paystack-inline", "true")
-    script.crossOrigin = "anonymous"
     script.onload = () => {
       const value = (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop
       if (value) resolve(value)
-      else reject(new Error("Couldn't load Paystack. Check your connection and try again."))
+      else fail()
     }
-    script.onerror = () => reject(new Error("Couldn't load Paystack. Check your connection and try again."))
+    script.onerror = fail
     document.head.appendChild(script)
   })
   return paystackLoad
