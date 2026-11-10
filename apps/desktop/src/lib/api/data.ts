@@ -14,6 +14,7 @@ import type {
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { getOrgId } from "@/lib/auth/org"
+import { freshToken } from "@/lib/auth/session"
 
 type Row = Record<string, unknown>
 
@@ -766,12 +767,12 @@ export async function fetchStaff(): Promise<Staff[]> {
 
 export async function upsertStaff(id: string | null, input: StaffInput): Promise<Staff> {
   const payload: Row = {
-    name: input.name,
+    name: input.name.trim(),
     role: input.role,
-    phone: input.phone ?? null,
-    photo_path: input.photo_path ?? null,
+    phone: input.phone?.trim() ?? "",
     active: input.active !== false,
   }
+  if (input.photo_path !== undefined) payload.photo_path = input.photo_path ?? ""
   if (id) {
     const { data, error } = await db()
       .from("staff")
@@ -783,6 +784,7 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
     const row = check<StaffRow>(data, error)
     return mapStaff(row)
   }
+  payload.photo_path = input.photo_path ?? ""
   const { data, error } = await db()
     .from("staff")
     .insert({ org_id: orgId(), ...payload })
@@ -799,6 +801,30 @@ export async function deleteStaff(id: string): Promise<void> {
     .eq("org_id", orgId())
     .eq("id", id)
   check(null, error as unknown as { message: string } | null)
+}
+
+export async function inviteEmployee(
+  org: string,
+  email: string,
+  role: Staff["role"],
+): Promise<{ emailed: boolean; invite_url?: string }> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
+  if (!url) throw new Error("Supabase is not configured")
+  const token = await freshToken()
+  if (!token) throw new Error("Your session expired. Sign in again.")
+  const res = await fetch(`${url}/functions/v1/invite-member`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ org_id: org, email, role }),
+    signal: AbortSignal.timeout(20_000),
+  })
+  const json = (await res.json().catch(() => ({}))) as {
+    emailed?: boolean
+    invite_url?: string
+    error?: string
+  }
+  if (!res.ok) throw new Error(json.error ?? "Invite failed")
+  return { emailed: json.emailed !== false, invite_url: json.invite_url }
 }
 
 export async function fetchSuppliers(): Promise<Supplier[]> {

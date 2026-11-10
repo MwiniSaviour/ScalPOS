@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useClerk } from "@clerk/clerk-react"
-import { BadgeCheck, Clock, RefreshCw, ShieldAlert } from "lucide-react"
+import { BadgeCheck, Clock, CreditCard, RefreshCw, ShieldAlert } from "lucide-react"
 import {
   BillingAuthError,
   getSubscription,
@@ -118,6 +118,12 @@ export default function BillingPage() {
     }
   }
 
+  async function finishPending() {
+    const plan = state?.plan
+    if (plan !== "standard" && plan !== "enterprise") return
+    await subscribe(plan)
+  }
+
   async function reSignIn() {
     await clerk.signOut()
     router.push("/auth/login")
@@ -193,7 +199,9 @@ export default function BillingPage() {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold text-amber-600">Payment pending</span>
-            <span className="block text-xs text-muted">Finish checkout, then refresh to confirm.</span>
+            <span className="block text-xs text-muted">
+              Not confirmed yet. If you closed the checkout window, start a new payment below.
+            </span>
           </span>
         </div>
       )
@@ -243,6 +251,16 @@ export default function BillingPage() {
           <RefreshCw size={15} className={cn(busy === "refresh" && "animate-spin")} />
           Refresh status
         </button>
+        {state?.status === "pending" && (
+          <button
+            onClick={() => void finishPending()}
+            disabled={busy !== null || loading || sessionExpired}
+            className="btn-primary text-sm"
+          >
+            <CreditCard size={15} />
+            Pay now
+          </button>
+        )}
       </div>
 
       {error && (

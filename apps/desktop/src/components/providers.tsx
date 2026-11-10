@@ -31,13 +31,19 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const onAuthPage = pathname.startsWith("/auth")
+  const onSsoCallback = pathname.startsWith("/auth/sso-callback")
+  const onPublicPage =
+    pathname === "/" ||
+    pathname === "/legal" ||
+    pathname === "/data-deletion"
 
   useEffect(() => {
-    if (!isLoaded) return
+    if (!isLoaded || onPublicPage || onSsoCallback) return
     if (!isSignedIn && !onAuthPage) router.replace("/auth/login")
     if (isSignedIn && onAuthPage) router.replace("/dashboard")
-  }, [isLoaded, isSignedIn, onAuthPage, router])
+  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router])
 
+  if (onPublicPage || onSsoCallback) return <>{children}</>
   if (!isLoaded) return <BootScreen />
   if (!isSignedIn && !onAuthPage) return <BootScreen />
   if (isSignedIn && onAuthPage) return <BootScreen />

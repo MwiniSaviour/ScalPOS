@@ -11,7 +11,8 @@ import { useClerk, useUser } from "@clerk/clerk-react"
 import type { LucideIcon } from "lucide-react"
 import type { NavItem } from "@/lib/types"
 import { ChevronDown } from "lucide-react"
-import { useOrg } from "@/lib/auth/org"
+import { useOrg, readDemoOrg } from "@/lib/auth/org"
+import { useEntitlement, entitlementKind, isEnterpriseKind } from "@/lib/entitlement"
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
@@ -91,6 +92,9 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   const { signOut } = useClerk()
   const { user } = useUser()
   const { shop } = useOrg()
+  const isDemo = !!shop && readDemoOrg(user?.id) === shop.id
+  const ent = useEntitlement(isDemo ? null : (shop?.id ?? null))
+  const allowEmployees = isDemo || isEnterpriseKind(entitlementKind(ent))
 
   useEffect(() => {
     onClose?.()
@@ -127,6 +131,7 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
         <nav className="flex-1 overflow-y-auto p-4">
           <ul className="space-y-1">
             {NAV_ITEMS.filter((item) => {
+              if (item.href === "/dashboard/employees" && !allowEmployees) return false
               if (!item.roles) return true
               const mapped = role === "owner" ? "admin" : "employee"
               return item.roles.includes(mapped)

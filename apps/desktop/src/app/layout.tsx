@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next"
 import { Providers } from "@/components/providers"
+import { AffiliateRefCapture } from "@/components/affiliate-ref-capture"
+import { LegacyServiceWorkerCleanup } from "@/components/legacy-sw-cleanup"
 import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 
@@ -48,10 +50,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <head>
-        <link rel="manifest" href="/manifest.ts" />
+        <link rel="manifest" href="/manifest.webmanifest" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.svg" />
       </head>
       <body className="min-h-screen antialiased">
+        <LegacyServiceWorkerCleanup />
+        <AffiliateRefCapture />
         <Providers>{children}</Providers>
       </body>
     </html>

@@ -282,9 +282,9 @@ export default function PosPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-8rem)] -mx-8 -mb-8">
-      <div className="flex flex-1 flex-col border-r border-border">
-        <div className="border-b border-border bg-card p-4">
+    <div className="flex h-[calc(100vh-8rem)] min-w-0 -mx-8 -mb-8">
+      <div className="flex min-w-0 flex-1 flex-col border-r border-border">
+        <div className="min-w-0 border-b border-border bg-card p-4">
           {error && (
             <div className="mb-2 rounded-lg bg-danger-bg px-3 py-2 text-xs text-danger flex items-center gap-2">
               <X size={14} />
@@ -326,11 +326,11 @@ export default function PosPage() {
               <Scan size={16} />
             </button>
           </div>
-          <div className="flex gap-2 overflow-x-auto pb-1">
+          <div className="flex w-full min-w-0 gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setCatFilter("")}
               className={cn(
-                "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+                "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all",
                 !catFilter
                   ? "bg-primary text-white"
                   : "bg-sidebar-hover text-muted hover:text-foreground"
@@ -343,7 +343,7 @@ export default function PosPage() {
                 key={cat.id}
                 onClick={() => setCatFilter(cat.id)}
                 className={cn(
-                  "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all",
+                  "shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium transition-all",
                   catFilter === cat.id
                     ? "bg-primary text-white"
                     : "bg-sidebar-hover text-muted hover:text-foreground"
@@ -355,7 +355,7 @@ export default function PosPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="min-w-0 flex-1 overflow-y-auto p-4">
           <div className="grid grid-cols-3 gap-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const inCart = cartQtyById[product.id] ?? 0
@@ -365,7 +365,7 @@ export default function PosPage() {
                   onClick={() => addToCart(product)}
                   disabled={product.stock === 0 || !product.active}
                   className={cn(
-                    "relative flex flex-col items-center rounded-xl border bg-card p-3 text-center transition-all hover:shadow-md active:scale-95",
+                    "relative flex min-w-0 flex-col items-center rounded-xl border bg-card p-3 text-center transition-all hover:shadow-md active:scale-95",
                     inCart > 0
                       ? "border-primary bg-primary-light ring-2 ring-primary/20"
                       : "border-border hover:border-primary",
@@ -401,7 +401,7 @@ export default function PosPage() {
         </div>
       </div>
 
-      <div className="flex w-96 flex-col bg-card">
+      <div className="flex w-96 shrink-0 flex-col bg-card">
         <div className="border-b border-border p-4">
           <h2 className="text-base font-bold text-foreground">Current Sale</h2>
           <p className="text-xs text-muted">{cart.length} items in cart</p>
@@ -611,35 +611,38 @@ export default function PosPage() {
       )}
 
       {showReceipt && lastSale && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 print:hidden">
-          <div className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
-            <div className="mb-4 text-center">
-              <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-success-bg">
-                <Package size={24} className="text-success" />
+        <>
+          <OrderReceipt sale={lastSale} settings={posSettings} className="hidden print:block" />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 print:hidden">
+            <div className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
+              <div className="mb-4 text-center">
+                <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-success-bg">
+                  <Package size={24} className="text-success" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">Sale Complete</h2>
+                <p className="text-xs text-muted">{lastSale.invoice_no}</p>
               </div>
-              <h2 className="text-lg font-bold text-foreground">Sale Complete</h2>
-              <p className="text-xs text-muted">{lastSale.invoice_no}</p>
-            </div>
 
-            <OrderReceipt sale={lastSale} settings={posSettings} className="rounded-xl border border-border" />
+              <OrderReceipt sale={lastSale} settings={posSettings} className="rounded-xl border border-border" />
 
-            <div className="mt-4 flex gap-3">
-              <button
-                onClick={() => window.print()}
-                className="btn-secondary flex-1"
-              >
-                <Printer size={16} />
-                Print Receipt
-              </button>
-              <button
-                onClick={() => { setShowReceipt(false); setLastSale(null) }}
-                className="btn-primary flex-1"
-              >
-                New Sale
-              </button>
+              <div className="mt-4 flex gap-3">
+                <button
+                  onClick={() => window.print()}
+                  className="btn-secondary flex-1"
+                >
+                  <Printer size={16} />
+                  Print Receipt
+                </button>
+                <button
+                  onClick={() => { setShowReceipt(false); setLastSale(null) }}
+                  className="btn-primary flex-1"
+                >
+                  New Sale
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   )

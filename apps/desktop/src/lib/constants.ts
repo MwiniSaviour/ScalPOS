@@ -30,7 +30,6 @@ export const NAV_ITEMS: NavItem[] = [
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },
   { label: "Orders", href: "/dashboard/orders", icon: "ShoppingCart" },
-  { label: "More", href: "/dashboard/more", icon: "MoreHorizontal" },
 ]
 
 export const SCAN_MODES = [

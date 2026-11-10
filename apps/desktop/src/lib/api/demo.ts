@@ -1,5 +1,5 @@
-import { getSupabase } from "@/lib/supabase/client"
-import { getOrgId } from "@/lib/auth/org"
+import { createDemoOrg, getSupabase } from "@/lib/supabase/client"
+import { clearDemoOrg, getOrgId, readDemoOrg, setDemoOrg } from "@/lib/auth/org"
 
 const PREFIX = "DEMO-"
 
@@ -9,10 +9,6 @@ function db(): NonNullable<ReturnType<typeof getSupabase>> {
   const client = getSupabase()
   if (!client) throw new Error("Supabase is not configured")
   return client
-}
-
-function orgId(): string {
-  return getOrgId()
 }
 
 function check<T>(data: unknown, error: { message: string } | null): T {
@@ -61,21 +57,41 @@ const ORDER_SPECS: { daysAgo: number; items: [string, number][]; method: "cash" 
   { daysAgo: 0, items: [["detergent", 1], ["water", 4]], method: "momo", customer: "akosua", credit: true },
 ]
 
-export async function hasDemoData(): Promise<boolean> {
+export async function isDemoModeActive(userId: string): Promise<boolean> {
+  return Boolean(readDemoOrg(userId))
+}
+
+export async function enterDemoMode(userId: string): Promise<void> {
+  db()
+  const existing = readDemoOrg(userId)
+  if (existing) {
+    setDemoOrg(userId, existing)
+    return
+  }
+  const orgId = await createDemoOrg(userId)
+  setDemoOrg(userId, orgId)
+  if (await hasDemoData()) return
+  await seedDemoData()
+}
+
+export function exitDemoMode(userId: string): void {
+  clearDemoOrg(userId)
+}
+
+async function hasDemoData(): Promise<boolean> {
   const { count, error } = await db()
     .from("products")
     .select("id", { count: "exact", head: true })
-    .eq("org_id", orgId())
+    .eq("org_id", getOrgId())
     .like("local_id", `${PREFIX}%`)
     .is("deleted_at", null)
   if (error) throw new Error(error.message)
   return (count ?? 0) > 0
 }
 
-export async function loadDemoData(): Promise<void> {
+async function seedDemoData(): Promise<void> {
   const client = db()
-  const org = orgId()
-  if (await hasDemoData()) throw new Error("Demo data is already loaded")
+  const org = getOrgId()
 
   const { data: catRows, error: catError } = await client
     .from("categories")
@@ -196,17 +212,3 @@ export async function loadDemoData(): Promise<void> {
   }
 }
 
-export async function clearDemoData(): Promise<void> {
-  const client = db()
-  const org = orgId()
-  const stamp = new Date().toISOString()
-  for (const table of ["orders", "order_items", "products", "customers", "categories"] as const) {
-    const { error } = await client
-      .from(table)
-      .update({ deleted_at: stamp, updated_at: stamp })
-      .eq("org_id", org)
-      .like("local_id", `${PREFIX}%`)
-      .is("deleted_at", null)
-    if (error) throw new Error(error.message)
-  }
-}

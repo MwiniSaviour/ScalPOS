@@ -57,7 +57,8 @@ export function useImageSrc(ref: string | null | undefined): string | null {
   return resolved?.ref === ref ? resolved.url : preview
 }
 
-const MAX_PIXELS = 1600 * 1600
+const MAX_EDGE = 1024
+const MAX_INPUT_BYTES = 15 * 1024 * 1024
 
 function extOf(blob: Blob): string {
   const t = blob.type || "image/jpeg"
@@ -67,24 +68,80 @@ function extOf(blob: Blob): string {
   return "jpg"
 }
 
-/** Downscale large photos to keep uploads small; returns a JPEG blob at best. */
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    try {
+      canvas.toBlob((blob) => resolve(blob), type, quality)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+function loadImage(file: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      resolve(img)
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error("Could not read that photo"))
+    }
+    img.src = url
+  })
+}
+
+/** Dimensions only; keeps decode cost off the main canvas. */
+function imageSize(file: Blob): Promise<{ w: number; h: number }> {
+  return loadImage(file).then((img) => ({
+    w: img.naturalWidth || 1,
+    h: img.naturalHeight || 1,
+  }))
+}
+
+/**
+ * Re-encode every upload as a small WebP (JPEG fallback) so cloud rows stay
+ * light. Decoding is resized in one pass where the browser supports it, and
+ * EXIF rotation is applied so phone photos arrive upright.
+ */
 async function normalizeImage(file: Blob): Promise<Blob> {
-  if (typeof createImageBitmap !== "function") return file
-  try {
-    const bmp = await createImageBitmap(file)
-    const scale = Math.min(1, Math.sqrt(MAX_PIXELS / (bmp.width * bmp.height)))
-    if (scale >= 1 && file.size < 1_500_000) return file
-    const canvas = document.createElement("canvas")
-    canvas.width = Math.max(1, Math.round(bmp.width * scale))
-    canvas.height = Math.max(1, Math.round(bmp.height * scale))
-    const ctx = canvas.getContext("2d")
-    if (!ctx) return file
-    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height)
-    const out = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/jpeg", 0.82))
-    return out ?? file
-  } catch {
-    return file
+  if (file.size > MAX_INPUT_BYTES) throw new Error("That photo is too large (max 15 MB)")
+  const { w, h } = await imageSize(file)
+  const scale = Math.min(1, MAX_EDGE / Math.max(w, h))
+  const tw = Math.max(1, Math.round(w * scale))
+  const th = Math.max(1, Math.round(h * scale))
+
+  let bitmap: ImageBitmap | null = null
+  if (typeof createImageBitmap === "function") {
+    try {
+      bitmap = await createImageBitmap(file, {
+        imageOrientation: "from-image",
+        resizeWidth: tw,
+        resizeHeight: th,
+        resizeQuality: "high",
+      } as ImageBitmapOptions)
+    } catch {
+      bitmap = null
+    }
   }
+
+  const canvas = document.createElement("canvas")
+  canvas.width = tw
+  canvas.height = th
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return file
+  const source: CanvasImageSource = bitmap ?? (await loadImage(file))
+  ctx.drawImage(source, 0, 0, tw, th)
+  bitmap?.close?.()
+
+  let out = await canvasToBlob(canvas, "image/webp", 0.82)
+  if (!out || out.type !== "image/webp") {
+    out = await canvasToBlob(canvas, "image/jpeg", 0.85)
+  }
+  return out ?? file
 }
 
 /**
@@ -94,10 +151,18 @@ async function normalizeImage(file: Blob): Promise<Blob> {
  * insecure LAN origin this app is served from.
  */
 export async function uploadProductImage(file: File, org: string): Promise<string> {
+  return uploadImage(file, org, "products")
+}
+
+export async function uploadStaffImage(file: File, org: string): Promise<string> {
+  return uploadImage(file, org, "staff")
+}
+
+async function uploadImage(file: File, org: string, folder: "products" | "staff"): Promise<string> {
   const blob = await normalizeImage(file)
   const c = getSupabase()
   const key = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  const path = `${org}/products/desktop/${key}.${extOf(blob)}`
+  const path = `${org}/${folder}/desktop/${key}.${extOf(blob)}`
   const { error } = await c.storage.from(BUCKET).upload(path, blob, {
     contentType: blob.type || "image/jpeg",
     upsert: true,

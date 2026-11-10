@@ -13,7 +13,7 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
     <div className="flex min-h-screen">
       <PWASetup />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="flex flex-1 flex-col lg:ml-64">
+      <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
         <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
       </div>

@@ -63,3 +63,27 @@ export async function bootstrapOrg(create = false, providedToken?: string): Prom
   }
   return { status: "ok", orgId: json.org_id }
 }
+
+export async function createDemoOrg(providedToken?: string): Promise<string> {
+  const token = providedToken ?? (await freshToken(true))
+  if (!token) throw new Error("Your session expired. Sign in again.")
+
+  const res = await fetch(`${supabaseUrl}/functions/v1/bootstrap-org`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ action: "create-demo" }),
+  })
+
+  const json = (await res.json().catch(() => ({}))) as {
+    org_id?: string
+    error?: string
+    detail?: string
+  }
+  if (!res.ok || !json.org_id) {
+    throw new Error(json.detail ?? json.error ?? "Failed to prepare demo workspace.")
+  }
+  return json.org_id
+}

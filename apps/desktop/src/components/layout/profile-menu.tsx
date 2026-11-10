@@ -127,7 +127,7 @@ function ProfileDropdown({
         <MenuRow
           icon={<MoreHorizontal size={16} />}
           label="More"
-          sub="Referrals, backup, demo data"
+          sub="Referrals, backup, demo mode"
           onClick={() => go("/dashboard/more")}
         />
         <div className="my-1 border-t border-border" />

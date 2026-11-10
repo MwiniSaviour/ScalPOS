@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useUser, useClerk } from "@clerk/clerk-react"
+import { useAuth, useUser, useClerk } from "@clerk/clerk-react"
 import { X, LogOut, Copy, Check, ExternalLink, Trash2 } from "lucide-react"
 import { useOrg } from "@/lib/auth/org"
 import { fetchSettings, updateSettings } from "@/lib/api/data"
@@ -14,7 +14,7 @@ import {
   saveAffiliateRef,
 } from "@/lib/affiliate"
 import { exportBackup } from "@/lib/api/backup"
-import { clearDemoData, hasDemoData, loadDemoData } from "@/lib/api/demo"
+import { enterDemoMode, exitDemoMode, isDemoModeActive } from "@/lib/api/demo"
 
 export const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
@@ -414,75 +414,70 @@ export function BackupModal({ onClose }: { onClose: () => void }) {
 }
 
 export function DemoModal({ onClose }: { onClose: () => void }) {
-  const { shop } = useOrg()
-  const [loaded, setLoaded] = useState<boolean | null>(null)
+  const { userId } = useAuth()
+  const [demoActive, setDemoActive] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const isOwner = shop?.role === "owner"
+  const active = userId ? demoActive : false
 
   useEffect(() => {
-    if (!isOwner) return
+    if (!userId) return
     let alive = true
-    hasDemoData()
+    isDemoModeActive(userId)
       .then((v) => {
-        if (alive) setLoaded(v)
+        if (alive) setDemoActive(v)
       })
       .catch((e: unknown) => {
-        if (alive) setError(e instanceof Error ? e.message : "Could not check demo data")
+        if (alive) setError(e instanceof Error ? e.message : "Could not check demo mode")
       })
     return () => {
       alive = false
     }
-  }, [isOwner])
+  }, [userId])
 
-  async function run(clear: boolean) {
+  async function toggle() {
+    if (!userId) {
+      setError("Sign in first to try demo mode.")
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      if (clear) await clearDemoData()
-      else await loadDemoData()
+      if (active) exitDemoMode(userId)
+      else await enterDemoMode(userId)
       window.location.reload()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not update demo data")
+      setError(e instanceof Error ? e.message : "Could not update demo mode")
       setBusy(false)
     }
   }
 
   return (
-    <ModalShell title="Demo data" onClose={onClose}>
-      {!isOwner ? (
-        <p className="text-sm leading-6 text-muted">
-          Only the shop owner can load or remove demo data.
-        </p>
-      ) : (
+    <ModalShell title="Demo mode" onClose={onClose}>
+      <p className="text-sm leading-6 text-muted">
+        Explore ScalPOS with sample products, customers and sales inside a private demo workspace.
+        Nothing in this preview touches your real shop&apos;s data.
+      </p>
+      {error && <p className="mt-3 text-sm text-danger">{error}</p>}
+      {userId && demoActive === null ? (
+        <p className="mt-4 text-sm text-muted">Checking…</p>
+      ) : active ? (
         <>
-          <p className="text-sm leading-6 text-muted">
-            Adds sample products, customers and sales to this shop so you can explore reports,
-            receipts and stock screens with realistic data. Everything created here is marked
-            &ldquo;Demo&rdquo; and can be removed again in one click.
+          <p className="mt-4 rounded-lg bg-sidebar-hover/60 px-3 py-2 text-xs text-muted">
+            Demo mode is currently on.
           </p>
-          {error && <p className="mt-3 text-sm text-danger">{error}</p>}
-          {loaded === null ? (
-            <p className="mt-4 text-sm text-muted">Checking…</p>
-          ) : loaded ? (
-            <>
-              <p className="mt-4 rounded-lg bg-sidebar-hover/60 px-3 py-2 text-xs text-muted">
-                Demo data is currently loaded in this shop.
-              </p>
-              <button
-                onClick={() => void run(true)}
-                disabled={busy}
-                className="mt-3 w-full rounded-lg border border-red-200 py-2.5 text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                {busy ? "Removing…" : "Clear demo data"}
-              </button>
-            </>
-          ) : (
-            <button onClick={() => void run(false)} disabled={busy} className="btn-primary mt-4 w-full">
-              {busy ? "Loading…" : "Load demo data"}
-            </button>
-          )}
+          <button
+            onClick={() => void toggle()}
+            disabled={busy}
+            className="mt-3 w-full rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:bg-sidebar-hover disabled:opacity-50"
+          >
+            {busy ? "Preparing…" : "Exit demo mode"}
+          </button>
         </>
+      ) : (
+        <button onClick={() => void toggle()} disabled={busy} className="btn-primary mt-4 w-full">
+          {busy ? "Preparing…" : "Enter demo mode"}
+        </button>
       )}
     </ModalShell>
   )

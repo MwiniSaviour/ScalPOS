@@ -25,8 +25,100 @@
   --color-danger-bg: #fef2f2;
   --color-info: #3b82f6;
   --color-info-bg: #eff6ff;
+  --color-bg: var(--m-bg);
+  --color-bg2: var(--m-bg2);
+  --color-surface: var(--m-surface);
+  --color-surface2: var(--m-surface2);
+  --color-surface3: var(--m-surface3);
+  --color-line: var(--m-line);
+  --color-line2: var(--m-line2);
+  --color-ink: var(--m-ink);
+  --color-ink2: var(--m-ink2);
+  --color-ink3: var(--m-ink3);
+  --color-ink4: var(--m-ink4);
+  --color-accent: var(--m-accent);
+  --color-accent2: var(--m-accent2);
+  --color-accentink: var(--m-accentink);
+  --color-accentsoft: var(--m-accentsoft);
+  --color-warn: var(--m-warn);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+.landing {
+  --m-bg: #0a0e17;
+  --m-bg2: #0e1420;
+  --m-surface: #121a28;
+  --m-surface2: #1a2332;
+  --m-surface3: #243044;
+  --m-line: #1f2940;
+  --m-line2: #2a3854;
+  --m-ink: #f3f7fd;
+  --m-ink2: #9fadc3;
+  --m-ink3: #68758d;
+  --m-ink4: #445064;
+  --m-accent: #10b981;
+  --m-accent2: #34d399;
+  --m-accentink: #06281a;
+  --m-accentsoft: #10b9811f;
+  --m-warn: #f5a524;
+  color-scheme: dark;
+}
+
+.landing[data-theme="light"] {
+  --m-bg: #eef1f6;
+  --m-bg2: #ffffff;
+  --m-surface: #ffffff;
+  --m-surface2: #f4f7fb;
+  --m-surface3: #e8edf4;
+  --m-line: #e2e7ef;
+  --m-line2: #c6cedb;
+  --m-ink: #0f172a;
+  --m-ink2: #475569;
+  --m-ink3: #5b6b82;
+  --m-ink4: #7c8aa0;
+  --m-accent: #047857;
+  --m-accent2: #065f46;
+  --m-accentink: #ffffff;
+  --m-accentsoft: #04785714;
+  --m-warn: #9a3412;
+  color-scheme: light;
+}
+
+.tabnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.press {
+  transition:
+    transform 0.12s cubic-bezier(0.2, 0, 0, 1),
+    opacity 0.12s,
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.press:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.anim-fade {
+  animation: fade-in 0.18s ease-out backwards;
 }
 
 body {
@@ -132,7 +224,15 @@ body {
     display: block !important;
     position: fixed !important;
     left: 0 !important;
+    right: 0 !important;
     top: 0 !important;
     width: 100% !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
   }
 }

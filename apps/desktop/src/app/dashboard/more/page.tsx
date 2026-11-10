@@ -133,8 +133,8 @@ export default function MorePage() {
           />
           <Row
             icon={<Sparkles size={18} />}
-            label="Demo data"
-            sub="Try sample products & sales"
+            label="Demo mode"
+            sub="Try the app with sample data; your real shop is untouched"
             onClick={() => setShowDemo(true)}
           />
         </Section>

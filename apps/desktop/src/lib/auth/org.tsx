@@ -29,10 +29,48 @@ type OrgContextValue = {
 }
 
 const CACHE_KEY = "desk-pos-shop-v1"
+const DEMO_STORE_KEY = "desk-pos-demo-org-v1"
 
 let activeShop: Shop | null = null
+let demoOrgId: string | null = null
+
+type DemoOrgEntry = { user_id: string; org_id: string }
+
+function readDemoOrgList(): DemoOrgEntry[] {
+  try {
+    const raw = window.localStorage.getItem(DEMO_STORE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (e): e is DemoOrgEntry =>
+        !!e && typeof e.user_id === "string" && typeof e.org_id === "string",
+    )
+  } catch {
+    return []
+  }
+}
+
+export function readDemoOrg(userId: string | null | undefined): string | null {
+  if (!userId || typeof window === "undefined") return null
+  return readDemoOrgList().find((e) => e.user_id === userId)?.org_id ?? null
+}
+
+export function setDemoOrg(userId: string, orgId: string) {
+  const next = readDemoOrgList().filter((e) => e.user_id !== userId)
+  next.push({ user_id: userId, org_id: orgId })
+  window.localStorage.setItem(DEMO_STORE_KEY, JSON.stringify(next))
+}
+
+export function clearDemoOrg(userId: string) {
+  window.localStorage.setItem(
+    DEMO_STORE_KEY,
+    JSON.stringify(readDemoOrgList().filter((e) => e.user_id !== userId)),
+  )
+}
 
 export function getOrgId(): string {
+  if (demoOrgId) return demoOrgId
   if (!activeShop) throw new Error("No shop connected")
   return activeShop.id
 }
@@ -66,8 +104,18 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   const [shop, setShop] = useState<Shop | null>(() => {
     if (typeof window === "undefined") return null
     const cached = readCache(userId)
-    if (cached) activeShop = cached
-    return cached
+    if (cached) {
+      activeShop = cached
+      return cached
+    }
+    const demo = readDemoOrg(userId)
+    if (demo) {
+      demoOrgId = demo
+      const pseudo: Shop = { id: demo, name: "Demo shop", role: "owner" }
+      activeShop = pseudo
+      return pseudo
+    }
+    return null
   })
   const [loading, setLoading] = useState(() => {
     if (typeof window === "undefined") return true
@@ -87,6 +135,16 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         if (!token) throw new Error("Your session expired. Sign in again.")
         const res = await bootstrapOrg(create, token)
         if (res.status === "no_shop") {
+          const demo = readDemoOrg(userId)
+          if (demo) {
+            demoOrgId = demo
+            const pseudo: Shop = { id: demo, name: "Demo shop", role: "owner" }
+            activeShop = pseudo
+            setShop(pseudo)
+            setNeedsShop(false)
+            setError(null)
+            return
+          }
           setNeedsShop(true)
           setError(null)
           return
@@ -128,6 +186,15 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     },
     [getToken, userId],
   )
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (isSignedIn && userId) {
+      demoOrgId = readDemoOrg(userId)
+    } else {
+      demoOrgId = null
+    }
+  }, [isSignedIn, userId])
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return

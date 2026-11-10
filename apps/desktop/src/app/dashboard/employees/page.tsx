@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from "react"
 import { Plus, Search, Edit2, Trash2, Loader2, AlertCircle } from "lucide-react"
 import type { Staff } from "@/lib/types"
 import { fetchStaff, deleteStaff } from "@/lib/api/data"
+import { useImageSrc } from "@/lib/api/image"
+import { useOrg } from "@/lib/auth/org"
 import { formatDate, cn } from "@/lib/utils"
 import { ROLE_LABELS } from "@/lib/constants"
 import { EmployeeForm } from "./employee-form"
@@ -24,7 +26,23 @@ function getInitials(name: string) {
     .slice(0, 2)
 }
 
+function StaffAvatar({ staff }: { staff: Staff }) {
+  const src = useImageSrc(staff.photo_path)
+  return (
+    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-sidebar-hover">
+      {src ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="text-sm font-bold text-muted">{getInitials(staff.name)}</span>
+      )}
+    </div>
+  )
+}
+
 export default function EmployeesPage() {
+  const { shop } = useOrg()
+  const isOwner = shop?.role === "owner"
   const [staff, setStaff] = useState<Staff[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -74,6 +92,8 @@ export default function EmployeesPage() {
         <button
           onClick={() => { setEditing(null); setShowForm(true) }}
           className="btn-primary"
+          disabled={!isOwner}
+          title={isOwner ? undefined : "Only the owner can manage staff"}
         >
           <Plus size={16} />
           Add Employee
@@ -136,9 +156,7 @@ export default function EmployeesPage() {
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-sidebar-hover overflow-hidden">
-                        <span className="text-sm font-bold text-muted">{getInitials(s.name)}</span>
-                      </div>
+                      <StaffAvatar staff={s} />
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-semibold text-foreground">{s.name}</span>
@@ -170,14 +188,16 @@ export default function EmployeesPage() {
                     <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={() => { setEditing(s); setShowForm(true) }}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-success hover:bg-success-bg transition-all"
+                        disabled={!isOwner}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-success hover:bg-success-bg transition-all disabled:opacity-40"
                         title="Edit"
                       >
                         <Edit2 size={17} />
                       </button>
                       <button
                         onClick={() => handleDelete(s)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-danger hover:bg-danger-bg transition-all"
+                        disabled={!isOwner}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg text-danger hover:bg-danger-bg transition-all disabled:opacity-40"
                         title="Delete"
                       >
                         <Trash2 size={17} />
@@ -194,6 +214,7 @@ export default function EmployeesPage() {
       {showForm && (
         <EmployeeForm
           staff={editing}
+          orgId={shop?.id ?? ""}
           onSave={load}
           onClose={() => { setShowForm(false); setEditing(null) }}
         />
