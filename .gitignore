@@ -63,3 +63,4 @@ keystore.properties
 
 # Termux build scratch
 .tmp/
+.vercel
