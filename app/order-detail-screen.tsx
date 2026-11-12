@@ -42,6 +42,7 @@ export default function OrderDetailScreen() {
   const hydrated = store.usePos((s) => s.hydrated);
   const orders = store.usePos((s) => s.orders);
   const customers = store.usePos((s) => s.customers);
+  const batches = store.usePos((s) => s.batches);
   const settings = store.useSettings();
   const addPaymentsToOrder = store.usePos((s) => s.addPaymentsToOrder);
   const refundOrder = store.usePos((s) => s.refundOrder);
@@ -137,18 +138,37 @@ export default function OrderDetailScreen() {
       <main className="flex flex-col gap-3 px-5 pt-3 pb-32">
         <Card inset>
           <CardTitle>{order.items.length} item{order.items.length === 1 ? "" : "s"}</CardTitle>
-          {order.items.map((i) => (
-            <div key={i.productId} className="flex items-center gap-3 px-4 py-3">
-              <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-medium text-ink">
-                  {i.name} <span className="text-ink3">× {i.qty}</span>
+          {order.items.map((i, idx) => {
+            const allocations = (i.batchAllocations ?? []).map((a) => {
+              const b = batches.find((x) => x.id === a.batchId);
+              return { batchNo: b?.batchNo || a.batchId, expiry: b?.expiry ?? "", qty: a.qty };
+            });
+            return (
+              <div
+                key={`${i.productId}-${i.packName ?? ""}-${idx}`}
+                className="flex items-center gap-3 px-4 py-3"
+              >
+                <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-medium text-ink">
+                    {i.packName ? `${i.name} — ${i.packName}` : i.name}{" "}
+                    <span className="text-ink3">× {i.qty}</span>
+                  </span>
+                  <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
+                  {i.prescriptionRef && (
+                    <span className="block text-[12px] text-ink3">Rx ref {i.prescriptionRef}</span>
+                  )}
+                  {allocations.map((b, idx) => (
+                    <span key={`${b.batchNo}-${idx}`} className="block text-[12px] text-ink3">
+                      {b.batchNo}
+                      {b.expiry ? ` · exp ${b.expiry}` : ""} × {b.qty}
+                    </span>
+                  ))}
                 </span>
-                <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
-              </span>
-              <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(i.price * i.qty)}</span>
-            </div>
-          ))}
+                <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(i.price * i.qty)}</span>
+              </div>
+            );
+          })}
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[14px] text-ink3">Subtotal</span>
             <span className="tabnum text-[15px] font-semibold text-ink">{fmtMoney(order.subtotal)}</span>

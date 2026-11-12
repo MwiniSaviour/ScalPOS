@@ -16,7 +16,7 @@ import { dateShort, timeOf } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { dueOf, paidOf, usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
-import type { Order, PaymentMethod, Settings } from "@/lib/types";
+import type { Batch, Order, PaymentMethod, Settings } from "@/lib/types";
 import { Printer, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -63,6 +63,30 @@ export function orderTax(order: Order): { amount: number; label: string } | null
 }
 
 /**
+ * The batches a sale drew from, one entry per allocation — batch number,
+ * expiry and the base units taken.
+ */
+function batchLines(order: Order, batches: Batch[]): { batchNo: string; expiry: string; qty: number }[] {
+  const lines: { batchNo: string; expiry: string; qty: number }[] = [];
+  for (const item of order.items) {
+    for (const a of item.batchAllocations ?? []) {
+      const b = batches.find((x) => x.id === a.batchId);
+      lines.push({
+        batchNo: b?.batchNo || a.batchId,
+        expiry: b?.expiry ?? "",
+        qty: a.qty,
+      });
+    }
+  }
+  return lines;
+}
+
+/** The line label of an order item — pack sales carry the pack name. */
+function itemName(item: Order["items"][number]): string {
+  return item.packName ? `${item.name} — ${item.packName}` : item.name;
+}
+
+/**
  * Plain-text receipt — this is what the shop copies and sends to the customer,
  * so it must carry the same information as the printed receipt: shop details,
  * subtotal, discount, tax, total, payments and the balance.
@@ -71,6 +95,7 @@ export function receiptText(order: Order, settings?: Settings): string {
   const paid = paidOf(order);
   const due = dueOf(order);
   const tax = orderTax(order);
+  const allocations = batchLines(order, usePos.getState().batches);
   const lines: string[] = [];
   if (settings) {
     lines.push(settings.shopName);
@@ -85,7 +110,10 @@ export function receiptText(order: Order, settings?: Settings): string {
   lines.push(order.id);
   lines.push(`${dateShort(order.createdAt)} ${timeOf(order.createdAt)}`);
   lines.push("");
-  for (const i of order.items) lines.push(`${i.name} × ${i.qty} — ${fmtMoney(i.price * i.qty)}`);
+  for (const i of order.items) {
+    lines.push(`${itemName(i)} × ${i.qty} — ${fmtMoney(i.price * i.qty)}`);
+    if (i.prescriptionRef) lines.push(`  Rx ref ${i.prescriptionRef}`);
+  }
   lines.push("");
   lines.push(`Subtotal ${fmtMoney(order.subtotal)}`);
   if (order.discount > 0) lines.push(`Discount -${fmtMoney(order.discount)}`);
@@ -96,6 +124,12 @@ export function receiptText(order: Order, settings?: Settings): string {
   }
   if (order.payments.length === 0) lines.push(`Paid ${fmtMoney(paid)}`);
   lines.push(due > 0 ? `Balance due ${fmtMoney(due)}` : "Fully paid");
+  if (allocations.length > 0) {
+    lines.push("");
+    for (const b of allocations) {
+      lines.push(`Batch ${b.batchNo}${b.expiry ? ` exp ${b.expiry}` : ""} × ${b.qty}`);
+    }
+  }
   if (settings?.receiptFooter?.trim()) {
     lines.push("");
     lines.push(settings.receiptFooter.trim());
@@ -114,6 +148,8 @@ export function Receipt({
 }) {
   const due = dueOf(order);
   const tax = orderTax(order);
+  const batches = usePos((s) => s.batches);
+  const allocations = batchLines(order, batches);
 
   return (
     <div
@@ -154,13 +190,20 @@ export function Receipt({
       <div className="receipt-rule my-3 border-t border-dashed border-line" />
 
       <div className="flex flex-col gap-1.5">
-        {order.items.map((i) => (
+        {order.items.map((i, idx) => (
           <div
-            key={`${i.productId}-${i.name}`}
+            key={`${i.productId}-${i.packName ?? ""}-${idx}`}
             className="flex items-start justify-between gap-3"
           >
             <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
-              {i.name} <span className="text-ink3">× {i.qty}</span>
+              <span className="block">
+                {itemName(i)} <span className="text-ink3">× {i.qty}</span>
+              </span>
+              {i.prescriptionRef && (
+                <span className="block text-[11px] leading-4 text-ink3">
+                  Rx ref {i.prescriptionRef}
+                </span>
+              )}
             </span>
             <span className="tabnum shrink-0 text-[13px] leading-5 font-semibold text-ink">
               {fmtMoney(i.price * i.qty)}
@@ -198,6 +241,31 @@ export function Receipt({
         </>
       )}
 
+      {allocations.length > 0 && (
+        <>
+          <div className="receipt-rule my-3 border-t border-dashed border-line" />
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+              Batches
+            </p>
+            {allocations.map((b, idx) => (
+              <div
+                key={`${b.batchNo}-${idx}`}
+                className="flex items-baseline justify-between gap-3"
+              >
+                <span className="min-w-0 flex-1 text-[12px] leading-5 text-ink2">
+                  {b.batchNo}
+                  {b.expiry ? ` · exp ${b.expiry}` : ""}
+                </span>
+                <span className="tabnum shrink-0 text-[12px] leading-5 font-semibold text-ink2">
+                  × {b.qty}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {settings.receiptFooter.trim() && (
         <>
           <div className="receipt-rule my-3 border-t border-dashed border-line" />
@@ -217,6 +285,10 @@ export function Receipt({
 export function receiptToPrintData(order: Order, settings: Settings): ReceiptPrintData {
   const due = dueOf(order);
   const tax = orderTax(order);
+  const allocations = batchLines(order, usePos.getState().batches);
+  const batchFooter = allocations
+    .map((b) => `Batch ${b.batchNo}${b.expiry ? ` exp ${b.expiry}` : ""} x${b.qty}`)
+    .join(" · ");
   return {
     shopName: settings.shopName,
     address: settings.address?.trim() ?? "",
@@ -230,7 +302,7 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
     orderId: order.id,
     orderDate: `${dateShort(order.createdAt)} - ${timeOf(order.createdAt)}`,
     items: order.items.map((i) => ({
-      name: i.name,
+      name: itemName(i),
       qty: i.qty,
       amount: fmtMoney(i.price * i.qty),
     })),
@@ -243,7 +315,7 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
       amount: fmtMoney(p.amount),
     })),
     balance: due > 0 ? fmtMoney(due) : null,
-    footer: settings.receiptFooter.trim(),
+    footer: [settings.receiptFooter.trim(), batchFooter].filter(Boolean).join(" · "),
   };
 }
 
