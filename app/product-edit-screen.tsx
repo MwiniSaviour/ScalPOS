@@ -15,7 +15,7 @@ import { deleteImageBlob, IMAGE_PREFIX, processImageFile, saveImageBlob } from "
 import { usePos, useSettings } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { cn, hueColor, hueSoft } from "@/lib/ui";
-import { Barcode, Camera, Check, ImagePlus, Link2, Package, Pill, Plus, ScanLine, Trash2 } from "lucide-react";
+import { Barcode, Camera, Check, ImagePlus, Link2, Package, Pill, Plus, ScanLine, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -31,6 +31,10 @@ const UNITS: { value: Product["unit"]; label: string }[] = [
 /** A pack row while it is being edited — the factor stays a string until save. */
 type PackDraft = { name: string; factor: string };
 
+/** A variant or modifier row while it is being edited. `id` is kept for rows
+ * that already exist so an edit never re-keys them. */
+type OptionDraft = { id?: string; name: string; delta: string };
+
 export default function ProductEditScreen() {
   const router = useRouter();
   const params = useSearchParams();
@@ -45,6 +49,7 @@ export default function ProductEditScreen() {
   const isNew = editId === "";
 
   const isPharmacy = hasFeature(settings.businessType, "batches");
+  const modifiersOn = hasFeature(settings.businessType, "modifiers");
   // a product that owns batches takes its stock from them — the raw number
   // must not be editable here or it would land on the earliest batch
   const ownsBatches = batches.some((b) => b.productId === editId);
@@ -74,6 +79,20 @@ export default function ProductEditScreen() {
   const [controlled, setControlled] = useState(editing?.controlled ?? false);
   const [packs, setPacks] = useState<PackDraft[]>(
     (editing?.packs ?? []).map((p) => ({ name: p.name, factor: String(p.factor) })),
+  );
+  const [variants, setVariants] = useState<OptionDraft[]>(
+    (editing?.variants ?? []).map((v) => ({
+      id: v.id,
+      name: v.name,
+      delta: String(v.priceDelta),
+    })),
+  );
+  const [modifiers, setModifiers] = useState<OptionDraft[]>(
+    (editing?.modifiers ?? []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      delta: String(m.priceDelta),
+    })),
   );
   const [touched, setTouched] = useState<{ name?: boolean; price?: boolean }>({});
   const [catOpen, setCatOpen] = useState(false);
@@ -161,6 +180,20 @@ export default function ProductEditScreen() {
     const packList = packs
       .map((p) => ({ name: p.name.trim(), factor: Math.round(parsePrice(p.factor)) }))
       .filter((p) => p.name !== "" && p.factor > 0);
+    const variantList = variants
+      .map((v) => ({
+        id: v.id ?? newOptionId(),
+        name: v.name.trim(),
+        priceDelta: Math.max(0, parsePrice(v.delta)),
+      }))
+      .filter((v) => v.name !== "");
+    const modifierList = modifiers
+      .map((m) => ({
+        id: m.id ?? newOptionId(),
+        name: m.name.trim(),
+        priceDelta: Math.max(0, parsePrice(m.delta)),
+      }))
+      .filter((m) => m.name !== "");
     usePos.getState().upsertProduct({
       ...(editing ? { id: editing.id } : {}),
       name: name.trim(),
@@ -179,6 +212,10 @@ export default function ProductEditScreen() {
       ...(isPharmacy
         ? { prescriptionOnly: rxOnly, controlled, packs: packList }
         : {}),
+      // menu options are restaurant-only. The drafts start from the product's
+      // current options, so an emptied list means the cashier cleared them —
+      // write it, or the old arrays would survive the merge forever.
+      ...(modifiersOn ? { variants: variantList, modifiers: modifierList } : {}),
     });
     // the previous photo is no longer referenced by this product
     const previous = editing?.imageUrl ?? "";
@@ -511,6 +548,130 @@ export default function ProductEditScreen() {
           </Card>
         )}
 
+        {modifiersOn && (
+          <Card className="mt-2.5 p-4">
+            <p className="flex items-center gap-1.5 text-[15px] font-medium text-ink2">
+              <SlidersHorizontal className="size-4" /> Variants
+            </p>
+            <p className="mt-0.5 text-[12px] leading-5 text-ink3">
+              Sizes this item comes in. Selling opens a picker — the first variant is the
+              default.
+            </p>
+            {variants.length > 0 && (
+              <div className="mt-2.5">
+                <div className="flex items-end gap-2">
+                  <p className="flex-1 text-[13px] font-medium text-ink2">Variant</p>
+                  <p className="w-24 text-[13px] font-medium text-ink2">Price +</p>
+                  <span className="size-11 shrink-0" />
+                </div>
+                {variants.map((v, i) => (
+                  <div key={v.id ?? i} className="mt-2 flex items-end gap-2">
+                    <Input
+                      placeholder="Large"
+                      value={v.name}
+                      onChange={(e) =>
+                        setVariants((rows) =>
+                          rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    <Input
+                      inputMode="decimal"
+                      money
+                      className="tabnum w-24"
+                      placeholder="0.00"
+                      value={v.delta}
+                      onChange={(e) =>
+                        setVariants((rows) =>
+                          rows.map((x, j) => (j === i ? { ...x, delta: e.target.value } : x)),
+                        )
+                      }
+                    />
+                    <IconButton
+                      label={`Remove ${v.name || "variant"}`}
+                      onClick={() => setVariants((rows) => rows.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="size-[17px]" />
+                    </IconButton>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="soft"
+              size="sm"
+              icon={<Plus className="size-4" />}
+              className="mt-2.5"
+              onClick={() => setVariants((rows) => [...rows, { name: "", delta: "" }])}
+            >
+              Add variant
+            </Button>
+          </Card>
+        )}
+
+        {modifiersOn && (
+          <Card className="mt-2.5 p-4">
+            <p className="flex items-center gap-1.5 text-[15px] font-medium text-ink2">
+              <Check className="size-4" /> Modifiers
+            </p>
+            <p className="mt-0.5 text-[12px] leading-5 text-ink3">
+              Add-ons the cashier can tick at the till, like &ldquo;no onions&rdquo; or
+              &ldquo;extra cheese&rdquo;.
+            </p>
+            {modifiers.length > 0 && (
+              <div className="mt-2.5">
+                <div className="flex items-end gap-2">
+                  <p className="flex-1 text-[13px] font-medium text-ink2">Modifier</p>
+                  <p className="w-24 text-[13px] font-medium text-ink2">Price +</p>
+                  <span className="size-11 shrink-0" />
+                </div>
+                {modifiers.map((m, i) => (
+                  <div key={m.id ?? i} className="mt-2 flex items-end gap-2">
+                    <Input
+                      placeholder="Extra cheese"
+                      value={m.name}
+                      onChange={(e) =>
+                        setModifiers((rows) =>
+                          rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)),
+                        )
+                      }
+                      className="flex-1"
+                    />
+                    <Input
+                      inputMode="decimal"
+                      money
+                      className="tabnum w-24"
+                      placeholder="0.00"
+                      value={m.delta}
+                      onChange={(e) =>
+                        setModifiers((rows) =>
+                          rows.map((x, j) => (j === i ? { ...x, delta: e.target.value } : x)),
+                        )
+                      }
+                    />
+                    <IconButton
+                      label={`Remove ${m.name || "modifier"}`}
+                      onClick={() => setModifiers((rows) => rows.filter((_, j) => j !== i))}
+                    >
+                      <Trash2 className="size-[17px]" />
+                    </IconButton>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="soft"
+              size="sm"
+              icon={<Plus className="size-4" />}
+              className="mt-2.5"
+              onClick={() => setModifiers((rows) => [...rows, { name: "", delta: "" }])}
+            >
+              Add modifier
+            </Button>
+          </Card>
+        )}
+
         <Card className="mt-2.5 p-4">
           <p className="flex items-center gap-1.5 text-[15px] font-medium text-ink2">
             <Barcode className="size-4" /> Barcode &amp; SKU
@@ -606,4 +767,12 @@ export default function ProductEditScreen() {
 
 function CediSign() {
   return <span className="text-[15px] font-semibold text-ink3">{CURRENCY_SYMBOL}</span>;
+}
+
+/** A local id for a new variant/modifier — no store helper exists for these. */
+function newOptionId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `opt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

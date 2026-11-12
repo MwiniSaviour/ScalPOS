@@ -20,6 +20,7 @@ import { useCartTotals, usePos, useSettings } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
   BadgePercent,
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -27,6 +28,7 @@ import {
   PackageOpen,
   Plus,
   SearchX,
+  SlidersHorizontal,
   User,
   Users,
   X,
@@ -69,6 +71,9 @@ export default function SellScreen() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [packFor, setPackFor] = useState<Product | null>(null);
   const [packPrice, setPackPrice] = useState<Record<number, string>>({});
+  const [optionFor, setOptionFor] = useState<Product | null>(null);
+  const [optionVariantId, setOptionVariantId] = useState<string | null>(null);
+  const [optionModIds, setOptionModIds] = useState<string[]>([]);
   const [tabPrompt, setTabPrompt] = useState<{ table: RestaurantTable; order: Order } | null>(
     null,
   );
@@ -176,6 +181,17 @@ export default function SellScreen() {
     return m;
   }, [cart, products]);
 
+  // the options sheet's live price — variant delta plus every ticked modifier
+  const optionVariants = optionFor?.variants ?? [];
+  const optionModifiers = optionFor?.modifiers ?? [];
+  const optionVariant = optionVariants.find((v) => v.id === optionVariantId) ?? null;
+  const optionChosenMods = optionModifiers.filter((m) => optionModIds.includes(m.id));
+  const optionPrice = optionFor
+    ? optionFor.price +
+      (optionVariant?.priceDelta ?? 0) +
+      optionChosenMods.reduce((s, m) => s + m.priceDelta, 0)
+    : 0;
+
   if (!hydrated) return null;
 
   const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
@@ -248,11 +264,55 @@ export default function SellScreen() {
     setTabPrompt(null);
   };
 
+  /* ------------------------------- options ------------------------------- */
+
+  /** Open the variant/modifier picker with a clean selection every time. */
+  const openOptions = (p: Product) => {
+    setOptionFor(p);
+    setOptionVariantId(p.variants?.[0]?.id ?? null);
+    setOptionModIds([]);
+  };
+
+  const toggleOptionMod = (id: string) => {
+    setOptionModIds((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
+  };
+
+  const addConfigured = () => {
+    if (!optionFor) return;
+    const p = optionFor;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    addToCart(p.id, 1, {
+      price: optionPrice,
+      ...(optionVariant
+        ? { variantId: optionVariant.id, variantName: optionVariant.name }
+        : {}),
+      ...(optionChosenMods.length
+        ? {
+            modifierIds: optionChosenMods.map((m) => m.id),
+            modifierNames: optionChosenMods.map((m) => m.name),
+          }
+        : {}),
+    });
+    setOptionFor(null);
+    flashTile(p.id);
+  };
+
   const tap = (pid: string) => {
     const p = products.find((x) => x.id === pid);
     if (!p) return;
     if (isUnavailableToday(p, now)) {
       usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    // options only apply to items sold on their own; a product with packs
+    // takes the pack picker instead (the two never meet in practice)
+    if (!p.packs?.length && (p.variants?.length || p.modifiers?.length)) {
+      openOptions(p);
       return;
     }
     if (p.packs?.length) {
@@ -527,11 +587,16 @@ export default function SellScreen() {
                 />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
-                    {packName ? `${l.product.name} · ${packName}` : l.product.name}
+                    {lineTitle(l, packName)}
                   </span>
                   <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
                     {fmtMoney(l.price ?? l.product.price)} each
                   </span>
+                  {l.modifierNames && l.modifierNames.length > 0 && (
+                    <span className="mt-0.5 block truncate text-[12px] text-ink3">
+                      {l.modifierNames.join(", ")}
+                    </span>
+                  )}
                 </span>
                 <span className="flex items-center gap-1.5">
                   <StepBtn
@@ -547,7 +612,18 @@ export default function SellScreen() {
                     label="Increase quantity"
                     disabled={l.qty >= max}
                     onClick={() =>
-                      addToCart(l.productId, 1, { packIdx: l.packIdx, price: l.price })
+                      addToCart(l.productId, 1, {
+                        packIdx: l.packIdx,
+                        price: l.price,
+                        ...(l.variantId ? { variantId: l.variantId } : {}),
+                        ...(l.variantName ? { variantName: l.variantName } : {}),
+                        ...(l.modifierIds && l.modifierIds.length
+                          ? { modifierIds: l.modifierIds }
+                          : {}),
+                        ...(l.modifierNames && l.modifierNames.length
+                          ? { modifierNames: l.modifierNames }
+                          : {}),
+                      })
                     }
                   >
                     <Plus className="size-3.5" />
@@ -739,6 +815,107 @@ export default function SellScreen() {
       </Sheet>
 
       <Sheet
+        open={optionFor !== null}
+        onClose={() => setOptionFor(null)}
+        title={optionFor ? `Sell ${optionFor.name}` : ""}
+        height="auto"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium text-ink3">Unit price</p>
+              <p className="tabnum truncate text-[19px] font-bold text-ink">
+                {fmtMoney(optionPrice)}
+              </p>
+            </div>
+            <Button
+              disabled={
+                (optionFor ? (availableById.get(optionFor.id) ?? optionFor.stock) : 0) <= 0
+              }
+              onClick={addConfigured}
+            >
+              Add
+            </Button>
+          </div>
+        }
+      >
+        {optionFor && (
+          <div className="space-y-2.5">
+            {optionVariants.length > 0 && (
+              <div>
+                <p className="px-1 pb-1.5 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                  Size
+                </p>
+                <Card inset>
+                  {optionVariants.map((v) => {
+                    const selected = v.id === optionVariantId;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setOptionVariantId(v.id)}
+                        className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                            selected ? "border-accent" : "border-line2",
+                          )}
+                        >
+                          {selected && <span className="size-2.5 rounded-full bg-accent" />}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left text-[17px] font-semibold text-ink">
+                          {v.name}
+                        </span>
+                        <span className="tabnum shrink-0 text-[14px] text-ink3">
+                          {deltaText(v.priceDelta)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </Card>
+              </div>
+            )}
+
+            {optionModifiers.length > 0 && (
+              <div>
+                <p className="px-1 pb-1.5 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                  Modifiers
+                </p>
+                <Card inset>
+                  {optionModifiers.map((m) => {
+                    const checked = optionModIds.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleOptionMod(m.id)}
+                        className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-md border",
+                            checked
+                              ? "border-accent bg-accent text-accentink"
+                              : "border-line2",
+                          )}
+                        >
+                          {checked && <Check className="size-3.5" strokeWidth={3} />}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left text-[17px] font-semibold text-ink">
+                          {m.name}
+                        </span>
+                        <span className="tabnum shrink-0 text-[14px] text-ink3">
+                          {deltaText(m.priceDelta)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet
         open={custOpen}
         onClose={() => setCustOpen(false)}
         title="Attach customer"
@@ -842,6 +1019,9 @@ function ProductTile({
   const out = available <= 0;
   const low = !out && available <= p.lowStockAt;
   const selected = qty > 0;
+  const hasOptions =
+    !p.packs?.length &&
+    ((p.variants?.length ?? 0) > 0 || (p.modifiers?.length ?? 0) > 0);
   return (
     <div
       role="button"
@@ -893,7 +1073,7 @@ function ProductTile({
           {p.name}
         </span>
         <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
-        <span className="mt-0.5 flex h-[16px] items-center">
+        <span className="mt-0.5 flex h-[16px] items-center gap-1">
           {unavailable ? (
             <span className="text-[12px] font-medium text-warn">Not available today</span>
           ) : out ? (
@@ -901,6 +1081,13 @@ function ProductTile({
           ) : low ? (
             <span className="text-[12px] font-medium text-warn">{available} left</span>
           ) : null}
+          {hasOptions && !unavailable && !out && (
+            <span className="flex items-center gap-0.5 text-[12px] font-medium text-ink3">
+              {low && <span className="text-ink3">·</span>}
+              <SlidersHorizontal className="size-3 shrink-0" />
+              <span>options</span>
+            </span>
+          )}
         </span>
       </span>
     </div>
@@ -932,6 +1119,17 @@ function StepBtn({
 
 function trimNum(n: number): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
+}
+
+/** How an option's price delta reads — "Included", "+₵5.00" or "−₵2.00". */
+function deltaText(n: number): string {
+  if (n === 0) return "Included";
+  return `${n > 0 ? "+" : "−"}${fmtMoney(Math.abs(n))}`;
+}
+
+/** A cart line's title — dish, chosen variant and pack, e.g. "Jollof · Large". */
+function lineTitle(l: CartLine & { product: Product }, packName: string | undefined): string {
+  return [l.product.name, l.variantName, packName].filter(Boolean).join(" · ");
 }
 
 /** The base-unit row of the pack picker — the product sold on its own. */
