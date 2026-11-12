@@ -8,7 +8,7 @@ import { Input, TextArea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { BusinessTypePicker } from "@/components/ui/business-type-picker";
 import { usePos } from "@/lib/store";
-import { createStaff, setCurrentStaff } from "@/lib/staff";
+import { createStaff, setCurrentStaff, upsertStaff } from "@/lib/staff";
 import { markOnboarded, useHasOnboarded } from "@/lib/first-run";
 import { savePin, setSessionUnlocked } from "@/lib/pin";
 import type { BusinessType } from "@/lib/types";
@@ -57,6 +57,7 @@ export default function ShopCreateScreen() {
     try {
       // 1. Owner is the first member of the shop — device-local, no email needed.
       const owner = createStaff({ name: ownerName.trim(), phone: phone.trim(), role: "owner" });
+      upsertStaff(owner);
       setCurrentStaff(owner.id);
 
       // 2. Shop settings (receipts, MoMo).
