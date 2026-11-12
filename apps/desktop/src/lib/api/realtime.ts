@@ -12,6 +12,8 @@ const TABLES = [
   "order_items",
   "stock_moves",
   "settings",
+  "product_batches",
+  "purchase_orders",
 ] as const
 
 /**

@@ -26,6 +26,12 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { label: "Customers", href: "/dashboard/customers", icon: "Users" },
   { label: "Suppliers", href: "/dashboard/suppliers", icon: "Truck" },
+  {
+    label: "Purchase Orders",
+    href: "/dashboard/purchase-orders",
+    icon: "ClipboardList",
+    feature: "suppliers-po",
+  },
   { label: "Employees", href: "/dashboard/employees", icon: "UserCog", roles: ["admin"] },
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },
