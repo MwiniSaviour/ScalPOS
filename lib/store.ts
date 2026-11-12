@@ -667,42 +667,46 @@ export const usePos = create<PosState>()(
           ? new Map<string, number>()
           : planRestockIngredients(order.items);
         const moves: StockMove[] = [];
-        for (const i of order.items) {
-          const allocations = i.batchAllocations ?? [];
-          if (allocations.length > 0) {
-            // restock into the exact batches the sale came out of
-            for (const a of allocations) {
+        // a skip-refund leaves stock untouched, so it must not write return
+        // moves either — the ledger has to match what actually moved
+        if (!skipRestock) {
+          for (const i of order.items) {
+            const allocations = i.batchAllocations ?? [];
+            if (allocations.length > 0) {
+              // restock into the exact batches the sale came out of
+              for (const a of allocations) {
+                moves.push({
+                  id: id("mv_"),
+                  productId: i.productId,
+                  qty: a.qty,
+                  reason: "return",
+                  ref: order.id,
+                  t: now,
+                  batchId: a.batchId,
+                });
+              }
+            } else {
+              const qty = i.baseQty ?? i.qty;
               moves.push({
                 id: id("mv_"),
                 productId: i.productId,
-                qty: a.qty,
+                qty,
                 reason: "return",
                 ref: order.id,
                 t: now,
-                batchId: a.batchId,
               });
             }
-          } else {
-            const qty = i.baseQty ?? i.qty;
+          }
+          for (const [ingredientId, qty] of ingredients) {
             moves.push({
               id: id("mv_"),
-              productId: i.productId,
+              productId: ingredientId,
               qty,
               reason: "return",
               ref: order.id,
               t: now,
             });
           }
-        }
-        for (const [ingredientId, qty] of ingredients) {
-          moves.push({
-            id: id("mv_"),
-            productId: ingredientId,
-            qty,
-            reason: "return",
-            ref: order.id,
-            t: now,
-          });
         }
         const batches = s.batches.map((b) => {
           const back = plan.batchBack.get(b.id);

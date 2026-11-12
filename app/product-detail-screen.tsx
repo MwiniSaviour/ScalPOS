@@ -5,7 +5,7 @@ import { Card, CardTitle } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Confirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/emptystate";
-import { Input } from "@/components/ui/input";
+import { Input, SearchBar } from "@/components/ui/input";
 import { NumberPad } from "@/components/ui/numberpad";
 import { ScreenHeader } from "@/components/shell/screenheader";
 import { ProductArt } from "@/components/ui/productart";
@@ -19,7 +19,7 @@ import { useNow } from "@/lib/now";
 import { usePos, useSettings } from "@/lib/store";
 import type { Batch, StockReason } from "@/lib/types";
 import { cn, hueColor } from "@/lib/ui";
-import { ArrowDownToLine, ArrowUpFromLine, ArrowUpDown, Layers, Package, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, ArrowUpDown, ChevronRight, CircleCheck, Layers, Package, Pencil, Plus, Trash2, TriangleAlert, UtensilsCrossed } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
@@ -43,19 +43,25 @@ const adjReasons: { value: StockReason; label: string }[] = [
   { value: "adjust", label: "Correction" },
 ];
 
+/** A recipe line while it is being edited — numbers stay strings until save. */
+type RecipeLineDraft = { ingredientProductId: string; qty: string; waste: string };
+
 export default function ProductDetailScreen() {
   const router = useRouter();
   const params = useSearchParams();
   const pid = params.get("id") ?? "";
   const hydrated = usePos((s) => s.hydrated);
   const product = usePos((s) => s.products.find((p) => p.id === pid));
+  const products = usePos((s) => s.products);
   const categories = usePos((s) => s.categories);
   const allMoves = usePos((s) => s.stockMoves);
   const batches = usePos((s) => s.batches);
+  const recipe = usePos((s) => s.recipes.find((r) => r.productId === pid));
   const settings = useSettings();
   const now = useNow(60_000);
 
   const isPharmacy = hasFeature(settings.businessType, "batches");
+  const recipesOn = hasFeature(settings.businessType, "recipes");
 
   const moves = useMemo(
     () => allMoves.filter((m) => m.productId === pid).slice().reverse(),
@@ -80,6 +86,11 @@ export default function ProductDetailScreen() {
   const [batchCost, setBatchCost] = useState("");
   const [batchTouched, setBatchTouched] = useState(false);
   const [confirmBatch, setConfirmBatch] = useState<string | null>(null);
+  const [recipeOpen, setRecipeOpen] = useState(false);
+  const [recipeDraft, setRecipeDraft] = useState<RecipeLineDraft[]>([]);
+  const [pickIdx, setPickIdx] = useState<number | null>(null);
+  const [pickQuery, setPickQuery] = useState("");
+  const [confirmRecipeDel, setConfirmRecipeDel] = useState(false);
 
   if (!hydrated) return null;
 
@@ -164,6 +175,59 @@ export default function ProductDetailScreen() {
       cost: Math.max(0, parsePrice(batchCost)),
     });
     setBatchOpen(false);
+  };
+
+  const productById = new Map(products.map((p) => [p.id, p]));
+  const recipeDraftOk =
+    recipeDraft.length > 0 &&
+    recipeDraft.every((l) => l.ingredientProductId !== "" && parsePrice(l.qty) > 0);
+  const pickSearch = pickQuery.trim().toLowerCase();
+  const ingredientChoices = products.filter(
+    (p) =>
+      p.id !== product.id &&
+      (pickSearch === "" ||
+        p.name.toLowerCase().includes(pickSearch) ||
+        p.sku.toLowerCase().includes(pickSearch) ||
+        p.barcode.toLowerCase().includes(pickSearch)),
+  );
+
+  const openRecipeEditor = () => {
+    setRecipeDraft(
+      recipe && recipe.lines.length > 0
+        ? recipe.lines.map((l) => ({
+            ingredientProductId: l.ingredientProductId,
+            qty: String(l.qty),
+            waste: l.wastePct ? String(l.wastePct) : "",
+          }))
+        : [{ ingredientProductId: "", qty: "", waste: "" }],
+    );
+    setRecipeOpen(true);
+  };
+
+  const saveRecipe = () => {
+    if (!recipeDraftOk) return;
+    const lines = recipeDraft.map((l) => {
+      const wastePct = Math.round(Math.min(99, Math.max(0, parsePrice(l.waste))) * 100) / 100;
+      return {
+        ingredientProductId: l.ingredientProductId,
+        qty: Math.round(parsePrice(l.qty) * 1000) / 1000,
+        ...(wastePct > 0 ? { wastePct } : {}),
+      };
+    });
+    usePos.getState().upsertRecipe({ productId: product.id, lines });
+    usePos.getState().toast("Recipe saved", "ok");
+    setRecipeOpen(false);
+  };
+
+  const updateLine = (idx: number, patch: Partial<RecipeLineDraft>) => {
+    setRecipeDraft((lines) => lines.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
+  };
+
+  const chooseIngredient = (ingredientProductId: string) => {
+    if (pickIdx === null) return;
+    updateLine(pickIdx, { ingredientProductId });
+    setPickIdx(null);
+    setPickQuery("");
   };
 
   return (
@@ -344,6 +408,74 @@ export default function ProductDetailScreen() {
           </Card>
         )}
 
+        {recipesOn && (
+          <Card inset className="mt-2.5">
+            <CardTitle
+              right={
+                recipe ? (
+                  <span className="flex items-center gap-1">
+                    <Button
+                      variant="soft"
+                      size="sm"
+                      icon={<Pencil className="size-4" />}
+                      onClick={openRecipeEditor}
+                    >
+                      Edit
+                    </Button>
+                    <IconButton label="Remove recipe" onClick={() => setConfirmRecipeDel(true)}>
+                      <Trash2 className="size-[17px]" />
+                    </IconButton>
+                  </span>
+                ) : (
+                  <Button
+                    variant="soft"
+                    size="sm"
+                    icon={<Plus className="size-4" />}
+                    onClick={openRecipeEditor}
+                  >
+                    Add recipe
+                  </Button>
+                )
+              }
+            >
+              <span className="flex items-center gap-1.5">
+                <UtensilsCrossed className="size-[17px] text-ink2" />
+                Recipe
+              </span>
+            </CardTitle>
+            {!recipe ? (
+              <EmptyState
+                icon={<UtensilsCrossed className="size-7" />}
+                title="No recipe yet"
+                hint="Add one to consume ingredients on every sale."
+                action={<Button onClick={openRecipeEditor}>Add recipe</Button>}
+                className="py-10"
+              />
+            ) : (
+              recipe.lines.map((l, idx) => {
+                const ingredient = productById.get(l.ingredientProductId);
+                return (
+                  <div key={`${l.ingredientProductId}-${idx}`} className="flex items-center gap-3 px-4 py-3.5">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accentsoft text-accent">
+                      <UtensilsCrossed className="size-[17px]" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[17px] font-semibold leading-tight text-ink">
+                        {ingredient?.name ?? "Unknown ingredient"}
+                      </p>
+                      <p className="tabnum mt-0.5 truncate text-[14px] text-ink3">
+                        {l.qty}
+                        {ingredient ? ` ${ingredient.unit}` : ""}
+                        {l.wastePct ? ` · ${l.wastePct}% waste` : ""}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </Card>
+        )}
+
         <Card inset className="mt-2.5">
           <div className="px-4 pt-4 pb-1">
             <h3 className="text-[15px] font-medium text-ink2">Stock moves</h3>
@@ -511,6 +643,159 @@ export default function ProductDetailScreen() {
           </p>
         </div>
       </Sheet>
+
+      <Sheet
+        open={recipeOpen}
+        onClose={() => setRecipeOpen(false)}
+        title={recipe ? "Edit recipe" : "Add recipe"}
+        height="tall"
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="secondary" block onClick={() => setRecipeOpen(false)}>
+              Cancel
+            </Button>
+            <Button block disabled={!recipeDraftOk} onClick={saveRecipe}>
+              Save recipe
+            </Button>
+          </div>
+        }
+      >
+        <p className="pb-3 text-[13px] leading-5 text-ink3">
+          Ingredients are drawn from stock every time one {product.name} is sold.
+        </p>
+        <div className="flex flex-col gap-3">
+          {recipeDraft.map((line, idx) => {
+            const ingredient = productById.get(line.ingredientProductId);
+            return (
+              <div key={idx} className="rounded-2xl border border-line2 bg-surface p-3">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      setPickIdx(idx);
+                      setPickQuery("");
+                    }}
+                    className="press flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1 py-1 text-left hover:bg-surface2/50"
+                  >
+                    {ingredient ? (
+                      <ProductArt
+                        imageUrl={ingredient.imageUrl}
+                        name={ingredient.name}
+                        className="size-9 shrink-0 rounded-xl"
+                      />
+                    ) : (
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-surface2 text-ink3">
+                        <UtensilsCrossed className="size-[17px]" />
+                      </span>
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px] font-semibold text-ink">
+                        {ingredient?.name ?? "Choose ingredient"}
+                      </span>
+                      <span className="tabnum block truncate text-[12px] text-ink3">
+                        {ingredient
+                          ? `${ingredient.stock} ${ingredient.unit} in stock`
+                          : "Tap to pick a product"}
+                      </span>
+                    </span>
+                    <ChevronRight className="size-4 shrink-0 text-ink3" />
+                  </button>
+                  <IconButton
+                    label={`Remove ingredient ${idx + 1}`}
+                    onClick={() =>
+                      setRecipeDraft((lines) => lines.filter((_, i) => i !== idx))
+                    }
+                    disabled={recipeDraft.length <= 1}
+                  >
+                    <Trash2 className="size-[17px]" />
+                  </IconButton>
+                </div>
+                <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+                  <Input
+                    label={`Qty${ingredient ? ` (${ingredient.unit})` : ""}`}
+                    inputMode="decimal"
+                    className="tabnum"
+                    placeholder="0"
+                    value={line.qty}
+                    onChange={(e) =>
+                      updateLine(idx, { qty: e.target.value.replace(/[^0-9.]/g, "") })
+                    }
+                  />
+                  <Input
+                    label="Waste % (optional)"
+                    inputMode="numeric"
+                    className="tabnum"
+                    placeholder="0"
+                    hint="0–99"
+                    value={line.waste}
+                    onChange={(e) =>
+                      updateLine(idx, { waste: e.target.value.replace(/[^0-9]/g, "") })
+                    }
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <Button
+          variant="secondary"
+          block
+          icon={<Plus className="size-4" />}
+          className="mt-3"
+          onClick={() =>
+            setRecipeDraft((lines) => [...lines, { ingredientProductId: "", qty: "", waste: "" }])
+          }
+        >
+          Add ingredient
+        </Button>
+      </Sheet>
+
+      <Sheet
+        open={pickIdx !== null}
+        onClose={() => setPickIdx(null)}
+        title="Choose ingredient"
+        height="tall"
+      >
+        <SearchBar value={pickQuery} onChange={setPickQuery} placeholder="Search products…" />
+        <Card inset className="mt-3">
+          {ingredientChoices.map((p) => {
+            const selected =
+              pickIdx !== null && recipeDraft[pickIdx]?.ingredientProductId === p.id;
+            return (
+              <button
+                key={p.id}
+                onClick={() => chooseIngredient(p.id)}
+                className="press flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface2/50"
+              >
+                <ProductArt imageUrl={p.imageUrl} name={p.name} className="size-9 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-ink">{p.name}</span>
+                  <span className="tabnum block truncate text-[13px] text-ink3">
+                    {p.stock} {p.unit} in stock
+                  </span>
+                </span>
+                {selected && <CircleCheck className="size-5 shrink-0 text-accent" />}
+              </button>
+            );
+          })}
+          {ingredientChoices.length === 0 && (
+            <p className="px-4 py-6 text-center text-[14px] text-ink3">
+              {products.length <= 1 ? "No other products in the catalogue." : "No product matches."}
+            </p>
+          )}
+        </Card>
+      </Sheet>
+
+      <Confirm
+        open={confirmRecipeDel}
+        onClose={() => setConfirmRecipeDel(false)}
+        onConfirm={() => {
+          if (recipe) usePos.getState().deleteRecipe(recipe.id);
+        }}
+        title="Remove recipe?"
+        body={`"${product.name}" will stop consuming ingredients on sale. Past orders keep the ingredients they already used.`}
+        confirmLabel="Remove"
+        tone="danger"
+      />
 
       <Confirm
         open={confirmBatch !== null}
