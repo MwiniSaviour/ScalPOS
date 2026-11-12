@@ -1,12 +1,19 @@
 "use client";
 
 import { Button, IconButton } from "@/components/ui/button";
+import {
+  BusinessTypePicker,
+  businessTypeLabel,
+} from "@/components/ui/business-type-picker";
 import { Card } from "@/components/ui/card";
+import { Confirm } from "@/components/ui/confirm";
 import { Input, TextArea } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import { ReceiptPreview } from "@/components/receipt/receipt-preview";
 import { CURRENCY_SYMBOL } from "@/lib/money";
 import { useSettings, usePos } from "@/lib/store";
-import { ChevronLeft } from "lucide-react";
+import type { BusinessType } from "@/lib/types";
+import { ChevronLeft, ChevronRight, Store } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -21,6 +28,26 @@ export default function ShopSettingsScreen() {
   const [address, setAddress] = useState(settings.address);
   const [footer, setFooter] = useState(settings.receiptFooter);
   const [nameError, setNameError] = useState("");
+  const [typeOpen, setTypeOpen] = useState(false);
+  const [pendingType, setPendingType] = useState<BusinessType | null>(null);
+
+  function chooseType(next: BusinessType) {
+    setTypeOpen(false);
+    if (next === settings.businessType) return;
+    if (next === "retail") {
+      updateSettings({ businessType: next });
+      toast(`Business type changed to ${businessTypeLabel(next)}`);
+      return;
+    }
+    setPendingType(next);
+  }
+
+  function confirmTypeChange() {
+    if (!pendingType) return;
+    updateSettings({ businessType: pendingType });
+    toast(`Business type changed to ${businessTypeLabel(pendingType)}`);
+    setPendingType(null);
+  }
 
   function save() {
     if (!shopName.trim()) {
@@ -63,7 +90,7 @@ export default function ShopSettingsScreen() {
       </section>
 
       {/* details */}
-      <section className="mt-6 pb-32">
+      <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Details</h2>
         <Card className="mt-2.5 px-4 py-4">
           <div className="flex flex-col gap-3.5">
@@ -103,6 +130,45 @@ export default function ShopSettingsScreen() {
           </div>
         </Card>
       </section>
+
+      {/* business type */}
+      <section className="mt-6 pb-32">
+        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <Card inset className="mt-2.5">
+          <button
+            type="button"
+            onClick={() => setTypeOpen(true)}
+            className="press flex w-full items-center gap-3 px-4 py-3.5 text-left hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <Store className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[17px] font-semibold text-ink">Business type</span>
+              <span className="block truncate text-[14px] text-ink3">
+                {businessTypeLabel(settings.businessType)} · sets wording and tools
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
+          </button>
+        </Card>
+      </section>
+
+      <Sheet open={typeOpen} onClose={() => setTypeOpen(false)} height="auto" title="Business type">
+        <p className="mb-3 text-[14px] leading-5 text-ink3">
+          Sets the wording and tools across the app. Your data stays as it is.
+        </p>
+        <BusinessTypePicker value={settings.businessType} onChange={chooseType} className="pb-2" />
+      </Sheet>
+
+      <Confirm
+        open={pendingType !== null}
+        onClose={() => setPendingType(null)}
+        onConfirm={confirmTypeChange}
+        title={pendingType ? `Switch to ${businessTypeLabel(pendingType)}?` : "Change business type?"}
+        body="Specialized pages for this type will unlock and terminology across the app will change. Your existing products, customers and orders stay exactly as they are."
+        confirmLabel="Change type"
+      />
 
       <footer className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-[440px] border-t border-line bg-surface px-4 pt-3 pb-[calc(var(--nova-sab)+12px)]">
         <div className="grid grid-cols-2 gap-2.5">
