@@ -5,25 +5,38 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { ProductArt } from "@/components/ui/productart";
 import { Segmented } from "@/components/ui/segmented";
+import { daysToExpiry, expiryBucket } from "@/lib/batches";
+import { hasFeature } from "@/lib/features";
 import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
-import { dueOf, usePos } from "@/lib/store";
+import { dueOf, usePos, useSettings } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
 import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, Smartphone, TriangleAlert, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 
 type Period = "today" | "7d" | "30d";
 const PERIOD_DAYS: Record<Period, number> = { today: 1, "7d": 7, "30d": 30 };
+
+/* expiry risk buckets, most urgent first — the order the section renders in */
+const EXPIRY_BUCKETS = [
+  { key: "expired", label: "Expired", text: "text-danger", pill: "bg-danger/10 text-danger" },
+  { key: "soon30", label: "Expiring in 30 days", text: "text-warn", pill: "bg-warn/10 text-warn" },
+  { key: "soon90", label: "Expiring in 90 days", text: "text-ink3", pill: "bg-ink2/10 text-ink2" },
+] as const;
 
 export default function ReportsScreen() {
   const router = useRouter();
   const orders = usePos((s) => s.orders);
   const products = usePos((s) => s.products);
+  const batches = usePos((s) => s.batches);
+  const settings = useSettings();
   const now = useNow();
   const [period, setPeriod] = useState<Period>("today");
+
+  const showExpiry = hasFeature(settings.businessType, "expiry");
 
   const periodInfo = useMemo(() => {
     const days = PERIOD_DAYS[period];
@@ -122,6 +135,38 @@ export default function ReportsScreen() {
     () => products.filter((p) => p.active && p.stock <= p.lowStockAt).sort((a, b) => a.stock - b.stock),
     [products],
   );
+
+  /* expiry risk: batches still on the shelf that are expired or about to be */
+  const expiry = useMemo(() => {
+    const productById = new Map(products.map((p) => [p.id, p]));
+    const atRisk = batches
+      .filter((b) => b.qty > 0 && b.expiry)
+      .map((b) => ({
+        batch: b,
+        product: productById.get(b.productId),
+        bucket: expiryBucket(b.expiry, now),
+        days: daysToExpiry(b.expiry, now),
+        value: b.qty * b.cost,
+      }))
+      .filter((r) => r.bucket !== "later");
+    const groups = EXPIRY_BUCKETS.map((def) => {
+      const rows = atRisk
+        .filter((r) => r.bucket === def.key)
+        .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
+      return {
+        ...def,
+        rows,
+        units: rows.reduce((s, r) => s + r.batch.qty, 0),
+        value: rows.reduce((s, r) => s + r.value, 0),
+      };
+    });
+    return {
+      groups,
+      units: groups.reduce((s, g) => s + g.units, 0),
+      value: groups.reduce((s, g) => s + g.value, 0),
+      risky: groups.reduce((s, g) => s + g.rows.length, 0),
+    };
+  }, [batches, products, now]);
 
   const delta = pctDelta(hero.pct);
   const maxBars = Math.max(...chart.map((b) => b.sum), 1);
@@ -285,6 +330,87 @@ export default function ReportsScreen() {
         </Card>
       </section>
 
+      {/* expiry risk */}
+      {showExpiry && batches.length > 0 && now > 0 && (
+        <section className="mt-6">
+          <Card inset>
+            <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
+              <h3 className="text-[15px] font-medium text-ink2">Expiry risk</h3>
+              <span className="text-[14px] text-ink3">
+                {expiry.risky > 0 ? `${expiry.units} units at risk` : "nothing at risk"}
+              </span>
+            </div>
+            {expiry.risky === 0 ? (
+              <p className="px-4 py-3.5 text-[14px] text-ink3">
+                Nothing expiring soon — no batch is expired or due within 90 days.
+              </p>
+            ) : (
+              <>
+                {expiry.groups
+                  .filter((g) => g.rows.length > 0)
+                  .map((g) => (
+                    <Fragment key={g.key}>
+                      <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+                        <span className={cn("text-[12px] font-semibold uppercase tracking-[.06em]", g.text)}>
+                          {g.label}
+                        </span>
+                        <span className="tabnum text-[12px] text-ink3">{g.units} units</span>
+                      </div>
+                      {g.rows.map((r) => (
+                        <Link
+                          key={r.batch.id}
+                          href={`/inventory/detail?id=${r.batch.productId}`}
+                          className="press flex items-center gap-3 px-4 py-3 hover:bg-surface2/50"
+                        >
+                          <ProductArt
+                            imageUrl={r.product?.imageUrl}
+                            name={r.product?.name}
+                            className="size-9 shrink-0 rounded-xl"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-[15px] font-semibold leading-tight text-ink">
+                              {r.product?.name ?? "Deleted product"}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[13px]">
+                              <span className="text-ink3">
+                                {r.batch.batchNo ? `Batch ${r.batch.batchNo}` : "Unnumbered batch"} ·{" "}
+                              </span>
+                              <span className={g.text}>{expiryWhen(g.key, r.days, r.batch.expiry)}</span>
+                            </span>
+                          </span>
+                          <span className="flex shrink-0 flex-col items-end gap-1">
+                            <span
+                              className={cn(
+                                "tabnum inline-flex h-6 items-center rounded-full px-2.5 text-[12px] font-bold",
+                                g.pill,
+                              )}
+                            >
+                              {r.batch.qty} units
+                            </span>
+                            <span className="tabnum text-[13px] text-ink3">{fmtMoney(r.value)}</span>
+                          </span>
+                        </Link>
+                      ))}
+                      <div className="flex items-baseline justify-between gap-2 px-4 py-2.5">
+                        <span className="text-[13px] text-ink3">
+                          {g.rows.length} {g.rows.length === 1 ? "batch" : "batches"}
+                        </span>
+                        <span className="tabnum text-[13px] font-semibold text-ink2">{fmtMoney(g.value)} at risk</span>
+                      </div>
+                    </Fragment>
+                  ))}
+                <div className="flex items-baseline justify-between gap-2 px-4 py-3">
+                  <span className="text-[13px] font-medium text-ink2">Total at risk</span>
+                  <span className="tabnum text-[14px] font-semibold text-ink">
+                    {expiry.units} units · {fmtMoney(expiry.value)}
+                  </span>
+                </div>
+              </>
+            )}
+          </Card>
+        </section>
+      )}
+
       {/* low stock */}
       {lowStock.length > 0 && (
         <section className="mt-6 pb-6">
@@ -325,6 +451,26 @@ const mixBg: Record<string, string> = {
   card: "bg-violet",
   credit: "bg-warn",
 };
+
+/** "2027-03-12" → "12 Mar 2027" (parsed as UTC so the day never shifts) */
+function expiryDate(expiry: string): string {
+  const d = new Date(`${expiry}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return expiry;
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+/** The date, plus how far away it is, in the words the bucket implies. */
+function expiryWhen(bucket: string, days: number | null, expiry: string): string {
+  const date = expiryDate(expiry);
+  if (bucket === "expired") return `Expired ${date}`;
+  if (days === null) return date;
+  return `${date} · ${days}d left`;
+}
 
 function MixIcon({ method }: { method: string }) {
   const icon =
