@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/ui/emptystate";
 import { Input, SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
+import { cartLineKey, linePackName, packFactor } from "@/lib/batches";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
 import { useCartTotals, usePos } from "@/lib/store";
@@ -52,6 +53,8 @@ export default function SellScreen() {
   const [discountOpen, setDiscountOpen] = useState(false);
   const [discountDraft, setDiscountDraft] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+  const [packFor, setPackFor] = useState<Product | null>(null);
+  const [packPrice, setPackPrice] = useState<Record<number, string>>({});
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -74,18 +77,64 @@ export default function SellScreen() {
 
   const qtyInCart = useMemo(() => {
     const m = new Map<string, number>();
-    for (const line of cart) m.set(line.productId, line.qty);
+    for (const line of cart) {
+      const p = products.find((x) => x.id === line.productId);
+      const base = line.qty * packFactor(p, line.packIdx);
+      m.set(line.productId, (m.get(line.productId) ?? 0) + base);
+    }
     return m;
-  }, [cart]);
+  }, [cart, products]);
 
   if (!hydrated) return null;
 
   const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
 
-  const tap = (pid: string) => {
-    addToCart(pid, 1);
+  const flashTile = (pid: string) => {
     setFlash(pid);
     window.setTimeout(() => setFlash((f) => (f === pid ? null : f)), 400);
+  };
+
+  const tap = (pid: string) => {
+    const p = products.find((x) => x.id === pid);
+    if (p?.packs?.length) {
+      setPackFor(p);
+      setPackPrice(
+        Object.fromEntries(
+          p.packs.map((_, i) => [i, trimNum(p.price * packFactor(p, i))]),
+        ),
+      );
+      return;
+    }
+    addToCart(pid, 1);
+    flashTile(pid);
+  };
+
+  const closePack = () => {
+    setPackFor(null);
+    setPackPrice({});
+  };
+
+  const addBaseUnit = (pid: string) => {
+    addToCart(pid, 1);
+    closePack();
+    flashTile(pid);
+  };
+
+  const addPack = (pid: string, packIdx: number) => {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return;
+    const fallback = trimNum(p.price * packFactor(p, packIdx));
+    const draft = (packPrice[packIdx] ?? fallback).trim();
+    addToCart(pid, 1, { packIdx, price: parsePrice(draft === "" ? fallback : draft) });
+    closePack();
+    flashTile(pid);
+  };
+
+  const removeOne = (pid: string) => {
+    const lines = cart.filter((l) => l.productId === pid);
+    const target = lines.find((l) => l.packIdx === undefined) ?? lines[0];
+    if (!target) return;
+    setCartQty(cartLineKey(target), target.qty - 1);
   };
 
   const openDiscount = () => {
@@ -193,7 +242,7 @@ export default function SellScreen() {
                   qty={qtyInCart.get(p.id) ?? 0}
                   flash={flash === p.id}
                   onTap={() => tap(p.id)}
-                  onRemove={() => setCartQty(p.id, (qtyInCart.get(p.id) ?? 1) - 1)}
+                  onRemove={() => removeOne(p.id)}
                 />
               ))}
             </div>
@@ -243,47 +292,51 @@ export default function SellScreen() {
         }
       >
         <Card inset>
-          {totals.lines.map((l) => (
-            <div key={l.productId} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
-              <ProductArt
-                imageUrl={l.product.imageUrl}
-                name={l.product.name}
-                className="size-10 shrink-0 rounded-xl"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
-                  {l.product.name}
+          {totals.lines.map((l) => {
+            const key = cartLineKey(l);
+            const packName = linePackName(l.product, l.packIdx);
+            const max = Math.floor(l.product.stock / packFactor(l.product, l.packIdx));
+            return (
+              <div key={key} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
+                <ProductArt
+                  imageUrl={l.product.imageUrl}
+                  name={l.product.name}
+                  className="size-10 shrink-0 rounded-xl"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
+                    {packName ? `${l.product.name} · ${packName}` : l.product.name}
+                  </span>
+                  <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
+                    {fmtMoney(l.price ?? l.product.price)} each
+                  </span>
                 </span>
-                <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
-                  {fmtMoney(l.product.price)} each
+                <span className="flex items-center gap-1.5">
+                  <StepBtn
+                    label="Decrease quantity"
+                    onClick={() => setCartQty(key, l.qty - 1)}
+                  >
+                    <Minus className="size-3.5" />
+                  </StepBtn>
+                  <span className="tabnum w-6 text-center text-[15px] font-bold text-ink">
+                    {l.qty}
+                  </span>
+                  <StepBtn
+                    label="Increase quantity"
+                    disabled={l.qty >= max}
+                    onClick={() =>
+                      addToCart(l.productId, 1, { packIdx: l.packIdx, price: l.price })
+                    }
+                  >
+                    <Plus className="size-3.5" />
+                  </StepBtn>
+                  <IconButton label="Remove line" onClick={() => setCartQty(key, 0)}>
+                    <X className="size-4" />
+                  </IconButton>
                 </span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StepBtn
-                  label="Decrease quantity"
-                  onClick={() => setCartQty(l.productId, l.qty - 1)}
-                >
-                  <Minus className="size-3.5" />
-                </StepBtn>
-                <span className="tabnum w-6 text-center text-[15px] font-bold text-ink">
-                  {l.qty}
-                </span>
-                <StepBtn
-                  label="Increase quantity"
-                  disabled={l.qty >= l.product.stock}
-                  onClick={() => addToCart(l.productId, 1)}
-                >
-                  <Plus className="size-3.5" />
-                </StepBtn>
-                <IconButton
-                  label="Remove line"
-                  onClick={() => setCartQty(l.productId, 0)}
-                >
-                  <X className="size-4" />
-                </IconButton>
-              </span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </Card>
 
         <Card inset className="mt-2.5">
@@ -375,6 +428,87 @@ export default function SellScreen() {
             <span className="tabnum">{fmtMoney(totals.total)}</span>
           </div>
         </div>
+      </Sheet>
+
+      <Sheet
+        open={packFor !== null}
+        onClose={closePack}
+        title={packFor ? `Sell ${packFor.name}` : ""}
+        height="auto"
+      >
+        {packFor && (
+          <Card inset>
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[17px] font-semibold text-ink">
+                  {baseLabel(packFor)}
+                </span>
+                <span className="tabnum block text-[14px] text-ink3">
+                  {fmtMoney(packFor.price)} each
+                </span>
+              </span>
+              <Button
+                size="sm"
+                disabled={packFor.stock <= 0}
+                onClick={() => addBaseUnit(packFor.id)}
+              >
+                Add
+              </Button>
+            </div>
+            {packFor.packs?.map((pack, i) => {
+              const factor = packFactor(packFor, i);
+              const packsLeft = Math.floor(packFor.stock / factor);
+              return (
+                <div key={`${i}-${pack.name}`} className="px-4 py-3.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-ink">
+                      {pack.name}
+                    </span>
+                    <span className="tabnum shrink-0 text-[14px] text-ink3">
+                      = {factor} {unitWord(packFor)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <Input
+                      money
+                      inputMode="decimal"
+                      label="Pack price"
+                      placeholder="0.00"
+                      leading={
+                        <span className="tabnum text-[15px] font-semibold text-ink3">
+                          {CURRENCY_SYMBOL}
+                        </span>
+                      }
+                      value={packPrice[i] ?? ""}
+                      onChange={(e) =>
+                        setPackPrice((d) => ({ ...d, [i]: e.target.value }))
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      className="mb-0.5"
+                      disabled={packsLeft <= 0}
+                      onClick={() => addPack(packFor.id, i)}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-[12px]",
+                      packsLeft > 0 ? "text-ink3" : "text-danger",
+                    )}
+                  >
+                    {packsLeft > 0
+                      ? `${packsLeft} pack${packsLeft === 1 ? "" : "s"} in stock`
+                      : "Not enough stock for a full pack"}
+                  </p>
+                </div>
+              );
+            })}
+          </Card>
+        )}
       </Sheet>
 
       <Sheet
@@ -533,4 +667,22 @@ function StepBtn({
 
 function trimNum(n: number): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
+}
+
+/** The base-unit row of the pack picker — the product sold on its own. */
+function baseLabel(p: Product): string {
+  if (p.unit === "pcs") return "Single unit";
+  if (p.unit === "kg") return "Per kg";
+  if (p.unit === "ltr") return "Per litre";
+  return `Single ${p.unit}`;
+}
+
+/** The unit a pack multiplies — "Box of 10 strips" reads "= 10 strips". */
+function unitWord(p: Product): string {
+  if (p.unit === "pcs") return "units";
+  if (p.unit === "kg") return "kg";
+  if (p.unit === "ltr") return "litres";
+  if (p.unit === "bag") return "bags";
+  if (p.unit === "box") return "boxes";
+  return p.unit;
 }

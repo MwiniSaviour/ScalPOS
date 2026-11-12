@@ -10,6 +10,7 @@ import { NumberPad } from "@/components/ui/numberpad";
 import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { ReceiptSheet, orderTax } from "@/components/receipt/receipt";
+import { hasFeature } from "@/lib/features";
 import { id } from "@/lib/format";
 import { cashierDenominations, fmtMoney, fmtMoneyCompact, parsePrice } from "@/lib/money";
 import { useCartTotals, usePos } from "@/lib/store";
@@ -76,6 +77,7 @@ export default function PayScreen() {
   const [entered, setEntered] = useState<Row[]>([]);
   const [momoRef, setMomoRef] = useState("");
   const [cardRef, setCardRef] = useState("");
+  const [rxRef, setRxRef] = useState("");
   const [done, setDone] = useState<{ order: Order; change: number } | null>(null);
   const [custOpen, setCustOpen] = useState(false);
   const [custQuery, setCustQuery] = useState("");
@@ -126,6 +128,10 @@ export default function PayScreen() {
   }
 
   const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
+
+  const needsRx =
+    hasFeature(settings.businessType, "rx") &&
+    totals.lines.some((l) => l.product.prescriptionOnly);
 
   const pick = (cid: string | null) => {
     setCartCustomer(cid);
@@ -189,7 +195,9 @@ export default function PayScreen() {
         ...(ref !== "" ? { ref } : {}),
       });
     }
-    const placed = usePos.getState().placeOrder(payments);
+    const placed = usePos
+      .getState()
+      .placeOrder(payments, needsRx ? { prescriptionRef: rxRef } : undefined);
     if (placed) setDone({ order: placed, change: changeDue });
   };
 
@@ -254,6 +262,27 @@ export default function PayScreen() {
           </button>
         </Card>
       </section>
+
+      {needsRx && (
+        <section className="px-5 pt-4">
+          <Card className="p-4">
+            <p className="text-[15px] font-medium text-ink2">Prescription</p>
+            <p className="mt-1 text-[14px] leading-6 text-ink2">
+              This sale carries prescription-only medicine — record the reference
+              before charging.
+            </p>
+            <Input
+              label="Prescription reference"
+              hint="Required for prescription-only items — stamped on every prescription line of the order."
+              placeholder="e.g. RX-2026-0042"
+              value={rxRef}
+              onChange={(e) => setRxRef(e.target.value)}
+              error={rxRef.trim() === "" ? "Required before you can charge" : undefined}
+              className="mt-3"
+            />
+          </Card>
+        </section>
+      )}
 
       {method === "cash" && (
         <section className="px-5 pt-4">
@@ -398,7 +427,12 @@ export default function PayScreen() {
               Leaves {fmtMoney(credit)} on credit
             </p>
           )}
-          <Button block size="lg" onClick={complete}>
+          <Button
+            block
+            size="lg"
+            disabled={needsRx && rxRef.trim() === ""}
+            onClick={complete}
+          >
             {ctaLabel}
           </Button>
         </div>
