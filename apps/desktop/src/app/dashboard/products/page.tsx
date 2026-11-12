@@ -1,20 +1,25 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import { Plus, Download, Package, ShoppingCart, ScanBarcode } from "lucide-react"
 import { useProducts, useCategories } from "@/hooks/use-products"
 import { getOrgId } from "@/lib/auth/org"
+import { fetchProductBatchesForProducts } from "@/lib/api/data"
+import { hasFeature } from "@/lib/features"
+import { useBusinessType } from "@/lib/terms"
 import { ProductCard } from "@/components/products/product-card"
 import { ProductTable } from "@/components/products/product-table"
 import { ProductForm } from "@/components/products/product-form"
 import { ProductDetail } from "@/components/products/product-detail"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
 import { formatCurrency, cn } from "@/lib/utils"
-import type { Product } from "@/lib/types"
+import type { Product, ProductBatch } from "@/lib/types"
 
 export default function ProductsPage() {
-  const { products, loading, addProduct, editProduct, removeProduct } = useProducts()
+  const { products, loading, addProduct, editProduct, removeProduct, reload } = useProducts()
   const { categories } = useCategories()
+  const businessType = useBusinessType()
+  const isPharmacy = hasFeature(businessType, "batches")
   const [view, setView] = useState<"grid" | "list">("list")
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState("")
@@ -25,21 +30,70 @@ export default function ProductsPage() {
   const [scanningError, setScanningError] = useState("")
   const [viewing, setViewing] = useState<Product | null>(null)
   const [editing, setEditing] = useState<Product | null>(null)
-
-  const filtered = products.filter((p) => {
-    const q = search.toLowerCase()
-    const matchSearch =
-      p.name.toLowerCase().includes(q) ||
-      p.sku.toLowerCase().includes(q) ||
-      (p.barcode ?? "").includes(search)
-    const matchCat = !categoryFilter || p.category_id === categoryFilter
-    const matchStock =
-      !stockFilter ||
-      (stockFilter === "low" && p.stock > 0 && p.stock <= 10) ||
-      (stockFilter === "out" && p.stock === 0) ||
-      (stockFilter === "in" && p.stock > 10)
-    return matchSearch && matchCat && matchStock
+  const [loadedBatches, setLoadedBatches] = useState<{ ids: string; batches: ProductBatch[] }>({
+    ids: "",
+    batches: [],
   })
+
+  const filtered = useMemo(
+    () =>
+      products.filter((p) => {
+        const q = search.toLowerCase()
+        const matchSearch =
+          p.name.toLowerCase().includes(q) ||
+          p.sku.toLowerCase().includes(q) ||
+          (p.barcode ?? "").includes(search)
+        const matchCat = !categoryFilter || p.category_id === categoryFilter
+        const matchStock =
+          !stockFilter ||
+          (stockFilter === "low" && p.stock > 0 && p.stock <= 10) ||
+          (stockFilter === "out" && p.stock === 0) ||
+          (stockFilter === "in" && p.stock > 10)
+        return matchSearch && matchCat && matchStock
+      }),
+    [products, search, categoryFilter, stockFilter],
+  )
+
+  const batchIds = useMemo(
+    () => (isPharmacy ? filtered.map((p) => p.id).join(",") : ""),
+    [filtered, isPharmacy],
+  )
+
+  // the batches on screen belong to the ids they were loaded for, so a filter
+  // change never shows another product's expiry
+  const batches = useMemo(
+    () => (loadedBatches.ids === batchIds ? loadedBatches.batches : []),
+    [loadedBatches, batchIds],
+  )
+
+  const fetchBatches = useCallback(async () => {
+    const ids = batchIds ? batchIds.split(",") : []
+    try {
+      return await fetchProductBatchesForProducts(ids)
+    } catch {
+      return []
+    }
+  }, [batchIds])
+
+  useEffect(() => {
+    let alive = true
+    void fetchBatches().then((next) => {
+      if (alive) setLoadedBatches({ ids: batchIds, batches: next })
+    })
+    return () => {
+      alive = false
+    }
+  }, [batchIds, fetchBatches])
+
+  const loadBatches = useCallback(async () => {
+    const next = await fetchBatches()
+    setLoadedBatches({ ids: batchIds, batches: next })
+  }, [batchIds, fetchBatches])
+
+  const handleBatchesChanged = useCallback(async () => {
+    await loadBatches()
+    await reload()
+  }, [loadBatches, reload])
 
   // Stats
   const totalProducts = products.length
@@ -264,6 +318,7 @@ export default function ProductsPage() {
           ) : (
             <ProductTable
               products={filtered}
+              batches={batches}
               onView={handleView}
               onEdit={handleEdit}
               onDelete={handleDelete}
@@ -278,6 +333,7 @@ export default function ProductsPage() {
           onClose={() => setViewing(null)}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onBatchesChanged={handleBatchesChanged}
         />
       )}
 

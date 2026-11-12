@@ -3,8 +3,10 @@ import type {
   Customer,
   OrderPayStatus,
   OrderStatus,
+  Pack,
   PaymentMethod,
   Product,
+  ProductBatch,
   Sale,
   SaleItem,
   ShopSettings,
@@ -35,8 +37,20 @@ type ProductRow = {
   unit: string | null
   low_stock_at: number | string | null
   active: boolean | null
+  prescription_only: boolean | null
+  controlled: boolean | null
+  packs: unknown
   created_at: string
   updated_at: string
+}
+
+type ProductBatchRow = {
+  id: string
+  product_id: string
+  batch_no: string | null
+  expiry: string | null
+  qty: number | string | null
+  cost: number | string | null
 }
 
 type CategoryRow = { id: string; name: string; color: string | null; created_at: string }
@@ -157,6 +171,16 @@ export interface ProductInput {
   unit?: string
   low_stock_at?: number
   active?: boolean
+  prescription_only?: boolean
+  controlled?: boolean
+  packs?: Pack[] | null
+}
+
+export interface ProductBatchInput {
+  batch_no?: string
+  expiry?: string | null
+  qty?: number
+  cost?: number
 }
 
 export interface CustomerInput {
@@ -185,6 +209,38 @@ export interface StaffInput {
 
 export const PRODUCT_SELECT = "*, category:categories(id,name,color)"
 
+const BATCH_SELECT = "id,product_id,batch_no,expiry,qty,cost"
+
+/**
+ * The packs column is jsonb, so it can hold anything: a bare array, an object
+ * or nothing at all. Only well-formed entries are kept, and a product with no
+ * usable pack reads back as null.
+ */
+function mapPacks(raw: unknown): Pack[] | null {
+  if (!Array.isArray(raw)) return null
+  const packs: Pack[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const pack = entry as { name?: unknown; factor?: unknown }
+    const name = typeof pack.name === "string" ? pack.name.trim() : ""
+    const factor = Number(pack.factor)
+    if (!name || !Number.isFinite(factor) || factor <= 0) continue
+    packs.push({ name, factor })
+  }
+  return packs.length > 0 ? packs : null
+}
+
+function mapBatch(row: ProductBatchRow): ProductBatch {
+  return {
+    id: row.id,
+    product_id: row.product_id,
+    batch_no: row.batch_no ?? "",
+    expiry: row.expiry ?? null,
+    qty: Number(row.qty ?? 0),
+    cost: Number(row.cost ?? 0),
+  }
+}
+
 function mapRow(row: ProductRow): Product {
   const cat = row.category
   const category = Array.isArray(cat) ? cat[0] : cat
@@ -212,6 +268,9 @@ function mapRow(row: ProductRow): Product {
     unit: row.unit ?? "pcs",
     low_stock_at: Number(row.low_stock_at ?? 5),
     active: row.active !== false,
+    prescription_only: row.prescription_only === true,
+    controlled: row.controlled === true,
+    packs: mapPacks(row.packs),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -392,6 +451,9 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     unit: input.unit ?? "pcs",
     low_stock_at: input.low_stock_at ?? 5,
     active: input.active !== false,
+    prescription_only: input.prescription_only === true,
+    controlled: input.controlled === true,
+    packs: input.packs ?? null,
   }
   const { data, error } = await db().from("products").insert(payload).select(PRODUCT_SELECT).single()
   const row = check<ProductRow>(data, error)
@@ -416,6 +478,9 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
   if (input.unit !== undefined) patch.unit = input.unit
   if (input.low_stock_at !== undefined) patch.low_stock_at = input.low_stock_at
   if (input.active !== undefined) patch.active = input.active
+  if (input.prescription_only !== undefined) patch.prescription_only = input.prescription_only
+  if (input.controlled !== undefined) patch.controlled = input.controlled
+  if (input.packs !== undefined) patch.packs = input.packs
   const client = db()
   if (Object.keys(patch).length > 0) {
     const { data, error } = await client
@@ -875,6 +940,156 @@ export async function deleteSupplier(id: string): Promise<void> {
     .eq("org_id", orgId())
     .eq("id", id)
   check(null, error as unknown as { message: string } | null)
+}
+
+/* ------------------------------- pharmacy batches ------------------------------- */
+
+function sortBatches(batches: ProductBatch[]): ProductBatch[] {
+  return batches.slice().sort((a, b) => {
+    const ea = a.expiry ?? "9999-12-31"
+    const eb = b.expiry ?? "9999-12-31"
+    if (ea !== eb) return ea < eb ? -1 : 1
+    return a.batch_no.localeCompare(b.batch_no)
+  })
+}
+
+/** The expiry column is a date: only a plain YYYY-MM-DD is stored. */
+function normalizeExpiry(expiry: string | null | undefined): string | null {
+  if (!expiry) return null
+  const trimmed = expiry.trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null
+}
+
+export async function fetchProductBatches(productId: string): Promise<ProductBatch[]> {
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+  const rows = check<ProductBatchRow[]>(data, error)
+  return sortBatches(rows.map(mapBatch))
+}
+
+export async function fetchProductBatchesForProducts(productIds: string[]): Promise<ProductBatch[]> {
+  if (productIds.length === 0) return []
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .in("product_id", productIds)
+    .is("deleted_at", null)
+  const rows = check<ProductBatchRow[]>(data, error)
+  return rows.map(mapBatch)
+}
+
+export async function createProductBatch(productId: string, input: ProductBatchInput): Promise<ProductBatch> {
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    product_id: productId,
+    batch_no: input.batch_no ?? "",
+    expiry: normalizeExpiry(input.expiry),
+    qty: input.qty ?? 0,
+    cost: input.cost ?? 0,
+  }
+  const { data, error } = await db()
+    .from("product_batches")
+    .insert(payload)
+    .select(BATCH_SELECT)
+    .single()
+  const batch = mapBatch(check<ProductBatchRow>(data, error))
+  await applyDerivedStock(batch.product_id, batch.id, batch.batch_no, true)
+  return batch
+}
+
+export async function updateProductBatch(id: string, input: ProductBatchInput): Promise<ProductBatch> {
+  const patch: Row = {}
+  if (input.batch_no !== undefined) patch.batch_no = input.batch_no
+  if (input.expiry !== undefined) patch.expiry = normalizeExpiry(input.expiry)
+  if (input.qty !== undefined) patch.qty = input.qty
+  if (input.cost !== undefined) patch.cost = input.cost
+  if (Object.keys(patch).length === 0) {
+    const { data, error } = await db()
+      .from("product_batches")
+      .select(BATCH_SELECT)
+      .eq("org_id", orgId())
+      .eq("id", id)
+      .maybeSingle()
+    return mapBatch(check<ProductBatchRow>(data, error))
+  }
+  const { data, error } = await db()
+    .from("product_batches")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select(BATCH_SELECT)
+    .single()
+  const batch = mapBatch(check<ProductBatchRow>(data, error))
+  await applyDerivedStock(batch.product_id, batch.id, batch.batch_no, false)
+  return batch
+}
+
+export async function deleteProductBatch(id: string): Promise<void> {
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .maybeSingle()
+  const row = check<ProductBatchRow | null>(data, error)
+  const { error: deleteError } = await db()
+    .from("product_batches")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, deleteError as unknown as { message: string } | null)
+  if (row) await applyDerivedStock(row.product_id, row.id, row.batch_no ?? "", false)
+}
+
+/**
+ * A batched product's stock is derived: it is the sum of its batches. After any
+ * batch change the product row is brought back in line, and the change is
+ * written as a stock move so the history still explains the number.
+ */
+async function applyDerivedStock(
+  productId: string,
+  batchId: string,
+  batchNo: string,
+  isNew: boolean,
+): Promise<void> {
+  const batches = await fetchProductBatches(productId)
+  const derived = batches.reduce((sum, b) => sum + b.qty, 0)
+  const { data, error } = await db()
+    .from("products")
+    .select("stock")
+    .eq("org_id", orgId())
+    .eq("id", productId)
+    .maybeSingle()
+  check<ProductRow | null>(data, error)
+  const previous = Number((data as { stock?: number | string } | null)?.stock ?? 0)
+  const delta = derived - previous
+  if (delta === 0) return
+  const { error: updateError } = await db()
+    .from("products")
+    .update({ stock: derived, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", productId)
+  check(null, updateError as unknown as { message: string } | null)
+  // the move column holds whole units, so a fractional change has no move to write
+  const moveQty = Math.round(delta)
+  if (moveQty === 0) return
+  const { error: moveError } = await db()
+    .from("stock_moves")
+    .insert({
+      org_id: orgId(),
+      product_id: productId,
+      qty: moveQty,
+      reason: isNew && delta > 0 ? "purchase" : "adjust",
+      ref: batchNo ? `batch ${batchNo}` : "batch",
+      batch_id: batchId,
+    })
+  check(null, moveError as unknown as { message: string } | null)
 }
 
 export async function findProductByBarcode(barcode: string): Promise<Product | null> {

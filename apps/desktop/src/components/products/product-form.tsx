@@ -1,9 +1,11 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ImagePlus, Link2, Trash2, X } from "lucide-react"
+import { ImagePlus, Link2, Pill, Plus, Trash2, X } from "lucide-react"
 import { useCategories } from "@/hooks/use-products"
 import { useImageSrc, uploadProductImage } from "@/lib/api/image"
+import { hasFeature } from "@/lib/features"
+import { useBusinessType } from "@/lib/terms"
 import { cn } from "@/lib/utils"
 import type { Product } from "@/lib/types"
 
@@ -16,6 +18,9 @@ interface ProductFormProps {
 
 type FieldErrors = Partial<Record<"name" | "price" | "cost" | "stock" | "lowStock" | "barcode", string>>
 
+/** A pack row while it is being edited — the factor stays a string until save. */
+type PackDraft = { name: string; factor: string }
+
 export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProps) {
   const [name, setName] = useState(product?.name || "")
   const [sku, setSku] = useState(product?.sku || "")
@@ -27,6 +32,11 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
   const [categoryId, setCategoryId] = useState(product?.category_id || "")
   const [description, setDescription] = useState(product?.description || "")
   const [image, setImage] = useState(product?.image || "")
+  const [prescriptionOnly, setPrescriptionOnly] = useState(product?.prescription_only ?? false)
+  const [controlled, setControlled] = useState(product?.controlled ?? false)
+  const [packs, setPacks] = useState<PackDraft[]>(
+    (product?.packs ?? []).map((p) => ({ name: p.name, factor: String(p.factor) })),
+  )
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkValue, setLinkValue] = useState(
     product?.image && !product.image.startsWith("sb-product-images:") ? product.image : "",
@@ -36,6 +46,8 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [saving, setSaving] = useState(false)
   const { categories } = useCategories()
+  const businessType = useBusinessType()
+  const isPharmacy = hasFeature(businessType, "batches")
   const preview = useImageSrc(image)
   const nameRef = useRef<HTMLInputElement>(null)
   const priceRef = useRef<HTMLInputElement>(null)
@@ -106,6 +118,9 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
     }
     setSaving(true)
     try {
+      const packList = packs
+        .map((p) => ({ name: p.name.trim(), factor: Math.round(parseFloat(p.factor) || 0) }))
+        .filter((p) => p.name !== "" && p.factor > 0)
       await onSave({
         name: name.trim(),
         sku,
@@ -117,6 +132,13 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
         category_id: categoryId || null,
         description: description || null,
         image: linkValue.trim() || image || null,
+        ...(isPharmacy
+          ? {
+              prescription_only: prescriptionOnly,
+              controlled,
+              packs: packList.length > 0 ? packList : null,
+            }
+          : {}),
       })
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Could not save this product.")
@@ -347,6 +369,94 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
               />
             </div>
           </div>
+
+          {isPharmacy && (
+            <div className="space-y-4 rounded-xl border border-border bg-sidebar-hover/40 p-4">
+              <div className="flex items-center gap-2">
+                <Pill size={16} className="text-primary" />
+                <h3 className="text-sm font-semibold text-foreground">Pharmacy</h3>
+              </div>
+
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={prescriptionOnly}
+                  onChange={(e) => setPrescriptionOnly(e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+                Prescription only
+              </label>
+              <p className="-mt-2 pl-6 text-[11px] text-muted">
+                Checkout asks for the prescription reference.
+              </p>
+
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  checked={controlled}
+                  onChange={(e) => setControlled(e.target.checked)}
+                  className="h-4 w-4 rounded border-border accent-primary"
+                />
+                Controlled drug
+              </label>
+              <p className="-mt-2 pl-6 text-[11px] text-muted">
+                Sold under a controlled-medicine record.
+              </p>
+
+              <div>
+                <label className="label">Packs</label>
+                <p className="mb-2 text-[11px] text-muted">
+                  Sell this item in packs. The base unit is {product?.unit ?? "pcs"} — a
+                  pack&rsquo;s factor says how many of them it holds.
+                </p>
+                {packs.map((pack, index) => (
+                  <div key={index} className="mb-2 flex items-center gap-2">
+                    <input
+                      value={pack.name}
+                      onChange={(e) =>
+                        setPacks((rows) =>
+                          rows.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)),
+                        )
+                      }
+                      placeholder="Box of 10"
+                      className="input-field flex-1"
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      value={pack.factor}
+                      onChange={(e) =>
+                        setPacks((rows) =>
+                          rows.map((row, i) => (i === index ? { ...row, factor: e.target.value } : row)),
+                        )
+                      }
+                      placeholder="10"
+                      className="input-field w-24"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPacks((rows) => rows.filter((_, i) => i !== index))}
+                      className="btn-ghost p-1"
+                      title="Remove pack"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setPacks((rows) => [...rows, { name: "", factor: "" }])}
+                  className="btn-secondary text-xs"
+                >
+                  <Plus size={13} />
+                  Add pack
+                </button>
+                <p className="mt-2 text-[11px] text-muted">
+                  Once a product has batches, its stock is the sum of their quantities.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn-secondary">

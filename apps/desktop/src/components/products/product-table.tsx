@@ -1,10 +1,11 @@
-import { Package, Eye, Edit, Trash2 } from "lucide-react"
+import { Package, Eye, Edit, Trash2, TriangleAlert } from "lucide-react"
 import { formatCurrency, cn } from "@/lib/utils"
 import { useImageSrc } from "@/lib/api/image"
-import type { Product } from "@/lib/types"
+import type { Product, ProductBatch } from "@/lib/types"
 
 interface ProductTableProps {
   products: Product[]
+  batches: ProductBatch[]
   onView: (product: Product) => void
   onEdit: (product: Product) => void
   onDelete: (id: string) => void
@@ -19,10 +20,34 @@ function ProductCellImage({ image, name }: { image: string | null; name: string 
   )
 }
 
-export function ProductTable({ products, onView, onEdit, onDelete }: ProductTableProps) {
+/** Days from today until an expiry date; negative when already expired. */
+function daysToExpiry(expiry: string): number | null {
+  const time = Date.parse(`${expiry}T00:00:00Z`)
+  if (!Number.isFinite(time)) return null
+  const now = new Date()
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  return Math.round((time - today) / 86400000)
+}
+
+/** The soonest expiry date of each product; batches without an expiry are ignored. */
+function soonestExpiry(batches: ProductBatch[]): Map<string, string> {
+  const soonest = new Map<string, string>()
+  for (const batch of batches) {
+    if (!batch.expiry) continue
+    const current = soonest.get(batch.product_id)
+    if (!current || batch.expiry < current) soonest.set(batch.product_id, batch.expiry)
+  }
+  return soonest
+}
+
+export function ProductTable({ products, batches, onView, onEdit, onDelete }: ProductTableProps) {
+  const expiryByProduct = soonestExpiry(batches)
   return (
     <div className="space-y-3">
       {products.map((product) => {
+        const expiry = expiryByProduct.get(product.id)
+        const expiryDays = expiry ? daysToExpiry(expiry) : null
+        const risky = expiryDays !== null && expiryDays <= 90
         return (
           <div
             key={product.id}
@@ -47,6 +72,15 @@ export function ProductTable({ products, onView, onEdit, onDelete }: ProductTabl
                 >
                   {product.stock > 0 ? "Active" : "Inactive"}
                 </span>
+                {risky && expiryDays !== null && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-danger-bg px-2 py-0.5 text-xs font-medium text-danger"
+                    title={`${expiryDays < 0 ? "Expired" : `Expires in ${expiryDays} days`} — ${expiry}`}
+                  >
+                    <TriangleAlert size={12} />
+                    {expiryDays < 0 ? "Expired" : `${expiryDays}d`}
+                  </span>
+                )}
               </div>
               <p className="mt-0.5 text-sm text-muted">SKU: {product.sku}</p>
               <div className="mt-1 flex items-center gap-3 text-sm">
