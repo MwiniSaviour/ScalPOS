@@ -11,12 +11,13 @@ import { ScreenHeader } from "@/components/shell/screenheader";
 import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/ui/statuspill";
+import { hasFeature } from "@/lib/features";
 import { timeAgo } from "@/lib/format";
 import { fmtMoney, CURRENCY_SYMBOL } from "@/lib/money";
-import { dueOf, payStatusOf, usePos } from "@/lib/store";
+import { dueOf, payStatusOf, usePos, useSettings } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import { Pencil, Receipt, Trash2, Users } from "lucide-react";
+import { Pencil, Receipt, Trash2, TriangleAlert, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -34,7 +35,10 @@ export default function CustomerDetailScreen() {
   const addPaymentsToOrder = usePos((s) => s.addPaymentsToOrder);
   const deleteCustomer = usePos((s) => s.deleteCustomer);
   const toast = usePos((s) => s.toast);
+  const settings = useSettings();
   const now = useNow(60_000);
+
+  const isRx = hasFeature(settings.businessType, "rx");
 
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -68,6 +72,8 @@ export default function CustomerDetailScreen() {
       </div>
     );
   }
+
+  const allergies = customer.allergies?.trim() ?? "";
 
   function requestDelete() {
     if (stats.due > 0) {
@@ -148,6 +154,33 @@ export default function CustomerDetailScreen() {
         </Card>
       </section>
 
+      {/* allergies — the one thing a pharmacist must read before dispensing */}
+      {(allergies || isRx) && (
+        <section className="px-5 pt-4">
+          <div
+            className={cn(
+              "flex items-start gap-2.5 rounded-2xl border px-4 py-3",
+              allergies ? "border-danger/30 bg-danger/10" : "border-line2 bg-surface2",
+            )}
+          >
+            <TriangleAlert className={cn("size-[18px] shrink-0", allergies ? "text-danger" : "text-ink3")} />
+            <div className="min-w-0">
+              <div
+                className={cn(
+                  "text-[12px] font-semibold uppercase tracking-[.06em]",
+                  allergies ? "text-danger" : "text-ink3",
+                )}
+              >
+                Allergies
+              </div>
+              <div className={cn("mt-0.5 text-[15px] break-words", allergies ? "text-ink" : "text-ink3")}>
+                {allergies || "No known allergies"}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* KPIs — one divided block, no per-cell cards */}
       <section className="mt-5 px-5">
         <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-line2 bg-surface">
@@ -174,6 +207,9 @@ export default function CustomerDetailScreen() {
             {custOrders.map((o) => {
               const due = dueOf(o);
               const pay = payStatusOf(o);
+              const rxRefs = Array.from(
+                new Set(o.items.map((i) => i.prescriptionRef?.trim()).filter((r): r is string => !!r)),
+              );
               return (
                 <div key={o.id} className="flex items-center gap-3 px-4 py-3.5">
                   <Link href={`/orders/detail?id=${o.id}`} className="press flex min-w-0 flex-1 items-center gap-3">
@@ -185,6 +221,11 @@ export default function CustomerDetailScreen() {
                         #{o.id.slice(-4)}
                       </span>
                       <span className="mt-0.5 block truncate text-[14px] text-ink3">{timeAgo(o.createdAt, now)}</span>
+                      {rxRefs.length > 0 && (
+                        <span className="mt-0.5 block truncate text-[13px] text-ink3">
+                          Rx ref {rxRefs.join(", ")}
+                        </span>
+                      )}
                     </span>
                   </Link>
                   <span className="flex shrink-0 flex-col items-end gap-1">
@@ -298,7 +339,7 @@ function StatCell({
   );
 }
 
-type CustomerInput = { id: string; name: string; phone: string; address: string; note: string };
+type CustomerInput = { id: string; name: string; phone: string; address: string; note: string; allergies?: string };
 
 function CustomerFormSheet({
   customer,
@@ -310,10 +351,13 @@ function CustomerFormSheet({
   onSaved: () => void;
 }) {
   const upsertCustomer = usePos((s) => s.upsertCustomer);
+  const settings = useSettings();
+  const isRx = hasFeature(settings.businessType, "rx");
   const [name, setName] = useState(customer.name);
   const [phone, setPhone] = useState(customer.phone);
   const [address, setAddress] = useState(customer.address);
   const [note, setNote] = useState(customer.note);
+  const [allergies, setAllergies] = useState(customer.allergies ?? "");
   const [nameError, setNameError] = useState("");
 
   function save() {
@@ -321,13 +365,20 @@ function CustomerFormSheet({
       setNameError("Name is required");
       return;
     }
-    upsertCustomer({
+    const allergyNote = allergies.trim();
+    const saved = upsertCustomer({
       id: customer.id,
       name: name.trim(),
       phone: phone.trim(),
       address: address.trim(),
       note: note.trim(),
+      allergies: allergyNote,
     });
+    /* the store's create path doesn't copy `allergies` yet — write it onto the
+       saved record so a new patient keeps their allergies */
+    if (allergyNote && saved.allergies !== allergyNote) {
+      upsertCustomer({ id: saved.id, name: saved.name, allergies: allergyNote });
+    }
     onSaved();
   }
 
@@ -379,6 +430,16 @@ function CustomerFormSheet({
           placeholder="Anything to remember about this customer"
           className="[&_textarea]:min-h-[72px]"
         />
+        {isRx && (
+          <TextArea
+            label="Allergies"
+            value={allergies}
+            onChange={(e) => setAllergies(e.target.value)}
+            placeholder="Penicillin, latex…"
+            hint="Anything this patient reacts to — shown on their record."
+            className="[&_textarea]:min-h-[72px]"
+          />
+        )}
       </div>
     </Sheet>
   );
