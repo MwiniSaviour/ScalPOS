@@ -9,6 +9,7 @@ import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
 import { notifyLocal } from "./notify";
 import { insertLowStockNotification } from "./api/notifications";
+import type { Staff } from "./staff";
 import type {
   Category,
   CartLine,
@@ -83,6 +84,59 @@ export function taxAmount(net: number, taxRate: number): number {
   return round2((net * taxRate) / 100);
 }
 
+/* --------------------------------- staff --------------------------------- */
+
+const OWNER_ID = "st_owner";
+const LEGACY_STAFF_KEY = "nova-pos-staff-v1";
+const LEGACY_CURRENT_STAFF_KEY = "nova-pos-current-staff";
+
+function seedOwner(): Staff {
+  return { id: OWNER_ID, name: "Owner", role: "owner", createdAt: 0, active: true, updatedAt: 0 };
+}
+
+function isLegacyStaff(v: unknown): v is Staff {
+  if (typeof v !== "object" || v === null) return false;
+  const s = v as Record<string, unknown>;
+  return (
+    typeof s.id === "string" &&
+    typeof s.name === "string" &&
+    (s.role === "owner" || s.role === "supervisor" || s.role === "cashier") &&
+    typeof s.createdAt === "number"
+  );
+}
+
+/** One-time import of the pre-store staff keys (see rehydrate). */
+function legacyStaff(): { members: Staff[]; currentStaffId: string | null } {
+  if (typeof window === "undefined") return { members: [], currentStaffId: null };
+  let members: Staff[] = [];
+  try {
+    const raw = window.localStorage.getItem(LEGACY_STAFF_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        members = parsed
+          .filter(isLegacyStaff)
+          .map((s) => ({ ...s, active: s.active ?? true, phone: s.phone ?? "" }));
+      }
+    }
+  } catch {
+    /* corrupt legacy list — fall through to seeding an owner */
+  }
+  let currentStaffId: string | null = null;
+  try {
+    currentStaffId = window.localStorage.getItem(LEGACY_CURRENT_STAFF_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  try {
+    window.localStorage.removeItem(LEGACY_STAFF_KEY);
+    window.localStorage.removeItem(LEGACY_CURRENT_STAFF_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  return { members, currentStaffId };
+}
+
 /* --------------------------------- store -------------------------------- */
 
 type Toast = { id: string; msg: string; kind: "ok" | "warn" | "error" };
@@ -96,6 +150,8 @@ type PosState = {
   orders: Order[];
   customers: Customer[];
   stockMoves: StockMove[];
+  staff: Staff[];
+  currentStaffId: string | null;
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -133,6 +189,11 @@ type PosState = {
   upsertCustomer: (c: Partial<Customer> & { name: string }) => Customer;
   deleteCustomer: (cid: string) => void;
 
+  /* staff */
+  upsertStaff: (staff: Staff) => void;
+  deleteStaff: (sid: string) => void;
+  setCurrentStaff: (sid: string) => void;
+
   /* settings */
   updateSettings: (patch: Partial<Settings>) => void;
 
@@ -150,6 +211,8 @@ export const usePos = create<PosState>()(
       orders: [],
       customers: [],
       stockMoves: [],
+      staff: [],
+      currentStaffId: null,
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -161,11 +224,19 @@ export const usePos = create<PosState>()(
       rehydrate: () => {
         const persisted =
           typeof window !== "undefined" ? window.localStorage.getItem("nova-pos-v1") : null;
-        if (persisted === null) {
-          set({ hydrated: true });
-          return;
-        }
         set({ hydrated: true });
+
+        // One-time migration off the pre-store staff keys. Reading the legacy
+        // keys also removes them, so this is a no-op after the first boot.
+        const legacy = legacyStaff();
+        if (get().staff.length === 0 && legacy.members.length > 0) {
+          set({ staff: legacy.members, currentStaffId: legacy.currentStaffId ?? null });
+        }
+        // A register must always have a staff list — seed the owner row.
+        if (get().staff.length === 0) set({ staff: [seedOwner()] });
+
+        if (persisted === null) return;
+
         // a cart left open for hours is not a sale — drop it
         const s = get();
         if (!s.settings.businessType) {
@@ -471,6 +542,20 @@ export const usePos = create<PosState>()(
         get().toast("Customer deleted", "ok");
       },
 
+      upsertStaff: (staff) => {
+        const s = get();
+        const saved: Staff = { ...staff, updatedAt: Date.now() };
+        const exists = s.staff.some((x) => x.id === saved.id);
+        set({ staff: exists ? s.staff.map((x) => (x.id === saved.id ? saved : x)) : [...s.staff, saved] });
+      },
+
+      deleteStaff: (sid) => {
+        const s = get();
+        set({ staff: s.staff.filter((x) => x.id !== sid) });
+      },
+
+      setCurrentStaff: (sid) => set({ currentStaffId: sid }),
+
       updateSettings: (patch) => {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
         if (patch.theme) {
@@ -505,6 +590,8 @@ export const usePos = create<PosState>()(
         orders: s.orders,
         customers: s.customers,
         stockMoves: s.stockMoves,
+        staff: s.staff,
+        currentStaffId: s.currentStaffId,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,

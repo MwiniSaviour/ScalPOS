@@ -17,6 +17,7 @@ import { getSupabase } from "@/lib/api/supabase";
 import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
+import type { Staff } from "@/lib/staff";
 import type { Category, Customer, Order, Product, Settings, StockMove } from "@/lib/types";
 import { isDemoMode } from "@/lib/demo";
 import { cloudAccessAllowed } from "@/lib/entitlement";
@@ -31,7 +32,7 @@ const LAST_PULL_KEY = "nova-pos-last-pull";
 
 const PULL_INTERVAL = 30_000;
 
-const TABLES = ["categories", "products", "customers", "orders", "order_items", "stock_moves"] as const;
+const TABLES = ["categories", "products", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
 type Table = (typeof TABLES)[number];
 
 type IdMap = Record<Table, Record<string, string>>;
@@ -40,7 +41,7 @@ let APPLYING = false;
 let armedOrgId: string | null = null;
 
 function emptyMap(): IdMap {
-  return { categories: {}, products: {}, customers: {}, orders: {}, order_items: {}, stock_moves: {} };
+  return { categories: {}, products: {}, customers: {}, orders: {}, order_items: {}, stock_moves: {}, staff: {} };
 }
 
 function readMap(): IdMap {
@@ -141,6 +142,7 @@ type Store = {
   customers: Customer[];
   orders: Order[];
   stockMoves: StockMove[];
+  staff: Staff[];
   settings: Settings;
 };
 
@@ -244,6 +246,26 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       phone: x.phone,
       address: x.address,
       note: x.note,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "staff") {
+    const x = s.staff.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    await put(table, {
+      ...(map.staff[x.id] ? { id: map.staff[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      name: x.name,
+      role: x.role,
+      phone: x.phone ?? "",
+      // Local "idb:" photos stay on this device; never upload the ref.
+      photo_path: x.photoId && !isLocalImageRef(x.photoId) ? x.photoId : "",
+      active: x.active,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -386,6 +408,19 @@ function prodLocal(r: RemoteRow, rev: Record<string, string>): Product {
   };
 }
 
+function staffLocal(r: RemoteRow): Staff {
+  return {
+    id: String(r.local_id ?? ""),
+    name: String(r.name ?? ""),
+    role: (["owner", "supervisor", "cashier"].includes(String(r.role)) ? r.role : "cashier") as Staff["role"],
+    phone: String(r.phone ?? ""),
+    photoId: typeof r.photo_path === "string" && r.photo_path ? r.photo_path : undefined,
+    active: r.active !== false,
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
 function ordLocal(r: RemoteRow, map: IdMap, items: Order["items"]): Order {
   const revCust = revFrom(map.customers);
   return {
@@ -441,6 +476,7 @@ function localStamp(table: Table, row: Record<string, unknown>): number {
     case "customers": return n(row.createdAt);
     case "orders": return n((row.completedAt as number | null) ?? row.createdAt);
     case "stock_moves": return n(row.t);
+    case "staff": return n(row.updatedAt ?? row.createdAt);
     default: return 0;
   }
 }
@@ -451,6 +487,7 @@ function remoteStamp(table: Table, r: RemoteRow): number {
     case "customers": return ms(r.created_at) ?? 0;
     case "orders": return ms(r.completed_at) ?? ms(r.created_at) ?? 0;
     case "stock_moves": return ms(r.occurred_at) ?? ms(r.created_at) ?? 0;
+    case "staff": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
     default: return 0;
   }
 }
@@ -588,7 +625,12 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         const mapped = revProd[row.productId];
         return ({ ...m, productId: mapped ?? "" } as unknown as typeof m);
       });
-      return { ...s, categories, products, customers, orders, stockMoves } as unknown as typeof s;
+      const staff = mergeLocal(
+        "staff",
+        s.staff as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.staff ?? []).map(staffLocal) as unknown as (Record<string, unknown> & { id: string })[],
+      );
+      return { ...s, categories, products, customers, orders, stockMoves, staff } as unknown as typeof s;
     });
 
     // Warm the local cache for portable images in the background so other
@@ -666,6 +708,12 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
         case "stock_moves": {
           return { ...s, stockMoves: putAt(s.stockMoves, mvLocal(row, map)) } as unknown as typeof s;
         }
+        case "staff": {
+          const local = staffLocal(row);
+          const cur = s.staff.find((x) => x.id === local.id);
+          if (cur && (cur.updatedAt ?? cur.createdAt) >= (local.updatedAt ?? local.createdAt)) return s;
+          return { ...s, staff: putAt(s.staff, local) } as unknown as typeof s;
+        }
         default:
           return s;
       }
@@ -708,6 +756,10 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
   );
   set("order_items", []);
   set("stock_moves", s.stockMoves.map((x): [string, string] => [x.id, `${x.productId}|${x.qty}|${x.reason}|${x.ref ?? ""}`]));
+  set(
+    "staff",
+    s.staff.map((x): [string, string] => [x.id, `${x.name}|${x.role}|${x.phone ?? ""}|${x.photoId ?? ""}|${x.active}`]),
+  );
   return fp;
 }
 
@@ -783,6 +835,7 @@ export async function armSync(conn: SyncConnection) {
         ...s.customers.map((x) => ["customers", x.id] as [Table, string]),
         ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
         ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
+        ...s.staff.map((x) => ["staff", x.id] as [Table, string]),
       ];
       for (const [t, id] of asks) {
         await enqueue({
@@ -860,7 +913,7 @@ export async function armSync(conn: SyncConnection) {
       const next = fingerprint(s);
       void (async () => {
         const { enqueue } = await import("./outbox");
-        for (const t of ["categories", "products", "customers", "orders", "stock_moves"] as Table[]) {
+        for (const t of ["categories", "products", "customers", "orders", "stock_moves", "staff"] as Table[]) {
           const before = prev.get(t)!;
           const after = next.get(t)!;
           for (const [id, fp] of after) {
@@ -973,6 +1026,7 @@ async function requeueMissing(): Promise<number> {
     ...s.customers.map((x) => ["customers", x.id] as [Table, string]),
     ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
     ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
+    ...s.staff.map((x) => ["staff", x.id] as [Table, string]),
   ];
   let added = 0;
   for (const [t, id] of rows) {
