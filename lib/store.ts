@@ -168,6 +168,9 @@ export const usePos = create<PosState>()(
         set({ hydrated: true });
         // a cart left open for hours is not a sale — drop it
         const s = get();
+        if (!s.settings.businessType) {
+          set({ settings: { ...s.settings, businessType: "retail" } });
+        }
         if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
           set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
         }

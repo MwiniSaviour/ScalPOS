@@ -80,7 +80,10 @@ export type StockMove = {
 
 export type StockReason = "purchase" | "sale" | "adjust" | "damage" | "return" | "count" | "opening";
 
+export type BusinessType = "retail" | "pharmacy" | "restaurant" | "salon";
+
 export type Settings = {
+  businessType: BusinessType;
   shopName: string;
   address: string;
   phone: string;
