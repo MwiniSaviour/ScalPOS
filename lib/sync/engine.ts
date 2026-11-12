@@ -18,7 +18,8 @@ import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import type { Staff } from "@/lib/staff";
-import type { Category, Customer, Order, Product, Settings, StockMove } from "@/lib/types";
+import type { Batch, BatchAllocation, Category, Customer, Order, Pack, Product, Settings, StockMove } from "@/lib/types";
+import { batchStock } from "@/lib/batches";
 import { isDemoMode } from "@/lib/demo";
 import { cloudAccessAllowed } from "@/lib/entitlement";
 import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "@/lib/image-refs";
@@ -32,7 +33,7 @@ const LAST_PULL_KEY = "nova-pos-last-pull";
 
 const PULL_INTERVAL = 30_000;
 
-const TABLES = ["categories", "products", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
+const TABLES = ["categories", "products", "product_batches", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
 type Table = (typeof TABLES)[number];
 
 type IdMap = Record<Table, Record<string, string>>;
@@ -41,7 +42,7 @@ let APPLYING = false;
 let armedOrgId: string | null = null;
 
 function emptyMap(): IdMap {
-  return { categories: {}, products: {}, customers: {}, orders: {}, order_items: {}, stock_moves: {}, staff: {} };
+  return { categories: {}, products: {}, product_batches: {}, customers: {}, orders: {}, order_items: {}, stock_moves: {}, staff: {} };
 }
 
 function readMap(): IdMap {
@@ -142,6 +143,7 @@ type Store = {
   customers: Customer[];
   orders: Order[];
   stockMoves: StockMove[];
+  batches: Batch[];
   staff: Staff[];
   settings: Settings;
 };
@@ -163,7 +165,8 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
   const c = await sb();
   if (!c) throw new Error("server not ready");
   const s = await store();
-  const map = readMap();
+  // A nested parent push rewrites the id map, so it is re-read after each one.
+  let map = readMap();
   const org_id = conn.org_id;
   const upd = new Date().toISOString();
 
@@ -204,7 +207,8 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         // The category exists here but has never been pushed — push it first
         // instead of leaving the product stuck forever.
         await pushLocalRow("categories", x.categoryId);
-        catId = readMap().categories[x.categoryId];
+        map = readMap();
+        catId = map.categories[x.categoryId];
       }
     }
     const imagePath: string | null =
@@ -227,11 +231,45 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       ...(imagePath === null ? {} : { image_path: imagePath }),
       description: x.description,
       active: x.active,
+      prescription_only: x.prescriptionOnly ?? false,
+      controlled: x.controlled ?? false,
+      packs: x.packs && x.packs.length ? x.packs.map((p) => ({ name: p.name, factor: p.factor })) : null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
     });
     if (imagePath && imagePath !== x.imageUrl) void adoptLocalImageUrl(x.id, imagePath);
+    return;
+  }
+
+  if (table === "product_batches") {
+    const x = s.batches.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    let productId = map.products[x.productId];
+    if (!productId && revFrom(map.products)[x.productId]) productId = x.productId;
+    if (!productId && s.products.some((p) => p.id === x.productId)) {
+      // The product exists here but has never been pushed — push it first so
+      // the batch can point at it.
+      await pushLocalRow("products", x.productId);
+      map = readMap();
+      productId = map.products[x.productId];
+    }
+    // A batch whose product is nowhere on the server cannot be attached to
+    // anything; let the op retire instead of failing forever.
+    if (!productId) return;
+    await put(table, {
+      ...(map.product_batches[x.id] ? { id: map.product_batches[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      product_id: productId,
+      batch_no: x.batchNo,
+      expiry: x.expiry || null,
+      qty: x.qty,
+      cost: x.cost,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
     return;
   }
 
@@ -246,6 +284,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       phone: x.phone,
       address: x.address,
       note: x.note,
+      allergies: x.allergies ?? "",
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -280,16 +319,26 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
     if (!productId && revFrom(map.products)[x.productId]) productId = x.productId;
     if (!productId && s.products.some((p) => p.id === x.productId)) {
       await pushLocalRow("products", x.productId);
-      productId = readMap().products[x.productId];
+      map = readMap();
+      productId = map.products[x.productId];
     }
     // A move whose product no longer exists locally cannot be attached to
     // anything on the server; let the op retire instead of failing forever.
     if (!productId) return;
+    let batchId = x.batchId ? map.product_batches[x.batchId] : undefined;
+    if (x.batchId && !batchId && s.batches.some((b) => b.id === x.batchId)) {
+      // The batch has never been pushed — push it first so the move can point
+      // at its remote row.
+      await pushLocalRow("product_batches", x.batchId);
+      map = readMap();
+      batchId = map.product_batches[x.batchId];
+    }
     await put(table, {
       ...(map.stock_moves[x.id] ? { id: map.stock_moves[x.id] } : {}),
       org_id,
       local_id: x.id,
       product_id: productId,
+      batch_id: batchId ?? null,
       qty: x.qty,
       reason: x.reason,
       ref: x.ref ?? null,
@@ -338,6 +387,18 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         it.imageUrl && isLocalImageRef(it.imageUrl)
           ? await imageRefForRemote(c, org_id, "items", itLocal, it.imageUrl)
           : (it.imageUrl ?? "");
+      const allocations: BatchAllocation[] = [];
+      for (const a of it.batchAllocations ?? []) {
+        let bid = map.product_batches[a.batchId];
+        if (!bid && s.batches.some((b) => b.id === a.batchId)) {
+          // The allocated batch has never been pushed — push it first so the
+          // allocation can name its remote row.
+          await pushLocalRow("product_batches", a.batchId);
+          map = readMap();
+          bid = map.product_batches[a.batchId];
+        }
+        allocations.push({ batchId: bid ?? a.batchId, qty: a.qty });
+      }
       await put("order_items", {
         ...(map.order_items[itLocal] ? { id: map.order_items[itLocal] } : {}),
         org_id,
@@ -350,6 +411,10 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         price: it.price,
         cost: it.cost,
         position: i,
+        batch_allocations: allocations.length ? allocations : null,
+        pack_name: it.packName ?? null,
+        prescription_ref: it.prescriptionRef ?? null,
+        base_qty: it.baseQty ?? null,
         updated_at: upd,
         deleted_at: null,
       });
@@ -377,6 +442,33 @@ function catLocal(r: RemoteRow): Category {
   return { id: String(r.local_id ?? ""), name: String(r.name ?? ""), color: String(r.color ?? "#059669") };
 }
 
+/** Packs arrive as jsonb — keep only the entries that make sense. */
+function packsLocal(v: unknown): Pack[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: Pack[] = [];
+  for (const p of v) {
+    if (!p || typeof p !== "object") continue;
+    const name = String((p as { name?: unknown }).name ?? "").trim();
+    const factor = Number((p as { factor?: unknown }).factor);
+    if (!name || !Number.isFinite(factor) || factor <= 0) continue;
+    out.push({ name, factor });
+  }
+  return out;
+}
+
+/** Batch allocations arrive as jsonb and name remote batch rows. */
+function allocLocal(v: unknown, revBatch: Record<string, string>): BatchAllocation[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: BatchAllocation[] = [];
+  for (const a of v) {
+    if (!a || typeof a !== "object") continue;
+    const bid = String((a as { batchId?: unknown }).batchId ?? (a as { batch_id?: unknown }).batch_id ?? "");
+    if (!bid) continue;
+    out.push({ batchId: revBatch[bid] ?? bid, qty: n((a as { qty?: unknown }).qty) });
+  }
+  return out.length ? out : undefined;
+}
+
 function custLocal(r: RemoteRow): Customer {
   return {
     id: String(r.local_id ?? ""),
@@ -384,6 +476,7 @@ function custLocal(r: RemoteRow): Customer {
     phone: String(r.phone ?? ""),
     address: String(r.address ?? ""),
     note: String(r.note ?? ""),
+    allergies: typeof r.allergies === "string" ? r.allergies : undefined,
     createdAt: ms(r.created_at) ?? Date.now(),
   };
 }
@@ -403,6 +496,24 @@ function prodLocal(r: RemoteRow, rev: Record<string, string>): Product {
     imageUrl: String(r.image_path ?? ""),
     description: String(r.description ?? ""),
     active: r.active !== false,
+    prescriptionOnly: typeof r.prescription_only === "boolean" ? r.prescription_only : undefined,
+    controlled: typeof r.controlled === "boolean" ? r.controlled : undefined,
+    packs: packsLocal(r.packs),
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
+function batchLocal(r: RemoteRow, revProd: Record<string, string>): Batch {
+  return {
+    id: String(r.local_id ?? ""),
+    // A product that is not known here yet keeps its server uuid; the pull
+    // repairs it once the product arrives.
+    productId: typeof r.product_id === "string" ? revProd[r.product_id] ?? r.product_id : "",
+    batchNo: String(r.batch_no ?? ""),
+    expiry: typeof r.expiry === "string" ? r.expiry : "",
+    qty: n(r.qty),
+    cost: n(r.cost),
     createdAt: ms(r.created_at) ?? Date.now(),
     updatedAt: ms(r.updated_at) ?? 0,
   };
@@ -447,14 +558,66 @@ function ordLocal(r: RemoteRow, map: IdMap, items: Order["items"]): Order {
 
 function mvLocal(r: RemoteRow, map: IdMap): StockMove {
   const revProd = revFrom(map.products);
+  const revBatch = revFrom(map.product_batches);
   return {
     id: String(r.local_id ?? ""),
     productId: typeof r.product_id === "string" ? revProd[r.product_id] ?? "" : "",
     qty: n(r.qty),
     reason: (["purchase", "sale", "adjust", "damage", "return", "count", "opening"].includes(String(r.reason)) ? r.reason : "adjust") as StockMove["reason"],
     ref: typeof r.ref === "string" ? r.ref : undefined,
+    batchId: typeof r.batch_id === "string" ? revBatch[r.batch_id] ?? undefined : undefined,
     t: ms(r.occurred_at) ?? ms(r.created_at) ?? Date.now(),
   };
+}
+
+/**
+ * A batched product's stock is derived from its batches — the server's
+ * products.stock is never trusted for one.
+ */
+function deriveStock(products: Product[], batches: Batch[]): Product[] {
+  const owners = new Set(batches.map((b) => b.productId));
+  if (!owners.size) return products;
+  return products.map((p) => {
+    if (!owners.has(p.id)) return p;
+    const stock = batchStock(batches, p.id);
+    return stock === p.stock ? p : { ...p, stock };
+  });
+}
+
+/** Carry the pharmacy fields a remote row does not carry over from the local row. */
+function carryPharmacy(pulled: Product, prev: Product | undefined): Product {
+  if (!prev) return pulled;
+  const next = { ...pulled };
+  if (next.prescriptionOnly === undefined && prev.prescriptionOnly !== undefined) next.prescriptionOnly = prev.prescriptionOnly;
+  if (next.controlled === undefined && prev.controlled !== undefined) next.controlled = prev.controlled;
+  if (next.packs === undefined && prev.packs !== undefined) next.packs = prev.packs;
+  if (next.prescriptionOnly === pulled.prescriptionOnly && next.controlled === pulled.controlled && next.packs === pulled.packs) return pulled;
+  return next;
+}
+
+/** Carry the allergies a remote row does not carry over from the local row. */
+function carryAllergies(pulled: Customer, prev: Customer | undefined): Customer {
+  if (!prev || pulled.allergies !== undefined || prev.allergies === undefined) return pulled;
+  return { ...pulled, allergies: prev.allergies };
+}
+
+/** Carry the pharmacy fields a remote order item does not carry over. */
+function carryItems(pulled: Order["items"], prev: Order["items"] | undefined): Order["items"] {
+  if (!prev || !prev.length) return pulled;
+  let changed = false;
+  const out = pulled.map((it, i) => {
+    const p = prev[i];
+    if (!p) return it;
+    const next = { ...it };
+    if (next.batchAllocations === undefined && p.batchAllocations !== undefined) next.batchAllocations = p.batchAllocations;
+    if (next.packName === undefined && p.packName !== undefined) next.packName = p.packName;
+    if (next.prescriptionRef === undefined && p.prescriptionRef !== undefined) next.prescriptionRef = p.prescriptionRef;
+    if (next.baseQty === undefined && p.baseQty !== undefined) next.baseQty = p.baseQty;
+    if (next.batchAllocations === it.batchAllocations && next.packName === it.packName && next.prescriptionRef === it.prescriptionRef && next.baseQty === it.baseQty) return it;
+    changed = true;
+    return next;
+  });
+  return changed ? out : pulled;
 }
 
 function revFrom(m: Record<string, string>): Record<string, string> {
@@ -473,6 +636,7 @@ function forgetId(map: IdMap, t: Table, localId: string) {
 function localStamp(table: Table, row: Record<string, unknown>): number {
   switch (table) {
     case "products": return n(row.updatedAt);
+    case "product_batches": return n(row.updatedAt);
     case "customers": return n(row.createdAt);
     case "orders": return n((row.completedAt as number | null) ?? row.createdAt);
     case "stock_moves": return n(row.t);
@@ -484,6 +648,7 @@ function localStamp(table: Table, row: Record<string, unknown>): number {
 function remoteStamp(table: Table, r: RemoteRow): number {
   switch (table) {
     case "products": return ms(r.updated_at) ?? 0;
+    case "product_batches": return ms(r.updated_at) ?? 0;
     case "customers": return ms(r.created_at) ?? 0;
     case "orders": return ms(r.completed_at) ?? ms(r.created_at) ?? 0;
     case "stock_moves": return ms(r.occurred_at) ?? ms(r.created_at) ?? 0;
@@ -547,6 +712,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
     registerRemoteIds(map, rows);
 
     const revProd = revFrom(map.products);
+    const revBatch = revFrom(map.product_batches);
     const itemsByOrder = new Map<string, Order["items"]>();
     for (const r of rows.order_items ?? []) {
       const orderLocal = typeof r.local_id === "string" ? r.local_id.split("#")[0] : null;
@@ -559,6 +725,10 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         qty: n(r.qty, 1),
         price: n(r.price),
         cost: n(r.cost),
+        batchAllocations: allocLocal(r.batch_allocations, revBatch),
+        packName: typeof r.pack_name === "string" && r.pack_name ? r.pack_name : undefined,
+        prescriptionRef: typeof r.prescription_ref === "string" && r.prescription_ref ? r.prescription_ref : undefined,
+        baseQty: r.base_qty === null || r.base_qty === undefined ? undefined : n(r.base_qty),
       });
       itemsByOrder.set(orderLocal, list);
     }
@@ -574,29 +744,53 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
       const catIds = new Set((categories as unknown as Category[]).map((c) => c.id));
       const pulledProducts = (rows.products ?? []).map((r) => prodLocal(r, revCat));
       const pulledCatByProduct = new Map(pulledProducts.map((p) => [p.id, p.categoryId]));
-      const products = mergeLocal(
-        "products",
-        s.products as unknown as (Record<string, unknown> & { id: string })[],
-        pulledProducts as unknown as (Record<string, unknown> & { id: string })[],
-      ).map((p) => {
-        // Repair refs saved by older builds as raw server UUIDs or nulled out
-        // by the onRemoteChange bug: prefer a valid local category id.
-        const row = p as unknown as Product;
-        let cid = row.categoryId;
-        if (!cid || !catIds.has(cid)) {
-          const fromPulled = pulledCatByProduct.get(row.id);
-          if (fromPulled && catIds.has(fromPulled)) cid = fromPulled;
-          else if (row.categoryId) cid = revCat[row.categoryId] ?? null;
-        }
-        if (cid && !catIds.has(cid)) cid = null;
-        return cid === row.categoryId ? p : ({ ...p, categoryId: cid } as unknown as typeof p);
-      });
-      const prodIds = new Set((products as unknown as Product[]).map((x) => x.id));
+      const prevProducts = new Map(s.products.map((x) => [x.id, x]));
+      const batches = mergeLocal(
+        "product_batches",
+        s.batches as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.product_batches ?? []).map((r) => batchLocal(r, revProd)) as unknown as (Record<string, unknown> & { id: string })[],
+      ).map((b) => {
+        // A batch that arrived before its product kept the server uuid; the
+        // product is known now, so the batch can name it.
+        const row = b as unknown as Batch;
+        const mapped = revProd[row.productId];
+        if (!mapped || mapped === row.productId) return b;
+        return ({ ...row, productId: mapped } as unknown as typeof b);
+      }) as unknown as Batch[];
+      const products = deriveStock(
+        mergeLocal(
+          "products",
+          s.products as unknown as (Record<string, unknown> & { id: string })[],
+          pulledProducts as unknown as (Record<string, unknown> & { id: string })[],
+        ).map((p) => {
+          // Repair refs saved by older builds as raw server UUIDs or nulled out
+          // by the onRemoteChange bug: prefer a valid local category id.
+          const row = p as unknown as Product;
+          let cid = row.categoryId;
+          if (!cid || !catIds.has(cid)) {
+            const fromPulled = pulledCatByProduct.get(row.id);
+            if (fromPulled && catIds.has(fromPulled)) cid = fromPulled;
+            else if (row.categoryId) cid = revCat[row.categoryId] ?? null;
+          }
+          if (cid && !catIds.has(cid)) cid = null;
+          const repaired = cid === row.categoryId ? row : ({ ...row, categoryId: cid } as unknown as typeof p);
+          // A remote row that predates the pharmacy columns must not wipe the
+          // local values it simply does not carry.
+          return carryPharmacy(repaired as unknown as Product, prevProducts.get(row.id)) as unknown as typeof p;
+        }) as unknown as Product[],
+        batches,
+      );
+      const prodIds = new Set(products.map((x) => x.id));
+      const prevCustomers = new Map(s.customers.map((x) => [x.id, x]));
       const customers = mergeLocal(
         "customers",
         s.customers as unknown as (Record<string, unknown> & { id: string })[],
         (rows.customers ?? []).map(custLocal) as unknown as (Record<string, unknown> & { id: string })[],
-      );
+      ).map((c) => {
+        const row = c as unknown as Customer;
+        const carried = carryAllergies(row, prevCustomers.get(row.id));
+        return carried as unknown as typeof c;
+      });
       const custIds = new Set((customers as unknown as Customer[]).map((c) => c.id));
       const pulledOrders = (rows.orders ?? []).map((r) => {
         const localOrder = ordLocal(r, { ...map, products: map.products }, [] as Order["items"]);
@@ -604,16 +798,23 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         localOrder.items = itemsByOrder.get(String(r.local_id)) ?? [];
         return localOrder as unknown as Record<string, unknown> & { id: string };
       });
+      const prevOrders = new Map(s.orders.map((o) => [o.id, o]));
       const orders = mergeLocal(
         "orders",
         s.orders as unknown as (Record<string, unknown> & { id: string })[],
         pulledOrders,
       ).map((o) => {
         const row = o as unknown as Order;
-        if (!row.customerId) return o;
-        const mapped = custIds.has(row.customerId) ? row.customerId : revCust[row.customerId];
-        const next = mapped && custIds.has(mapped) ? mapped : null;
-        return next === row.customerId ? o : ({ ...o, customerId: next } as unknown as typeof o);
+        const mapped = row.customerId
+          ? custIds.has(row.customerId)
+            ? row.customerId
+            : revCust[row.customerId] ?? null
+          : null;
+        const customerId = mapped && custIds.has(mapped) ? mapped : null;
+        const prev = prevOrders.get(row.id);
+        const items = prev ? carryItems(row.items, prev.items) : row.items;
+        if (customerId === row.customerId && items === row.items) return o;
+        return ({ ...row, customerId, items } as unknown as typeof o);
       });
       const stockMoves = mergeLocal(
         "stock_moves",
@@ -630,7 +831,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         s.staff as unknown as (Record<string, unknown> & { id: string })[],
         (rows.staff ?? []).map(staffLocal) as unknown as (Record<string, unknown> & { id: string })[],
       );
-      return { ...s, categories, products, customers, orders, stockMoves, staff } as unknown as typeof s;
+      return { ...s, categories, products, customers, orders, stockMoves, staff, batches } as unknown as typeof s;
     });
 
     // Warm the local cache for portable images in the background so other
@@ -672,6 +873,7 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
   writeMap(map);
 
   const revCat = revFrom(map.categories);
+  const revProd = revFrom(map.products);
 
   APPLYING = true;
   try {
@@ -692,10 +894,27 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
           }
           const cur = s.products.find((x) => x.id === local.id);
           if (cur && cur.updatedAt >= local.updatedAt) return s;
-          return { ...s, products: putAt(s.products, local) } as unknown as typeof s;
+          const merged = carryPharmacy(local, cur);
+          // Batches that waited for this product can name it now.
+          const remoteId = typeof row.id === "string" ? row.id : "";
+          const batches = remoteId
+            ? s.batches.map((b) => (b.productId === remoteId ? { ...b, productId: local.id } : b))
+            : s.batches;
+          // A batched product's stock comes from its batches, not from the
+          // server's products.stock.
+          return { ...s, batches, products: deriveStock(putAt(s.products, merged), batches) } as unknown as typeof s;
+        }
+        case "product_batches": {
+          const local = batchLocal(row, revProd);
+          const cur = s.batches.find((x) => x.id === local.id);
+          if (cur && cur.updatedAt >= local.updatedAt) return s;
+          const batches = putAt(s.batches, local);
+          return { ...s, batches, products: deriveStock(s.products, batches) } as unknown as typeof s;
         }
         case "customers": {
-          return { ...s, customers: putAt(s.customers, custLocal(row)) } as unknown as typeof s;
+          const local = custLocal(row);
+          const cur = s.customers.find((x) => x.id === local.id);
+          return { ...s, customers: putAt(s.customers, carryAllergies(local, cur)) } as unknown as typeof s;
         }
         case "categories": {
           return { ...s, categories: putAt(s.categories, catLocal(row)) } as unknown as typeof s;
@@ -740,26 +959,27 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
     s.products.map(
       (x): [string, string] => [
         x.id,
-        `${x.name}|${x.categoryId}|${x.price}|${x.cost}|${x.stock}|${x.lowStockAt}|${x.unit}|${x.sku}|${x.barcode}|${x.imageUrl}|${x.description}|${x.active}`,
+        `${x.name}|${x.categoryId}|${x.price}|${x.cost}|${x.stock}|${x.lowStockAt}|${x.unit}|${x.sku}|${x.barcode}|${x.imageUrl}|${x.description}|${x.active}|${x.prescriptionOnly ?? false}|${x.controlled ?? false}|${JSON.stringify(x.packs ?? [])}`,
       ],
     ),
   );
-  set("customers", s.customers.map((x): [string, string] => [x.id, `${x.name}|${x.phone}|${x.address}|${x.note}`]));
+  set("customers", s.customers.map((x): [string, string] => [x.id, `${x.name}|${x.phone}|${x.address}|${x.note}|${x.allergies ?? ""}`]));
   set(
     "orders",
     s.orders.map(
       (x): [string, string] => [
         x.id,
-        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price}`))}`,
+        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price},${i.packName ?? ""},${i.prescriptionRef ?? ""},${i.baseQty ?? ""},${JSON.stringify(i.batchAllocations ?? [])}`))}`,
       ],
     ),
   );
   set("order_items", []);
-  set("stock_moves", s.stockMoves.map((x): [string, string] => [x.id, `${x.productId}|${x.qty}|${x.reason}|${x.ref ?? ""}`]));
+  set("stock_moves", s.stockMoves.map((x): [string, string] => [x.id, `${x.productId}|${x.qty}|${x.reason}|${x.ref ?? ""}|${x.batchId ?? ""}`]));
   set(
     "staff",
     s.staff.map((x): [string, string] => [x.id, `${x.name}|${x.role}|${x.phone ?? ""}|${x.photoId ?? ""}|${x.active}`]),
   );
+  set("product_batches", s.batches.map((x): [string, string] => [x.id, `${x.batchNo}|${x.expiry}|${x.qty}|${x.cost}`]));
   return fp;
 }
 
@@ -832,6 +1052,7 @@ export async function armSync(conn: SyncConnection) {
       const asks: [Table, string][] = [
         ...s.categories.map((x) => ["categories", x.id] as [Table, string]),
         ...s.products.map((x) => ["products", x.id] as [Table, string]),
+        ...s.batches.map((x) => ["product_batches", x.id] as [Table, string]),
         ...s.customers.map((x) => ["customers", x.id] as [Table, string]),
         ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
         ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
@@ -913,7 +1134,7 @@ export async function armSync(conn: SyncConnection) {
       const next = fingerprint(s);
       void (async () => {
         const { enqueue } = await import("./outbox");
-        for (const t of ["categories", "products", "customers", "orders", "stock_moves", "staff"] as Table[]) {
+        for (const t of ["categories", "products", "product_batches", "customers", "orders", "stock_moves", "staff"] as Table[]) {
           const before = prev.get(t)!;
           const after = next.get(t)!;
           for (const [id, fp] of after) {
@@ -1023,6 +1244,7 @@ async function requeueMissing(): Promise<number> {
   const rows: [Table, string][] = [
     ...s.categories.map((x) => ["categories", x.id] as [Table, string]),
     ...s.products.map((x) => ["products", x.id] as [Table, string]),
+    ...s.batches.map((x) => ["product_batches", x.id] as [Table, string]),
     ...s.customers.map((x) => ["customers", x.id] as [Table, string]),
     ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
     ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
