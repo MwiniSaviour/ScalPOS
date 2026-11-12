@@ -10,10 +10,11 @@ const DEPS: Record<string, string[]> = {
   memberships: ["orgs"],
   categories: [],
   products: ["categories"],
+  product_batches: ["products"],
   customers: [],
   orders: ["customers"],
   order_items: ["orders", "products"],
-  stock_moves: ["products", "orders"],
+  stock_moves: ["products", "orders", "product_batches"],
   settings: [],
   staff: [],
 };
