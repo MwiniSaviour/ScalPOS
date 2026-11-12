@@ -4,14 +4,15 @@ import { usePathname } from "next/navigation";
 import { House, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/ui";
+import { useTerms } from "@/lib/terms";
 /** bottom tab chrome exists only on the tab destinations */
 const TAB_ROUTES = ["/home", "/orders", "/inventory", "/customers", "/more"];
 
-const tabs: { href: string; label: string; icon: LucideIcon }[] = [
-  { href: "/home", label: "Home", icon: House },
-  { href: "/orders", label: "Orders", icon: ReceiptText },
-  { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/customers", label: "Customers", icon: Users },
+const tabs: { href: string; icon: LucideIcon }[] = [
+  { href: "/home", icon: House },
+  { href: "/orders", icon: ReceiptText },
+  { href: "/inventory", icon: Package },
+  { href: "/customers", icon: Users },
 ];
 
 function normalize(p: string): string {
@@ -21,6 +22,13 @@ function normalize(p: string): string {
 
 export function TabBar() {
   const pathname = usePathname();
+  const terms = useTerms();
+  const labels: Record<string, string> = {
+    "/home": "Home",
+    "/orders": terms.orders,
+    "/inventory": "Inventory",
+    "/customers": terms.customers,
+  };
 
   // drill-in & flow screens own their chrome — no tab bar
   if (!TAB_ROUTES.includes(normalize(pathname))) return null;
@@ -53,7 +61,7 @@ export function TabBar() {
                 )}
               >
                 <Icon className="size-[21px]" />
-                <span className={cn("text-[11px] font-medium", active && "font-semibold")}>{t.label}</span>
+                <span className={cn("text-[11px] font-medium", active && "font-semibold")}>{labels[t.href]}</span>
               </Link>
             );
           })}
