@@ -49,9 +49,12 @@ hand-set); no restaurant/salon features.
   (`api/data.ts:23-40`, `:188-218`); `createProduct`/`updateProduct`
   (`:379-404`, `:407-418`); suppliers CRUD `:832-878`; product form/table/detail
   pages; `NAV_ITEMS` in `constants.ts`.
-- `lib/features.ts` features already exist from Plan 1 (pharmacy set includes
-  `batches`, `feo`, `expiryAlerts`, `prescription`, `unitConversions`,
-  `purchaseOrders`); `hasFeature()` currently unused by screens.
+- `lib/features.ts` — the Feature union is kebab-case and the pharmacy set is
+  `batches`, `expiry`, `rx`, `suppliers-po` (there is **no** `feo`,
+  `expiryAlerts`, `prescription`, `unitConversions` or `purchaseOrders`
+  member). `hasFeature(bt, f)` takes **two** arguments:
+  `hasFeature(settings.businessType, "batches")`. `hasFeature()` was unused
+  by screens until Plan 2.
 - **BANNED**: `useSyncExternalStore` / `useClientValue` with fresh-object
   readers (React #185). New derived reads: `useState`+`useEffect` or zustand.
 - Gates every task: `./node_modules/.bin/tsc --noEmit` +
@@ -61,63 +64,81 @@ hand-set); no restaurant/salon features.
 ## Modeling decisions (fixed before tasks)
 
 - **Batch invariant**: when a product has ≥1 batch, `product.stock` is derived
-  = `sum(batch.qty)`. Batch create/edit/delete adjusts product.stock by the
-  delta. A batched product never has `product.stock` edited directly; retail
-  path (no batches) unchanged.
-- **FEFO**: `placeOrder` on a batched pharmacy product allocates from the
+  = `sum(batch.qty)`. A batched product's stock is never edited directly — a
+  stock edit lands on the earliest-expiring batch so the derived total stays
+  truthful. Retail path (no batches) unchanged.
+- **FEFO**: `placeOrder` on a batched product allocates from the
   earliest-expiring batches with qty>0, writes
   `item.batchAllocations: { batchId, qty }[]`, decrements those batches (and
   product.stock via derived total), and stamps each move `batchId`. Non-batched
   products behave exactly as today.
+  - **Refinement (T1)**: the FEFO path keys off *"the product owns batches"*,
+    not off the `batches` feature flag. The flag gates the UI; the data
+    invariant must hold even if a shop changes business type. Otherwise a
+    batched product could be sold from its raw stock count and the derived
+    total would drift.
 - **Refund**: restocks by the order's recorded `batchAllocations` (not FEFO),
   batchId on the reverse moves. Expired batches may receive stock back — that
   is per owner semantics.
-- **Product-level `adjustStock`** on a batched product applies the delta to the
-  earliest-expiring batch (UI elsewhere routes to batch adjust).
+- **Product-level `adjustStock`** on a batched product applies the delta to
+  the earliest-expiring batch (UI elsewhere routes to batch adjust).
 - **CartLine generalization (once, here — foundation for Plan 4 credits)**:
   `CartLine { productId, qty, packIdx?, price? }`. Cart identity key =
   `productId` when no pack, else `` `${productId}#${packIdx}` ``. `useCartTotals`
   and `placeOrder` use `line.price ?? product.price`. Pack sale qty = base units
   (`qty * factor`); the line records pack qty and `packName` for the item.
+  - **Refinement (T1)**: `addToCart(pid, qty?, opts?: { packIdx?, price? })` —
+    the pack factor is read off `product.packs[packIdx].factor`, never passed
+    in, so it cannot go stale. `OrderItem.baseQty` records the base units the
+    line consumed (a pack line sells packs; stock moves in base units) so a
+    refund returns the right number of units.
 - **Rx ref**: one field on the pay screen stamped onto every rx line as
   `OrderItem.prescriptionRef`; required (blocking) when the cart contains a
-  `prescriptionOnly` product and `hasFeature("prescription")`.
+  `prescriptionOnly` product and `hasFeature(bt, "rx")`.
+- **New module `lib/batches.ts`**: the pure pharmacy maths lives here — cart
+  keys, pack factors, batch ordering, FEFO allocation, expiry buckets, plus
+  `planSale()` / `planRestock()` which the store applies. Unit tested in
+  `tests/unit/batches.test.ts` (node --test, no browser needed).
 
-## Task 1 — Data core (types, batches in store, CartLine, migration 0014)
+## Task 1 — Data core (types, batches in store, CartLine, migration 0014) — DONE
 
-Files: `lib/types.ts`, `lib/store.ts`, `lib/features.ts` (no change expected),
-`backend/supabase/migrations/0014_pharmacy.sql`
+Files: `lib/types.ts`, `lib/store.ts`, `lib/batches.ts` (new),
+`lib/batches.ts` helpers, `app/stock-screen.tsx` + `app/product-detail-screen.tsx`
+(reason labels), `backend/supabase/migrations/0014_pharmacy.sql`,
+`tests/unit/batches.test.ts` (new)
 
-1. Types: add `Batch { id, productId, batchNo, expiry, qty, cost }`,
-   `BatchAllocation { batchId, qty }`, `Pack { name, factor }`; Product +=
-   `prescriptionOnly?`, `controlled?`, `packs?`; StockMove += `batchId?`;
-   OrderItem += `batchAllocations?`, `packName?`, `prescriptionRef?`; Customer
-   += `allergies?`; CartLine per decision above; store gains `batches: Batch[]`.
-2. Store actions: `upsertBatch(b)` (create/edit; adjusts product.stock by
-   delta), `deleteBatch(id)` (same), and `placeOrder` FEFO path per decision
-   (only when `hasFeature("batches")` and product has batches). `partialize`
-   includes `batches`.
-3. `addToCart(pid, qty?, factor?, packIdx?, price?)`; `useCartTotals`
-   price/line changes per decision; cart totals unchanged for retail.
-4. Add `"expiry"` to reason labels (`stock-screen.tsx:22-30`) and to the
-   0001 CHECK constraint via 0014 (drop + re-create the check including all
-   existing reasons + `expiry`).
-5. Migration `0014_pharmacy.sql`: `product_batches` table (id uuid, shop_id,
-   product_id FK, batch_no, expiry, qty numeric, cost numeric, timestamps) +
-   RLS (pattern `0002_rls.sql:121-129`) + realtime (`0003` pattern); products
-   += `prescription_only bool`, `controlled bool`, `packs jsonb`; customers
-   += `allergies text`; order_items += `batch_allocations jsonb`,
-   `pack_name text`, `prescription_ref text`; fix the stock_moves reason CHECK.
+1. Types: add `Batch { id, productId, batchNo, expiry, qty, cost, createdAt,
+   updatedAt }`, `BatchAllocation { batchId, qty }`, `Pack { name, factor }`;
+   Product += `prescriptionOnly?`, `controlled?`, `packs?`; StockMove +=
+   `batchId?`; OrderItem += `batchAllocations?`, `packName?`, `prescriptionRef?`,
+   `baseQty?`; Customer += `allergies?`; CartLine per decision above; store
+   gains `batches: Batch[]`.
+2. Store actions: `upsertBatch(b)` (create/edit; recomputes the product's
+   derived stock), `deleteBatch(id)` (same), and the FEFO sale path.
+   `partialize` includes `batches`.
+3. `addToCart(pid, qty?, opts?)`; `useCartTotals` uses `line.price ?? product.price`;
+   cart totals unchanged for retail.
+4. Add `"expiry"` to reason labels (both `Record<StockReason, string>` maps:
+   `app/stock-screen.tsx` and `app/product-detail-screen.tsx`) and widen the
+   0001 CHECK constraint via 0014.
+5. Migration `0014_pharmacy.sql`: `product_batches` table (id uuid, org_id,
+   product_id FK, local_id, batch_no, expiry date, qty numeric, cost numeric,
+   timestamps, op_id) + RLS + realtime; products += `prescription_only bool`,
+   `controlled bool`, `packs jsonb`; customers += `allergies text`;
+   order_items += `batch_allocations jsonb`, `pack_name text`,
+   `prescription_ref text`, `base_qty numeric`; stock_moves += `batch_id uuid`
+   and the reason CHECK widened with `expiry`.
    All nullable / with defaults.
 
 Verify: tsc, eslint. Manual: retail shop sells exactly as before (no batches).
+**Status: implemented, gates pass, 23 unit tests pass.**
 
 ## Task 2 — Batch UI (product detail + product edit)
 
 Files: `app/product-detail-screen.tsx`, `app/product-edit-screen.tsx`,
 `components/ui/*` (reuse Sheet/Input only)
 
-1. Product detail: when `hasFeature("batches")`, batch list replaces the plain
+1. Product detail: when `hasFeature(settings.businessType, "batches")`, batch list replaces the plain
    stock card rows (:64-92 zone) — batchNo, expiry (danger tone when within 90
    days or expired), qty, cost; "Add batch" sheet (batchNo, expiry date, qty,
    cost); edit + delete rows; adjust sheet (:96-140) routes to batch adjust
@@ -155,7 +176,7 @@ Files: `app/reports-screen.tsx`
 
 1. New section after Top products (~:286-290): batches with qty>0 grouped —
    expired, expiring ≤30d, ≤90d, with qty and cost-at-risk totals; only
-   rendered when `hasFeature("expiryAlerts")`.
+   rendered when `hasFeature(settings.businessType, "expiry")`.
 2. Reuse existing section scaffolding/Card styling; no new deps.
 
 Verify: tsc, eslint. Manual: expired + near batches appear in correct buckets.
@@ -165,7 +186,7 @@ Verify: tsc, eslint. Manual: expired + near batches appear in correct buckets.
 Files: `app/customer-edit*` (grep exact file), `app/customers-screen.tsx`,
 `app/customer-detail-screen.tsx`
 
-1. Customer edit: `allergies` textarea when `hasFeature("prescription")`.
+1. Customer edit: `allergies` textarea when `hasFeature(settings.businessType, "rx")`.
 2. Detail: allergies shown prominently; purchase history (:161-208) shows rx
    refs when present.
 
@@ -196,7 +217,7 @@ Files: `apps/desktop/src/app/dashboard/*` (new `purchase-orders` route + form),
    batched items, qty in base units via pack factor).
 2. Page: list with status chips, create form (supplier picker, product rows
    with pack option), Receive action with confirmation summary.
-3. Nav item gated on `purchaseOrders` feature.
+3. Nav item gated on `hasFeature(bt, "suppliers-po")`.
 
 Verify: desktop gates; manual receive flow moves stock + creates batches.
 

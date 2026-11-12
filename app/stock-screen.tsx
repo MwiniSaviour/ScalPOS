@@ -27,6 +27,7 @@ const REASON_LABELS: Record<StockReason, string> = {
   return: "Return",
   count: "Count",
   opening: "Opening",
+  expiry: "Expiry",
 };
 
 const DIRS: { value: Dir; label: string }[] = [

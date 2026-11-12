@@ -4,6 +4,36 @@ export type Category = {
   color: string; // hex for chips/dots
 };
 
+/**
+ * A sellable pack of a product: "Box of 10 strips" of a base unit.
+ * `factor` is how many base units one pack contains.
+ */
+export type Pack = {
+  name: string;
+  factor: number;
+};
+
+/**
+ * A batch of a product with its own expiry (pharmacy).
+ * `expiry` is an ISO date string ("YYYY-MM-DD"); empty = no expiry.
+ */
+export type Batch = {
+  id: string;
+  productId: string;
+  batchNo: string;
+  expiry: string;
+  qty: number;
+  cost: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** How much of an order line came out of each batch (FEFO allocation). */
+export type BatchAllocation = {
+  batchId: string;
+  qty: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -20,6 +50,10 @@ export type Product = {
   active: boolean;
   createdAt: number;
   updatedAt: number;
+  /* pharmacy */
+  prescriptionOnly?: boolean;
+  controlled?: boolean;
+  packs?: Pack[];
 };
 
 export type PaymentMethod = "cash" | "momo" | "card" | "credit";
@@ -39,6 +73,12 @@ export type OrderItem = {
   qty: number;
   price: number; // unit price at time of sale
   cost: number; // unit cost at time of sale (for reports)
+  /* pharmacy */
+  batchAllocations?: BatchAllocation[];
+  packName?: string;
+  prescriptionRef?: string;
+  /** base units this line consumed (pack lines sell packs, stock moves in base units) */
+  baseQty?: number;
 };
 
 export type OrderStatus = "pending" | "completed" | "refunded";
@@ -67,6 +107,8 @@ export type Customer = {
   address: string;
   note: string;
   createdAt: number;
+  /* pharmacy */
+  allergies?: string;
 };
 
 export type StockMove = {
@@ -76,9 +118,18 @@ export type StockMove = {
   reason: StockReason;
   ref?: string; // order id / note
   t: number;
+  batchId?: string; // which batch moved (pharmacy)
 };
 
-export type StockReason = "purchase" | "sale" | "adjust" | "damage" | "return" | "count" | "opening";
+export type StockReason =
+  | "purchase"
+  | "sale"
+  | "adjust"
+  | "damage"
+  | "return"
+  | "count"
+  | "opening"
+  | "expiry";
 
 export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const;
 
@@ -100,7 +151,15 @@ export type Settings = {
   createdAt: number;
 };
 
+/**
+ * A cart line. `packIdx` points at `Product.packs[packIdx]` when the customer
+ * bought a pack rather than the base unit; `price` is the pack price then
+ * (undefined = the product's own price). `qty` counts the sold units
+ * (packs when `packIdx` is set, base units otherwise).
+ */
 export type CartLine = {
   productId: string;
   qty: number;
+  packIdx?: number;
+  price?: number;
 };

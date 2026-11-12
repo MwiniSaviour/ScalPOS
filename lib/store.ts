@@ -4,6 +4,14 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { defaultSettings } from "./seed";
 import { isDemoMode } from "./demo";
+import {
+  batchesOf,
+  batchStock,
+  cartLineKey,
+  packFactor,
+  planRestock,
+  planSale,
+} from "./batches";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
@@ -11,10 +19,12 @@ import { notifyLocal } from "./notify";
 import { insertLowStockNotification } from "./api/notifications";
 import type { Staff } from "./staff";
 import type {
+  Batch,
   Category,
   CartLine,
   Customer,
   Order,
+  OrderItem,
   Payment,
   PaymentMethod,
   Product,
@@ -84,6 +94,26 @@ export function taxAmount(net: number, taxRate: number): number {
   return round2((net * taxRate) / 100);
 }
 
+/* ------------------------------ pharmacy helpers ------------------------------ */
+
+/** Apply a stock delta to the earliest-expiring batch of a product. */
+function applyToEarliestBatch(
+  batches: Batch[],
+  productId: string,
+  delta: number,
+): { batches: Batch[]; applied: number; batchId: string | null } {
+  const ordered = batchesOf(batches, productId);
+  const target = ordered.find((b) => b.qty > 0) ?? ordered[0];
+  if (!target) return { batches, applied: 0, batchId: null };
+  return {
+    batches: batches.map((b) =>
+      b.id === target.id ? { ...b, qty: b.qty + delta, updatedAt: Date.now() } : b,
+    ),
+    applied: delta,
+    batchId: target.id,
+  };
+}
+
 /* --------------------------------- staff --------------------------------- */
 
 const OWNER_ID = "st_owner";
@@ -150,6 +180,7 @@ type PosState = {
   orders: Order[];
   customers: Customer[];
   stockMoves: StockMove[];
+  batches: Batch[];
   staff: Staff[];
   currentStaffId: string | null;
   settings: Settings;
@@ -164,8 +195,8 @@ type PosState = {
   rehydrate: () => void;
 
   /* register */
-  addToCart: (productId: string, qty?: number) => void;
-  setCartQty: (productId: string, qty: number) => void;
+  addToCart: (productId: string, qty?: number, opts?: { packIdx?: number; price?: number }) => void;
+  setCartQty: (key: string, qty: number) => void;
   clearCart: () => void;
   setCartCustomer: (cid: string | null) => void;
   setCartDiscount: (n: number) => void;
@@ -173,7 +204,7 @@ type PosState = {
   clearDraftPayments: () => void;
 
   /* orders */
-  placeOrder: (payments: Payment[]) => Order | null;
+  placeOrder: (payments: Payment[], opts?: { prescriptionRef?: string }) => Order | null;
   addPaymentsToOrder: (oid: string, payments: Array<{ method: PaymentMethod; amount: number; ref?: string }>) => void;
   refundOrder: (oid: string, reason?: string) => void;
   setPendingToCompleted: (oid: string) => void;
@@ -184,6 +215,10 @@ type PosState = {
 
   adjustStock: (productId: string, qtyDelta: number, reason: StockReason, ref?: string) => void;
   deleteProduct: (pid: string) => void;
+
+  /* batches (pharmacy) */
+  upsertBatch: (b: Partial<Batch> & { productId: string; qty: number }) => Batch;
+  deleteBatch: (id: string) => void;
 
   /* customers */
   upsertCustomer: (c: Partial<Customer> & { name: string }) => Customer;
@@ -211,6 +246,7 @@ export const usePos = create<PosState>()(
       orders: [],
       customers: [],
       stockMoves: [],
+      batches: [],
       staff: [],
       currentStaffId: null,
       settings: defaultSettings(),
@@ -253,34 +289,47 @@ export const usePos = create<PosState>()(
         if (!isDemoMode()) void pruneImages(refs);
       },
 
-      addToCart: (pid, qty = 1) => {
+      addToCart: (pid, qty = 1, opts) => {
         const p = get().products.find((x) => x.id === pid);
         if (!p) return;
         const cart = [...get().cart];
-        const i = cart.findIndex((l) => l.productId === pid);
+        const packIdx = opts?.packIdx;
+        const key = cartLineKey({ productId: pid, packIdx });
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
+        const factor = packFactor(p, packIdx);
         const want = (i >= 0 ? cart[i].qty : 0) + qty;
-        const capped = Math.min(want, p.stock <= 0 ? 0 : p.stock);
+        // stock is held in base units — a pack line can only take whole packs
+        const available = p.stock <= 0 ? 0 : Math.floor(p.stock / factor);
+        const capped = Math.min(want, available);
         if (capped <= 0) {
-          get().toast("Out of stock", "error");
+          get().toast(p.stock <= 0 ? "Out of stock" : "Not enough stock for a full pack", "error");
           return;
         }
-        if (capped < want) get().toast(`Only ${p.stock} left`, "warn");
-        if (i >= 0) cart[i] = { ...cart[i], qty: capped };
-        else cart.push({ productId: pid, qty: capped });
+        if (capped < want) get().toast(`Only ${available} left`, "warn");
+        const line: CartLine = {
+          productId: pid,
+          qty: capped,
+          ...(packIdx === undefined ? {} : { packIdx }),
+          ...(opts?.price === undefined ? {} : { price: opts.price }),
+        };
+        if (i >= 0) cart[i] = { ...cart[i], ...line };
+        else cart.push(line);
         set({ cart, cartUpdatedAt: Date.now() });
       },
 
-      setCartQty: (pid, qty) => {
-        const p = get().products.find((x) => x.id === pid);
-        if (!p) return;
-        let cart = [...get().cart];
-        const i = cart.findIndex((l) => l.productId === pid);
+      setCartQty: (key, qty) => {
+        const s = get();
+        let cart = [...s.cart];
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
         if (i < 0) return;
-        const capped = Math.max(0, Math.min(qty, Math.max(0, p.stock)));
-        if (capped === 0) cart = cart.filter((l) => l.productId !== pid);
-        else cart[i] = { ...cart[i], qty: capped };
+        const line = cart[i];
+        const p = s.products.find((x) => x.id === line.productId);
+        const factor = packFactor(p, line.packIdx);
+        const available = p && p.stock > 0 ? Math.floor(p.stock / factor) : 0;
+        const capped = Math.max(0, Math.min(qty, available));
+        if (capped === 0) cart = cart.filter((l) => cartLineKey(l) !== key);
+        else cart[i] = { ...line, qty: capped };
         set({ cart, cartUpdatedAt: Date.now() });
-        set({ cart });
       },
 
       clearCart: () =>
@@ -293,14 +342,33 @@ export const usePos = create<PosState>()(
       addDraftPayment: (p) => set((s) => ({ draftPayments: [...s.draftPayments, p] })),
       clearDraftPayments: () => set({ draftPayments: [] }),
 
-      placeOrder: (payments) => {
+      placeOrder: (payments, opts) => {
         const s = get();
         if (s.cart.length === 0) return null;
         const now = Date.now();
-        const items = s.cart.map((l) => {
-          const p = s.products.find((x) => x.id === l.productId)!;
-          return { productId: p.id, name: p.name, imageUrl: p.imageUrl, qty: l.qty, price: p.price, cost: p.cost };
-        });
+        const rxRef = opts?.prescriptionRef?.trim();
+
+        // Work out the lines and the batch allocations (FEFO) up front.
+        const plan = planSale(s.cart, s.products, s.batches);
+        if (plan.lines.length === 0) return null;
+        if (plan.shortfall > 0) {
+          get().toast(`Not enough stock for ${plan.shortageProduct ?? "an item"}`, "error");
+          return null;
+        }
+
+        const items: OrderItem[] = plan.lines.map((pl) => ({
+          productId: pl.product.id,
+          name: pl.product.name,
+          imageUrl: pl.product.imageUrl,
+          qty: pl.line.qty,
+          price: pl.line.price ?? pl.product.price,
+          cost: round2(pl.product.cost * pl.factor),
+          baseQty: pl.baseQty,
+          ...(pl.allocations.length > 0 ? { batchAllocations: pl.allocations } : {}),
+          ...(pl.packName ? { packName: pl.packName } : {}),
+          ...(rxRef && pl.product.prescriptionOnly ? { prescriptionRef: rxRef } : {}),
+        }));
+
         const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
         const net = Math.max(0, subtotal - s.cartDiscount);
         const tax = taxAmount(net, s.settings.taxRate);
@@ -324,17 +392,46 @@ export const usePos = create<PosState>()(
           completedAt: credit > 0 ? null : now,
         };
 
-        // stock moves: one per order line item, count is total sold qty
-        const moves: StockMove[] = items.map((i) => ({
-          id: id("mv_"),
-          productId: i.productId,
-          qty: -i.qty,
-          reason: "sale",
-          ref: order.id,
-          t: now,
-        }));
+        // stock moves: one per order line, split per batch when the line was
+        // allocated from batches. Counts are base units.
+        const moves: StockMove[] = [];
+        for (const pl of plan.lines) {
+          if (pl.allocations.length > 0) {
+            for (const a of pl.allocations) {
+              moves.push({
+                id: id("mv_"),
+                productId: pl.product.id,
+                qty: -a.qty,
+                reason: "sale",
+                ref: order.id,
+                t: now,
+                batchId: a.batchId,
+              });
+            }
+          } else {
+            moves.push({
+              id: id("mv_"),
+              productId: pl.product.id,
+              qty: -pl.baseQty,
+              reason: "sale",
+              ref: order.id,
+              t: now,
+            });
+          }
+        }
+
+        const batches = s.batches.map((b) => {
+          const used = plan.batchDraw.get(b.id);
+          return used ? { ...b, qty: b.qty - used, updatedAt: now } : b;
+        });
         const products = s.products.map((p) => {
-          const sold = items.filter((i) => i.productId === p.id).reduce((q, i) => q + i.qty, 0);
+          const isBatched = batches.some((b) => b.productId === p.id);
+          if (isBatched) {
+            // a batched product's stock is derived from its batches
+            const derived = batchStock(batches, p.id);
+            return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
+          }
+          const sold = plan.productSold.get(p.id) ?? 0;
           return sold > 0 ? { ...p, stock: Math.max(0, p.stock - sold), updatedAt: now } : p;
         });
 
@@ -343,6 +440,7 @@ export const usePos = create<PosState>()(
         set({
           orders: [order, ...s.orders],
           products,
+          batches,
           stockMoves: [...moves, ...s.stockMoves],
           settings: { ...s.settings, nextOrderNo: orderNo },
           cart: [],
@@ -393,22 +491,52 @@ export const usePos = create<PosState>()(
         const order = s.orders.find((o) => o.id === oid);
         if (!order || order.status === "refunded") return;
         const now = Date.now();
-        const moves: StockMove[] = order.items.map((i) => ({
-          id: id("mv_"),
-          productId: i.productId,
-          qty: i.qty,
-          reason: "return",
-          ref: order.id,
-          t: now,
-        }));
+        const plan = planRestock(order.items);
+        const moves: StockMove[] = [];
+        for (const i of order.items) {
+          const allocations = i.batchAllocations ?? [];
+          if (allocations.length > 0) {
+            // restock into the exact batches the sale came out of
+            for (const a of allocations) {
+              moves.push({
+                id: id("mv_"),
+                productId: i.productId,
+                qty: a.qty,
+                reason: "return",
+                ref: order.id,
+                t: now,
+                batchId: a.batchId,
+              });
+            }
+          } else {
+            const qty = i.baseQty ?? i.qty;
+            moves.push({
+              id: id("mv_"),
+              productId: i.productId,
+              qty,
+              reason: "return",
+              ref: order.id,
+              t: now,
+            });
+          }
+        }
+        const batches = s.batches.map((b) => {
+          const back = plan.batchBack.get(b.id);
+          return back ? { ...b, qty: b.qty + back, updatedAt: now } : b;
+        });
         const products = s.products.map((p) => {
-          const back = order.items.filter((i) => i.productId === p.id).reduce((q, i) => q + i.qty, 0);
+          const isBatched = batches.some((b) => b.productId === p.id);
+          if (isBatched) {
+            const derived = batchStock(batches, p.id);
+            return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
+          }
+          const back = plan.productBack.get(p.id) ?? 0;
           return back > 0 ? { ...p, stock: p.stock + back, updatedAt: now } : p;
         });
         const orders = s.orders.map((o) =>
           o.id === oid ? { ...o, status: "refunded" as const, payStatus: "refunded" as const } : o,
         );
-        set({ orders, products, stockMoves: [...moves, ...s.stockMoves] });
+        set({ orders, products, batches, stockMoves: [...moves, ...s.stockMoves] });
         get().toast("Order refunded", "ok");
       },
 
@@ -426,17 +554,44 @@ export const usePos = create<PosState>()(
         const now = Date.now();
         const existing = patch.id ? s.products.find((p) => p.id === patch.id) : undefined;
         let saved: Product;
+        let batches = s.batches;
+        let extraMoves: StockMove[] = [];
         if (existing) {
           saved = { ...existing, ...patch, name: patch.name, updatedAt: now } as Product;
           const stockDelta = (patch.stock ?? existing.stock) - existing.stock;
+          // A batched product owns its stock through its batches — a stock
+          // edit lands on the earliest-expiring batch so the derived total
+          // stays truthful.
+          const isBatched = batches.some((b) => b.productId === existing.id);
+          if (isBatched) {
+            if (stockDelta !== 0) {
+              const r = applyToEarliestBatch(batches, existing.id, stockDelta);
+              batches = r.batches;
+              extraMoves = [
+                {
+                  id: id("mv_"),
+                  productId: saved.id,
+                  qty: stockDelta,
+                  reason: "adjust",
+                  ref: "product edit",
+                  t: now,
+                  ...(r.batchId ? { batchId: r.batchId } : {}),
+                },
+              ];
+            }
+            // derived stock for a batched product
+            saved = { ...saved, stock: batchStock(batches, saved.id) };
+          } else if (stockDelta !== 0) {
+            extraMoves = [
+              { id: id("mv_"), productId: saved.id, qty: stockDelta, reason: "adjust", ref: "product edit", t: now },
+            ];
+          }
           set({
             products: s.products.map((p) => (p.id === existing.id ? saved : p)),
+            batches,
             stockMoves:
               stockDelta !== 0
-                ? [
-                    { id: id("mv_"), productId: saved.id, qty: stockDelta, reason: "adjust", ref: "product edit", t: now },
-                    ...s.stockMoves,
-                  ]
+                ? [...extraMoves, ...s.stockMoves]
                 : s.stockMoves,
           });
         } else {
@@ -496,12 +651,37 @@ export const usePos = create<PosState>()(
       adjustStock: (pid, delta, reason, ref) => {
         const s = get();
         const now = Date.now();
-        const products = s.products.map((p) =>
-          p.id === pid ? { ...p, stock: Math.max(0, p.stock + delta), updatedAt: now } : p,
-        );
+        const isBatched = s.batches.some((b) => b.productId === pid);
+        let batches = s.batches;
+        let batchId: string | undefined;
+        if (isBatched) {
+          const r = applyToEarliestBatch(batches, pid, delta);
+          batches = r.batches;
+          batchId = r.batchId ?? undefined;
+        }
+        const products = s.products.map((p) => {
+          if (p.id !== pid) return p;
+          if (isBatched) {
+            const derived = batchStock(batches, pid);
+            return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
+          }
+          return { ...p, stock: Math.max(0, p.stock + delta), updatedAt: now };
+        });
         set({
           products,
-          stockMoves: [{ id: id("mv_"), productId: pid, qty: delta, reason, ref, t: now }, ...s.stockMoves],
+          batches,
+          stockMoves: [
+            {
+              id: id("mv_"),
+              productId: pid,
+              qty: delta,
+              reason,
+              ref,
+              t: now,
+              ...(batchId ? { batchId } : {}),
+            },
+            ...s.stockMoves,
+          ],
         });
         fireLowStockAlerts(s.products, products);
       },
@@ -510,10 +690,87 @@ export const usePos = create<PosState>()(
         const s = get();
         set({
           products: s.products.filter((p) => p.id !== pid),
+          batches: s.batches.filter((b) => b.productId !== pid),
           cart: s.cart.filter((l) => l.productId !== pid),
           cartUpdatedAt: Date.now(),
         });
         get().toast("Product deleted", "ok");
+      },
+
+      /* ---------------- batches (pharmacy) ---------------- */
+
+      upsertBatch: (patch) => {
+        const s = get();
+        const now = Date.now();
+        const existing = patch.id ? s.batches.find((b) => b.id === patch.id) : undefined;
+        const saved: Batch = existing
+          ? ({ ...existing, ...patch, updatedAt: now } as Batch)
+          : {
+              id: patch.id ?? id("b_"),
+              productId: patch.productId,
+              batchNo: patch.batchNo ?? "",
+              expiry: patch.expiry ?? "",
+              qty: patch.qty,
+              cost: patch.cost ?? 0,
+              createdAt: now,
+              updatedAt: now,
+            };
+        const batches = existing
+          ? s.batches.map((b) => (b.id === saved.id ? saved : b))
+          : [saved, ...s.batches];
+        // a batched product's stock is derived from its batches
+        const products = s.products.map((p) => {
+          if (p.id !== saved.productId) return p;
+          const derived = batchStock(batches, p.id);
+          return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
+        });
+        const delta = existing ? saved.qty - existing.qty : saved.qty;
+        const moves: StockMove[] =
+          delta !== 0
+            ? [
+                {
+                  id: id("mv_"),
+                  productId: saved.productId,
+                  qty: delta,
+                  reason: existing ? "adjust" : "purchase",
+                  ref: saved.batchNo ? `batch ${saved.batchNo}` : "batch",
+                  t: now,
+                  batchId: saved.id,
+                },
+              ]
+            : [];
+        set({ batches, products, stockMoves: [...moves, ...s.stockMoves] });
+        get().toast(existing ? "Batch updated" : "Batch added", "ok");
+        return saved;
+      },
+
+      deleteBatch: (bid) => {
+        const s = get();
+        const b = s.batches.find((x) => x.id === bid);
+        if (!b) return;
+        const now = Date.now();
+        const batches = s.batches.filter((x) => x.id !== bid);
+        const products = s.products.map((p) => {
+          if (p.id !== b.productId) return p;
+          const derived = batchStock(batches, p.id);
+          return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
+        });
+        const moves: StockMove[] =
+          b.qty !== 0
+            ? [
+                {
+                  id: id("mv_"),
+                  productId: b.productId,
+                  qty: -b.qty,
+                  reason: "adjust",
+                  ref: b.batchNo ? `batch ${b.batchNo}` : "batch",
+                  t: now,
+                  batchId: b.id,
+                },
+              ]
+            : [];
+        set({ batches, products, stockMoves: [...moves, ...s.stockMoves] });
+        get().toast("Batch deleted", "ok");
       },
 
       upsertCustomer: (patch) => {
@@ -590,6 +847,7 @@ export const usePos = create<PosState>()(
         orders: s.orders,
         customers: s.customers,
         stockMoves: s.stockMoves,
+        batches: s.batches,
         staff: s.staff,
         currentStaffId: s.currentStaffId,
         settings: s.settings,
@@ -623,9 +881,9 @@ export function useCartTotals() {
       const p = products.find((x) => x.id === l.productId);
       return p ? { ...l, product: p } : null;
     })
-    .filter(Boolean) as { productId: string; qty: number; product: Product }[];
+    .filter(Boolean) as (CartLine & { product: Product })[];
   const count = lines.reduce((s, l) => s + l.qty, 0);
-  const subtotal = lines.reduce((s, l) => s + l.product.price * l.qty, 0);
+  const subtotal = lines.reduce((s, l) => s + (l.price ?? l.product.price) * l.qty, 0);
   const net = Math.max(0, subtotal - discount);
   const tax = taxAmount(net, settings.taxRate);
   // taxRate 0 → tax 0 → total is exactly the old subtotal - discount

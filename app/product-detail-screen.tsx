@@ -29,6 +29,7 @@ const moveLabel: Record<StockReason, string> = {
   return: "Customer return",
   count: "Stock count",
   opening: "Opening stock",
+  expiry: "Expired",
 };
 
 const adjReasons: { value: StockReason; label: string }[] = [
