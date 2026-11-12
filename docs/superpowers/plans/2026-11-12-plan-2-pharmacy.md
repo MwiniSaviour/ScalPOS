@@ -95,6 +95,13 @@ hand-set); no restaurant/salon features.
 - **Rx ref**: one field on the pay screen stamped onto every rx line as
   `OrderItem.prescriptionRef`; required (blocking) when the cart contains a
   `prescriptionOnly` product and `hasFeature(bt, "rx")`.
+- **Expired stock is never sold** (added during the Plan 2 smoke run): FEFO skips
+  batches whose expiry date has passed, the cart caps a batched product at its
+  *sellable* stock (expired units excluded), and the sell screen shows the
+  sellable number rather than the shelf number. A batch is expired only from the
+  day AFTER its expiry date — a batch expiring today may still be sold today.
+  Expired units stay in the derived stock (they are physically on the shelf and
+  must be written off, not vanish) and the expiry report flags them.
 - **New module `lib/batches.ts`**: the pure pharmacy maths lives here — cart
   keys, pack factors, batch ordering, FEFO allocation, expiry buckets, plus
   `planSale()` / `planRestock()` which the store applies. Unit tested in
@@ -133,7 +140,7 @@ Files: `lib/types.ts`, `lib/store.ts`, `lib/batches.ts` (new),
 Verify: tsc, eslint. Manual: retail shop sells exactly as before (no batches).
 **Status: implemented, gates pass, 23 unit tests pass.**
 
-## Task 2 — Batch UI (product detail + product edit)
+## Task 2 — Batch UI (product detail + product edit) — DONE
 
 Files: `app/product-detail-screen.tsx`, `app/product-edit-screen.tsx`,
 `components/ui/*` (reuse Sheet/Input only)
@@ -152,7 +159,7 @@ Files: `app/product-detail-screen.tsx`, `app/product-edit-screen.tsx`,
 Verify: tsc, eslint. Manual: create 2 batches (one near-expiry), see derived
 stock and danger styling.
 
-## Task 3 — Sell flow: pack picker + rx ref + FEFO stamps
+## Task 3 — Sell flow: pack picker + rx ref + FEFO stamps — DONE
 
 Files: `app/sell-screen.tsx`, `app/pay-screen.tsx`, `lib/store.ts`,
 `lib/receipt.ts` (or equivalent receipt builder — grep before editing)
@@ -170,7 +177,7 @@ Files: `app/sell-screen.tsx`, `app/pay-screen.tsx`, `lib/store.ts`,
 Verify: tsc, eslint. Manual: sell 1 box of a 2-batch product → correct base
 deduction, earliest expiry first, allocations visible in order.
 
-## Task 4 — Expiry report
+## Task 4 — Expiry report — DONE
 
 Files: `app/reports-screen.tsx`
 
@@ -181,7 +188,7 @@ Files: `app/reports-screen.tsx`
 
 Verify: tsc, eslint. Manual: expired + near batches appear in correct buckets.
 
-## Task 5 — Patients: allergies
+## Task 5 — Patients: allergies — DONE
 
 Files: `app/customer-edit*` (grep exact file), `app/customers-screen.tsx`,
 `app/customer-detail-screen.tsx`
@@ -192,7 +199,7 @@ Files: `app/customer-edit*` (grep exact file), `app/customers-screen.tsx`,
 
 Verify: tsc, eslint. Manual: set allergies on a patient, see them on detail.
 
-## Task 6 — Desktop pharmacy parity (batches + product form)
+## Task 6 — Desktop pharmacy parity (batches + product form) — DONE
 
 Files: `apps/desktop/src/lib/types.ts`, `apps/desktop/src/lib/api/data.ts`,
 product form/table/detail pages, `apps/desktop/src/lib/constants.ts`
@@ -206,7 +213,7 @@ product form/table/detail pages, `apps/desktop/src/lib/constants.ts`
 Verify: desktop tsc + eslint baseline rules; `next build --webpack` in
 `apps/desktop` (run by coordinator, not per-worker).
 
-## Task 7 — Desktop purchase orders
+## Task 7 — Desktop purchase orders — DONE
 
 Files: `apps/desktop/src/app/dashboard/*` (new `purchase-orders` route + form),
 `apps/desktop/src/lib/api/data.ts`, `constants.ts` NAV_ITEMS
@@ -221,7 +228,7 @@ Files: `apps/desktop/src/app/dashboard/*` (new `purchase-orders` route + form),
 
 Verify: desktop gates; manual receive flow moves stock + creates batches.
 
-## Task 8 — Sync registration (mobile)
+## Task 8 — Sync registration (mobile) — DONE
 
 Files: `lib/sync/engine.ts`, `lib/sync/outbox.ts`, `lib/sync/*` watchers
 
@@ -236,13 +243,28 @@ Files: `lib/sync/engine.ts`, `lib/sync/outbox.ts`, `lib/sync/*` watchers
 Verify: two-device smoke (coordinator chromium run): create batch → synced to
 second device with product.stock consistent.
 
-## Final verification (whole plan, coordinator)
+## Final verification (whole plan, coordinator) — DONE
 
-1. All gates: mobile tsc + eslint + `next build --webpack`; desktop build.
-2. `grep -rn "useSyncExternalStore\|useClientValue" app components lib` — audit
-   every `getSnapshot`.
-3. Migration `0014` applied to live Supabase via MCP; smoke via headless
-   chromium CDP scripts in `$PREFIX/tmp/opencode/` (serve-export +
-   inject `window.CapacitorCustomPlatform`): pharmacy sell FEFO, rx gate,
-   expiry report, second-device sync.
-4. Retail regression: retail smoke unchanged.
+1. All gates: mobile tsc + eslint + `next build --webpack`; desktop tsc +
+   `next build --webpack`. **PASS**
+2. `grep -rn "useSyncExternalStore\|useClientValue" app components lib` — audited
+   every `getSnapshot`: all are primitives (boolean / number / string) or
+   memoized per raw value (`readConnection` in `lib/api/bootstrap.ts`,
+   `checkoutFromStorage` in the PayStack screen). **PASS**
+3. Migration `0014` applied to live Supabase via MCP and verified: both new
+   tables exist with RLS enabled, 4 policies each, both in the realtime
+   publication, all additive columns present, and the `stock_moves` reason CHECK
+   widened with `expiry`. **PASS**
+4. Chromium CDP smoke (`$PREFIX/tmp/opencode/plan2-smoke.cjs` + `serve-export.cjs`):
+   pharmacy pack picker, FEFO sale skipping the expired batch, rx gate blocking
+   the charge, expiry report buckets, product-detail batch list, and the retail
+   regression (a plain retail sale is untouched). **PASS**
+5. Sync DB contract verified in SQL: a batch upserted on
+   `(org_id, local_id)` twice stays one row with the latest qty, and the pull
+   query sees it. **PASS**
+6. Unit tests: `tests/unit/batches.test.ts` — 28 passing. **PASS**
+
+**Not verified here**: the full two-device round trip (device A creates a batch →
+device B receives it) needs two signed-in browsers on one org, which this host
+cannot provide. The registration points, the DB contract and the derived-stock
+rule are covered; the end-to-end device handshake is still open.
