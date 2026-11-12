@@ -10,11 +10,13 @@ import { Input, SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
 import { cartLineKey, linePackName, packFactor } from "@/lib/batches";
+import { hasFeature } from "@/lib/features";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
 import { sellableStock } from "@/lib/batches";
 import { useNow } from "@/lib/now";
-import { useCartTotals, usePos } from "@/lib/store";
+import { isUnavailableToday } from "@/lib/restaurant";
+import { useCartTotals, usePos, useSettings } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
   BadgePercent,
@@ -30,8 +32,8 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import type { Product } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { CartLine, Order, Product, RestaurantTable } from "@/lib/types";
 
 export default function SellScreen() {
   const router = useRouter();
@@ -45,6 +47,14 @@ export default function SellScreen() {
   const setCartCustomer = usePos((s) => s.setCartCustomer);
   const cart = usePos((s) => s.cart);
   const batches = usePos((s) => s.batches);
+  const settings = useSettings();
+  const tables = usePos((s) => s.tables);
+  const orders = usePos((s) => s.orders);
+  const cartOrderType = usePos((s) => s.cartOrderType);
+  const cartTableId = usePos((s) => s.cartTableId);
+  const cartTabOrderId = usePos((s) => s.cartTabOrderId);
+  const setCartContext = usePos((s) => s.setCartContext);
+  const seedTables = usePos((s) => s.seedTables);
   const totals = useCartTotals();
   const now = useNow();
 
@@ -59,6 +69,72 @@ export default function SellScreen() {
   const [confirmClear, setConfirmClear] = useState(false);
   const [packFor, setPackFor] = useState<Product | null>(null);
   const [packPrice, setPackPrice] = useState<Record<number, string>>({});
+  const [tabPrompt, setTabPrompt] = useState<{ table: RestaurantTable; order: Order } | null>(
+    null,
+  );
+
+  /* ------------------------------ restaurant ------------------------------ */
+
+  const orderTypesOn = hasFeature(settings.businessType, "order-types");
+  const tablesOn = hasFeature(settings.businessType, "tables");
+
+  // a shop configures the service types it takes; without a list a
+  // restaurant still serves at the table and over the counter
+  const orderTypes = useMemo(() => {
+    const cfg = settings.restaurantConfig?.orderTypes ?? [];
+    return cfg.length > 0 ? cfg : ["dine-in", "takeaway"];
+  }, [settings.restaurantConfig]);
+
+  const activeType = orderTypesOn
+    ? cartOrderType && orderTypes.includes(cartOrderType)
+      ? cartOrderType
+      : orderTypes[0]
+    : null;
+
+  const showTables =
+    tablesOn && settings.restaurantConfig?.tables !== false && isDineIn(activeType);
+
+  const table = tables.find((t) => t.id === cartTableId) ?? null;
+  const onTab = cartTabOrderId !== null;
+  const typeText = activeType ? typeLabel(activeType) : null;
+  const chargeContext = table ? table.name : typeText;
+  const cartContext = onTab
+    ? [table?.name ?? null, "open tab"].filter(Boolean).join(" · ")
+    : [table?.name ?? null, typeText].filter(Boolean).join(" · ");
+  const tabCount = tabPrompt
+    ? tabPrompt.order.items.reduce((s, i) => s + i.qty, 0)
+    : 0;
+
+  // a table with a pending order holds an open tab
+  const tabByTable = useMemo(() => {
+    const m = new Map<string, Order>();
+    for (const o of orders) {
+      if (o.status !== "pending" || !o.tableId) continue;
+      if (!m.has(o.tableId)) m.set(o.tableId, o);
+    }
+    return m;
+  }, [orders]);
+
+  // the service type belongs to the sale — default it to the first configured
+  useEffect(() => {
+    if (!orderTypesOn) return;
+    if (cartOrderType && orderTypes.includes(cartOrderType)) return;
+    setCartContext({ orderType: orderTypes[0] });
+  }, [orderTypesOn, cartOrderType, orderTypes, setCartContext]);
+
+  // a restaurant with no tables yet gets eight to pick from
+  useEffect(() => {
+    if (!showTables) return;
+    if (tables.length > 0) return;
+    seedTables(8);
+  }, [showTables, tables.length, seedTables]);
+
+  // an item the kitchen marked off is not sold today
+  const offMenu = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const p of products) m.set(p.id, isUnavailableToday(p, now));
+    return m;
+  }, [products, now]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -109,9 +185,77 @@ export default function SellScreen() {
     window.setTimeout(() => setFlash((f) => (f === pid ? null : f)), 400);
   };
 
+  /* ---------------------------- restaurant actions ---------------------------- */
+
+  /** Leaving a tab keeps the table's items on the tab and empties the cart. */
+  const releaseTab = () => {
+    usePos.setState({ cart: [], cartDiscount: 0, cartUpdatedAt: 0 });
+    setCartContext({ tabOrderId: null });
+  };
+
+  const pickType = (t: string) => {
+    if (t === activeType) return;
+    if (cartTabOrderId) {
+      releaseTab();
+      usePos.getState().toast("Tab released — the table keeps its items", "warn");
+    }
+    setCartContext({ orderType: t, tableId: isDineIn(t) ? cartTableId : null });
+  };
+
+  const pickTable = (t: RestaurantTable) => {
+    const open = tabByTable.get(t.id);
+    if (open) {
+      setTabPrompt({ table: t, order: open });
+      return;
+    }
+    if (cartTabOrderId) {
+      releaseTab();
+      usePos.getState().toast("Tab released — the table keeps its items", "warn");
+    }
+    setCartContext({ tableId: t.id, tabOrderId: null });
+  };
+
+  /** Load the tab's items into the cart and keep selling on that order. */
+  const continueTab = () => {
+    if (!tabPrompt) return;
+    const { table: t, order } = tabPrompt;
+    const lines: CartLine[] = order.items.map((i) => ({
+      productId: i.productId,
+      qty: i.qty,
+      price: i.price,
+      ...(i.variantId ? { variantId: i.variantId } : {}),
+      ...(i.variantName ? { variantName: i.variantName } : {}),
+      ...(i.modifierIds && i.modifierIds.length ? { modifierIds: i.modifierIds } : {}),
+      ...(i.modifierNames && i.modifierNames.length ? { modifierNames: i.modifierNames } : {}),
+    }));
+    usePos.setState({ cart: lines, cartDiscount: 0, cartUpdatedAt: Date.now() });
+    // the tab keeps the service it was opened with — the cashier's current
+    // selection must not rewrite it
+    setCartContext({
+      tabOrderId: order.id,
+      tableId: t.id,
+      orderType: order.orderType ?? activeType,
+    });
+    setTabPrompt(null);
+  };
+
+  /** Start a fresh sale on the table — the open tab stays as it is. */
+  const startNew = () => {
+    if (!tabPrompt) return;
+    const { table: t } = tabPrompt;
+    releaseTab();
+    setCartContext({ tableId: t.id, tabOrderId: null });
+    setTabPrompt(null);
+  };
+
   const tap = (pid: string) => {
     const p = products.find((x) => x.id === pid);
-    if (p?.packs?.length) {
+    if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    if (p.packs?.length) {
       setPackFor(p);
       setPackPrice(
         Object.fromEntries(
@@ -130,6 +274,12 @@ export default function SellScreen() {
   };
 
   const addBaseUnit = (pid: string) => {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
     addToCart(pid, 1);
     closePack();
     flashTile(pid);
@@ -138,6 +288,10 @@ export default function SellScreen() {
   const addPack = (pid: string, packIdx: number) => {
     const p = products.find((x) => x.id === pid);
     if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
     const fallback = trimNum(p.price * packFactor(p, packIdx));
     const draft = (packPrice[packIdx] ?? fallback).trim();
     addToCart(pid, 1, { packIdx, price: parsePrice(draft === "" ? fallback : draft) });
@@ -207,7 +361,48 @@ export default function SellScreen() {
       </header>
 
       <div className="px-5 pt-4 pb-32">
+        {orderTypesOn && (
+          <>
+            <div className="edge-fade no-scrollbar -mx-5 overflow-x-auto px-5">
+              <div className="flex w-max gap-1.5">
+                {orderTypes.map((t) => (
+                  <Chip key={t} active={t === activeType} onClick={() => pickType(t)}>
+                    {typeLabel(t)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            {showTables && (
+              <div className="mt-3">
+                <div className="mb-2 flex items-baseline justify-between px-0.5">
+                  <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                    Table
+                  </p>
+                  {table && <p className="text-[13px] font-medium text-ink2">{table.name}</p>}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {tables.map((t) => (
+                    <Chip
+                      key={t.id}
+                      active={t.id === cartTableId}
+                      onClick={() => pickTable(t)}
+                      className="justify-center"
+                    >
+                      <span className="truncate">{t.name}</span>
+                      {tabByTable.has(t.id) && (
+                        <span className="size-1.5 shrink-0 rounded-full bg-accent" />
+                      )}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         <SearchBar
+          className={orderTypesOn ? "mt-2.5" : undefined}
           value={query}
           onChange={setQuery}
           placeholder="Search products…"
@@ -257,6 +452,7 @@ export default function SellScreen() {
                   p={p}
                   qty={qtyInCart.get(p.id) ?? 0}
                   flash={flash === p.id}
+                  unavailable={offMenu.get(p.id) ?? false}
                   onTap={() => tap(p.id)}
                   onRemove={() => removeOne(p.id)}
                 />
@@ -271,17 +467,20 @@ export default function SellScreen() {
           <div className="mx-auto flex max-w-[440px] items-center gap-3 px-4 pb-[max(var(--nova-sab),8px)] pt-3">
             <button
               onClick={() => setCartOpen(true)}
-              aria-label={`Open cart, ${totals.count} items, ${fmtMoney(totals.total)}`}
+              aria-label={`Open cart, ${totals.count} items, ${fmtMoney(totals.total)}${
+                table ? `, ${table.name}` : ""
+              }`}
               className="press flex min-w-0 flex-1 items-baseline gap-2 text-left"
             >
               <span className="tabnum min-w-0 truncate text-[17px] font-bold text-ink">
                 {fmtMoney(totals.total)}
               </span>
-              <span className="shrink-0 text-[14px] text-ink3">
+              <span className="min-w-0 truncate text-[14px] text-ink3">
+                {chargeContext ? `${chargeContext} · ` : ""}
                 {totals.count} item{totals.count === 1 ? "" : "s"}
               </span>
             </button>
-            <Button onClick={() => router.push("/pay")}>Charge</Button>
+            <Button onClick={() => router.push("/pay")}>{onTab ? "Settle tab" : "Charge"}</Button>
           </div>
         </div>
       )}
@@ -302,11 +501,15 @@ export default function SellScreen() {
                 router.push("/pay");
               }}
             >
-              Charge
+              {onTab ? "Settle tab" : "Charge"}
             </Button>
           </div>
         }
       >
+        {cartContext && (
+          <p className="px-1 pb-2 text-[14px] font-medium text-ink2">{cartContext}</p>
+        )}
+
         <Card inset>
           {totals.lines.map((l) => {
             const key = cartLineKey(l);
@@ -576,6 +779,31 @@ export default function SellScreen() {
         </Card>
       </Sheet>
 
+      <Sheet
+        open={tabPrompt !== null}
+        onClose={() => setTabPrompt(null)}
+        title={tabPrompt ? `${tabPrompt.table.name} is open` : ""}
+        height="auto"
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="secondary" block onClick={startNew}>
+              Start new
+            </Button>
+            <Button block onClick={continueTab}>
+              Continue tab
+            </Button>
+          </div>
+        }
+      >
+        {tabPrompt && (
+          <p className="pb-4 text-[14px] leading-6 text-ink2">
+            {tabPrompt.table.name} already has an open tab ({tabPrompt.order.id}) with{" "}
+            {tabCount} item{tabCount === 1 ? "" : "s"}. Continue it to add more items, or start
+            a new sale on this table — the current cart is cleared.
+          </p>
+        )}
+      </Sheet>
+
       <Confirm
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
@@ -599,6 +827,7 @@ function ProductTile({
   available,
   qty,
   flash,
+  unavailable,
   onTap,
   onRemove,
 }: {
@@ -606,6 +835,7 @@ function ProductTile({
   available: number;
   qty: number;
   flash: boolean;
+  unavailable: boolean;
   onTap: () => void;
   onRemove: () => void;
 }) {
@@ -616,8 +846,14 @@ function ProductTile({
     <div
       role="button"
       tabIndex={out ? undefined : 0}
-      aria-disabled={out}
-      aria-label={selected ? `${p.name}, ${qty} in cart` : p.name}
+      aria-disabled={out || unavailable}
+      aria-label={
+        unavailable
+          ? `${p.name}, not available today`
+          : selected
+            ? `${p.name}, ${qty} in cart`
+            : p.name
+      }
       onClick={() => !out && onTap()}
       onKeyDown={(e) => {
         if (!out && (e.key === "Enter" || e.key === " ")) {
@@ -631,6 +867,7 @@ function ProductTile({
           ? "border-accent bg-accent/10"
           : "border-line bg-surface hover:bg-surface2/50",
         out && "cursor-default opacity-50",
+        unavailable && !out && "opacity-60",
       )}
     >
       <ProductArt
@@ -657,7 +894,9 @@ function ProductTile({
         </span>
         <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
         <span className="mt-0.5 flex h-[16px] items-center">
-          {out ? (
+          {unavailable ? (
+            <span className="text-[12px] font-medium text-warn">Not available today</span>
+          ) : out ? (
             <span className="text-[12px] font-medium text-ink3">Out of stock</span>
           ) : low ? (
             <span className="text-[12px] font-medium text-warn">{available} left</span>
@@ -711,4 +950,18 @@ function unitWord(p: Product): string {
   if (p.unit === "bag") return "bags";
   if (p.unit === "box") return "boxes";
   return p.unit;
+}
+
+/** Dine-in is the service that eats at a table — only it needs one. */
+function isDineIn(orderType: string | null | undefined): boolean {
+  return (orderType ?? "").trim().toLowerCase() === "dine-in";
+}
+
+/** How a service type reads on screen — "dine-in" becomes "Dine-in". */
+function typeLabel(orderType: string): string {
+  const key = orderType.trim().toLowerCase();
+  if (key === "dine-in") return "Dine-in";
+  if (key === "takeaway" || key === "take-away" || key === "take away") return "Takeaway";
+  if (key === "delivery") return "Delivery";
+  return orderType.replace(/(^|[\s-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
 }

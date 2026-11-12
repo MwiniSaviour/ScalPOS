@@ -62,6 +62,15 @@ function trimNum(n: number): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
 }
 
+/** How a service type reads on screen — "dine-in" becomes "Dine-in". */
+function typeLabel(orderType: string): string {
+  const key = orderType.trim().toLowerCase();
+  if (key === "dine-in") return "Dine-in";
+  if (key === "takeaway" || key === "take-away" || key === "take away") return "Takeaway";
+  if (key === "delivery") return "Delivery";
+  return orderType.replace(/(^|[\s-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
+}
+
 export default function PayScreen() {
   const router = useRouter();
   const hydrated = usePos((s) => s.hydrated);
@@ -71,6 +80,10 @@ export default function PayScreen() {
   const customers = usePos((s) => s.customers);
   const cartCustomerId = usePos((s) => s.cartCustomerId);
   const setCartCustomer = usePos((s) => s.setCartCustomer);
+  const tables = usePos((s) => s.tables);
+  const cartOrderType = usePos((s) => s.cartOrderType);
+  const cartTableId = usePos((s) => s.cartTableId);
+  const cartTabOrderId = usePos((s) => s.cartTabOrderId);
 
   const [method, setMethod] = useState<PayMethod>("cash");
   const [tendered, setTendered] = useState("");
@@ -133,6 +146,17 @@ export default function PayScreen() {
     hasFeature(settings.businessType, "rx") &&
     totals.lines.some((l) => l.product.prescriptionOnly);
 
+  /* ------------------------- restaurant context ------------------------- */
+
+  const table = tables.find((t) => t.id === cartTableId) ?? null;
+  const onTab = cartTabOrderId !== null;
+  const contextLine = [
+    table?.name ?? null,
+    cartOrderType ? typeLabel(cartOrderType) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const pick = (cid: string | null) => {
     setCartCustomer(cid);
     setCustOpen(false);
@@ -154,7 +178,9 @@ export default function PayScreen() {
       ? `Change due ${fmtMoney(changeDue)}`
       : credit > 0
         ? "Record & charge"
-        : `Complete sale ${fmtMoney(totals.total)}`;
+        : onTab
+          ? `Settle tab ${fmtMoney(totals.total)}`
+          : `Complete sale ${fmtMoney(totals.total)}`;
 
   const onDigit = (d: string) =>
     setTendered((t) => {
@@ -197,7 +223,12 @@ export default function PayScreen() {
     }
     const placed = usePos
       .getState()
-      .placeOrder(payments, needsRx ? { prescriptionRef: rxRef } : undefined);
+      .placeOrder(payments, {
+        ...(needsRx ? { prescriptionRef: rxRef } : {}),
+        ...(cartOrderType ? { orderType: cartOrderType } : {}),
+        ...(cartTableId ? { tableId: cartTableId } : {}),
+        ...(cartTabOrderId ? { tabOrderId: cartTabOrderId } : {}),
+      });
     if (placed) setDone({ order: placed, change: changeDue });
   };
 
@@ -227,6 +258,9 @@ export default function PayScreen() {
             ? ` · ${settings.taxInclusive ? "tax incl." : "tax"} ${fmtMoney(totals.tax)}`
             : ""}
         </p>
+        {contextLine && (
+          <p className="mt-1 text-[14px] font-semibold text-ink2">{contextLine}</p>
+        )}
       </section>
 
       <section className="px-5 pt-5">
