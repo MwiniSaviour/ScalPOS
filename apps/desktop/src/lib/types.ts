@@ -30,6 +30,15 @@ export interface Category {
   product_count?: number
 }
 
+/**
+ * A sellable pack of a product: "Box of 10 strips" of a base unit.
+ * `factor` is how many base units one pack holds.
+ */
+export interface Pack {
+  name: string
+  factor: number
+}
+
 export interface Product {
   id: string
   name: string
@@ -45,8 +54,24 @@ export interface Product {
   unit: string
   low_stock_at: number
   active: boolean
+  prescription_only: boolean
+  controlled: boolean
+  packs: Pack[] | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * A batch of a product with its own expiry (pharmacy).
+ * `expiry` is a "YYYY-MM-DD" date or null when the product does not expire.
+ */
+export interface ProductBatch {
+  id: string
+  product_id: string
+  batch_no: string
+  expiry: string | null
+  qty: number
+  cost: number
 }
 
 export interface Customer {
