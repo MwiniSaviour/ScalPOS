@@ -34,6 +34,48 @@ export type BatchAllocation = {
   qty: number;
 };
 
+/** A choice on a menu item: "no onions", "extra cheese" (restaurant). */
+export type Modifier = {
+  id: string;
+  name: string;
+  priceDelta: number;
+};
+
+/** A size option on a menu item: "Large +50" (restaurant). */
+export type Variant = {
+  id: string;
+  name: string;
+  priceDelta: number;
+};
+
+/** One ingredient line of a recipe. */
+export type RecipeLine = {
+  ingredientProductId: string;
+  qty: number;
+  wastePct?: number;
+};
+
+/** What a plated dish consumes. One recipe per menu item. */
+export type Recipe = {
+  id: string;
+  productId: string;
+  lines: RecipeLine[];
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** A dining table (restaurant). */
+export type RestaurantTable = {
+  id: string;
+  name: string;
+  seats: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/** Where a ticket sits in the kitchen pipeline. */
+export type TicketStatus = "queued" | "preparing" | "ready" | "served";
+
 export type Product = {
   id: string;
   name: string;
@@ -54,6 +96,11 @@ export type Product = {
   prescriptionOnly?: boolean;
   controlled?: boolean;
   packs?: Pack[];
+  /* restaurant */
+  modifiers?: Modifier[];
+  variants?: Variant[];
+  /** the item is off the menu until this date (inclusive) */
+  unavailableUntil?: string;
 };
 
 export type PaymentMethod = "cash" | "momo" | "card" | "credit";
@@ -79,6 +126,14 @@ export type OrderItem = {
   prescriptionRef?: string;
   /** base units this line consumed (pack lines sell packs, stock moves in base units) */
   baseQty?: number;
+  /* restaurant */
+  modifierIds?: string[];
+  /** names snapshotted so the receipt and order detail read right even if the menu item changes */
+  modifierNames?: string[];
+  variantId?: string;
+  variantName?: string;
+  /** ingredients this line consumed — so a refund can credit exactly what was taken */
+  recipeConsumption?: { productId: string; qty: number }[];
 };
 
 export type OrderStatus = "pending" | "completed" | "refunded";
@@ -98,6 +153,10 @@ export type Order = {
   createdAt: number;
   completedAt: number | null;
   note?: string;
+  /* restaurant */
+  orderType?: string; // "dine-in" | "takeaway" | "delivery"
+  tableId?: string;
+  ticketStatus?: TicketStatus;
 };
 
 export type Customer = {
@@ -149,6 +208,13 @@ export type Settings = {
   theme: "dark" | "light";
   nextOrderNo: number;
   createdAt: number;
+  /** restaurant setup — absent for every other business type */
+  restaurantConfig?: {
+    /** dine-in tables (a takeaway-only food vendor has none) */
+    tables: boolean;
+    /** the order types this shop takes */
+    orderTypes: string[];
+  };
 };
 
 /**
@@ -162,4 +228,9 @@ export type CartLine = {
   qty: number;
   packIdx?: number;
   price?: number;
+  /* restaurant */
+  variantId?: string;
+  variantName?: string;
+  modifierIds?: string[];
+  modifierNames?: string[];
 };

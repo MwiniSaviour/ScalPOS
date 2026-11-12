@@ -4,7 +4,7 @@ export type Feature =
   | "core-pos" | "inventory" | "customers" | "reports" | "staff"
   | "momo" | "tax" | "backup"
   | "batches" | "expiry" | "rx" | "suppliers-po"
-  | "tables" | "order-types" | "kitchen" | "recipes" | "daily-availability"
+  | "tables" | "order-types" | "kitchen" | "modifiers" | "recipes" | "daily-availability"
   | "appointments" | "services" | "packages" | "commissions"
 
 const SETS: Record<BusinessType, Feature[]> = {
@@ -12,7 +12,7 @@ const SETS: Record<BusinessType, Feature[]> = {
   pharmacy:   ["core-pos", "inventory", "customers", "reports", "staff", "momo", "tax", "backup",
                "batches", "expiry", "rx", "suppliers-po"],
   restaurant: ["core-pos", "inventory", "customers", "reports", "staff", "momo", "tax", "backup",
-               "tables", "order-types", "kitchen", "recipes", "daily-availability"],
+               "tables", "order-types", "kitchen", "modifiers", "recipes", "daily-availability"],
   salon:      ["core-pos", "inventory", "customers", "reports", "staff", "momo", "tax", "backup",
                "appointments", "services", "packages", "commissions"],
 }

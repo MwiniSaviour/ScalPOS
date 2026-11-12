@@ -18,7 +18,19 @@ import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import type { Staff } from "@/lib/staff";
-import type { Batch, BatchAllocation, Category, Customer, Order, Pack, Product, Settings, StockMove } from "@/lib/types";
+import type {
+  Batch,
+  BatchAllocation,
+  Category,
+  Customer,
+  Order,
+  Pack,
+  Product,
+  Recipe,
+  RestaurantTable,
+  Settings,
+  StockMove,
+} from "@/lib/types";
 import { batchStock } from "@/lib/batches";
 import { isDemoMode } from "@/lib/demo";
 import { cloudAccessAllowed } from "@/lib/entitlement";
@@ -33,7 +45,7 @@ const LAST_PULL_KEY = "nova-pos-last-pull";
 
 const PULL_INTERVAL = 30_000;
 
-const TABLES = ["categories", "products", "product_batches", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
+const TABLES = ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
 type Table = (typeof TABLES)[number];
 
 type IdMap = Record<Table, Record<string, string>>;
@@ -42,7 +54,18 @@ let APPLYING = false;
 let armedOrgId: string | null = null;
 
 function emptyMap(): IdMap {
-  return { categories: {}, products: {}, product_batches: {}, customers: {}, orders: {}, order_items: {}, stock_moves: {}, staff: {} };
+  return {
+    categories: {},
+    products: {},
+    product_batches: {},
+    recipes: {},
+    restaurant_tables: {},
+    customers: {},
+    orders: {},
+    order_items: {},
+    stock_moves: {},
+    staff: {},
+  };
 }
 
 function readMap(): IdMap {
@@ -144,6 +167,8 @@ type Store = {
   orders: Order[];
   stockMoves: StockMove[];
   batches: Batch[];
+  recipes: Recipe[];
+  tables: RestaurantTable[];
   staff: Staff[];
   settings: Settings;
 };
@@ -234,6 +259,13 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       prescription_only: x.prescriptionOnly ?? false,
       controlled: x.controlled ?? false,
       packs: x.packs && x.packs.length ? x.packs.map((p) => ({ name: p.name, factor: p.factor })) : null,
+      modifiers: x.modifiers && x.modifiers.length
+        ? x.modifiers.map((m) => ({ id: m.id, name: m.name, priceDelta: m.priceDelta }))
+        : null,
+      variants: x.variants && x.variants.length
+        ? x.variants.map((m) => ({ id: m.id, name: m.name, priceDelta: m.priceDelta }))
+        : null,
+      unavailable_until: x.unavailableUntil || null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -312,6 +344,52 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
     return;
   }
 
+  if (table === "recipes") {
+    const x = s.recipes.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    let productId = map.products[x.productId];
+    if (!productId && revFrom(map.products)[x.productId]) productId = x.productId;
+    if (!productId && s.products.some((p) => p.id === x.productId)) {
+      // The menu item exists here but has never been pushed — push it first so
+      // the recipe can point at it.
+      await pushLocalRow("products", x.productId);
+      map = readMap();
+      productId = map.products[x.productId];
+    }
+    if (!productId) return;
+    await put(table, {
+      ...(map.recipes[x.id] ? { id: map.recipes[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      product_id: productId,
+      lines: x.lines.map((l) => ({
+        ingredientProductId: l.ingredientProductId,
+        qty: l.qty,
+        ...(l.wastePct === undefined ? {} : { wastePct: l.wastePct }),
+      })),
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "restaurant_tables") {
+    const x = s.tables.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    await put(table, {
+      ...(map.restaurant_tables[x.id] ? { id: map.restaurant_tables[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      name: x.name,
+      seats: x.seats,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
   if (table === "stock_moves") {
     const x = s.stockMoves.find((i) => i.id === localId);
     if (!x) throw new Error("row deleted locally");
@@ -375,6 +453,9 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       pay_status: x.payStatus,
       completed_at: iso(x.completedAt ?? null),
       note: x.note ?? "",
+      order_type: x.orderType ?? null,
+      table_id: x.tableId ?? null,
+      ticket_status: x.ticketStatus ?? null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -415,6 +496,16 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         pack_name: it.packName ?? null,
         prescription_ref: it.prescriptionRef ?? null,
         base_qty: it.baseQty ?? null,
+        modifier_ids: it.modifierIds && it.modifierIds.length ? it.modifierIds : null,
+        modifier_names: it.modifierNames && it.modifierNames.length ? it.modifierNames : null,
+        variant_id: it.variantId ?? null,
+        variant_name: it.variantName ?? null,
+        recipe_consumption: it.recipeConsumption && it.recipeConsumption.length
+          ? it.recipeConsumption.map((c) => ({
+              productId: map.products[c.productId] ?? (revProductIds[c.productId] ? c.productId : c.productId),
+              qty: c.qty,
+            }))
+          : null,
         updated_at: upd,
         deleted_at: null,
       });
@@ -457,6 +548,29 @@ function packsLocal(v: unknown): Pack[] | undefined {
 }
 
 /** Batch allocations arrive as jsonb and name remote batch rows. */
+/** a jsonb array of strings */
+function strListLocal(v: unknown): string[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.filter((x): x is string => typeof x === "string");
+  return out.length > 0 ? out : undefined;
+}
+
+/** the ingredients an order line took: [{ productId, qty }] */
+function consumptionLocal(
+  v: unknown,
+  revProd: Record<string, string>,
+): { productId: string; qty: number }[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v
+    .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+    .map((c) => {
+      const pid = String(c.productId ?? "");
+      return { productId: revProd[pid] ?? pid, qty: n(c.qty) };
+    })
+    .filter((c) => c.productId !== "");
+  return out.length > 0 ? out : undefined;
+}
+
 function allocLocal(v: unknown, revBatch: Record<string, string>): BatchAllocation[] | undefined {
   if (!Array.isArray(v)) return undefined;
   const out: BatchAllocation[] = [];
@@ -499,9 +613,26 @@ function prodLocal(r: RemoteRow, rev: Record<string, string>): Product {
     prescriptionOnly: typeof r.prescription_only === "boolean" ? r.prescription_only : undefined,
     controlled: typeof r.controlled === "boolean" ? r.controlled : undefined,
     packs: packsLocal(r.packs),
+    modifiers: modifiersLocal(r.modifiers),
+    variants: modifiersLocal(r.variants),
+    unavailableUntil: typeof r.unavailable_until === "string" ? r.unavailable_until : undefined,
     createdAt: ms(r.created_at) ?? Date.now(),
     updatedAt: ms(r.updated_at) ?? 0,
   };
+}
+
+/** modifiers and variants share one shape: [{ id, name, priceDelta }] */
+function modifiersLocal(raw: unknown): { id: string; name: string; priceDelta: number }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((m): m is Record<string, unknown> => typeof m === "object" && m !== null)
+    .map((m) => ({
+      id: String(m.id ?? ""),
+      name: String(m.name ?? ""),
+      priceDelta: n(m.priceDelta),
+    }))
+    .filter((m) => m.id !== "" && m.name !== "");
+  return out.length > 0 ? out : undefined;
 }
 
 function batchLocal(r: RemoteRow, revProd: Record<string, string>): Batch {
@@ -514,6 +645,37 @@ function batchLocal(r: RemoteRow, revProd: Record<string, string>): Batch {
     expiry: typeof r.expiry === "string" ? r.expiry : "",
     qty: n(r.qty),
     cost: n(r.cost),
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
+function recipeLocal(r: RemoteRow, revProd: Record<string, string>): Recipe {
+  const raw = Array.isArray(r.lines) ? (r.lines as unknown[]) : [];
+  const lines = raw
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l) => ({
+      ingredientProductId: String(l.ingredientProductId ?? ""),
+      qty: n(l.qty),
+      ...(l.wastePct === undefined || l.wastePct === null ? {} : { wastePct: n(l.wastePct) }),
+    }))
+    .filter((l) => l.ingredientProductId !== "");
+  return {
+    id: String(r.local_id ?? ""),
+    // A menu item that is not known here yet keeps its server uuid; the pull
+    // repairs it once the product arrives.
+    productId: typeof r.product_id === "string" ? revProd[r.product_id] ?? r.product_id : "",
+    lines,
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
+function tableLocal(r: RemoteRow): RestaurantTable {
+  return {
+    id: String(r.local_id ?? ""),
+    name: String(r.name ?? ""),
+    seats: n(r.seats, 4),
     createdAt: ms(r.created_at) ?? Date.now(),
     updatedAt: ms(r.updated_at) ?? 0,
   };
@@ -553,6 +715,11 @@ function ordLocal(r: RemoteRow, map: IdMap, items: Order["items"]): Order {
     createdAt: ms(r.created_at) ?? Date.now(),
     completedAt: ms(r.completed_at),
     note: typeof r.note === "string" ? r.note : "",
+    orderType: typeof r.order_type === "string" && r.order_type ? r.order_type : undefined,
+    tableId: typeof r.table_id === "string" && r.table_id ? r.table_id : undefined,
+    ticketStatus: (["queued", "preparing", "ready", "served"].includes(String(r.ticket_status))
+      ? r.ticket_status
+      : undefined) as Order["ticketStatus"],
   };
 }
 
@@ -591,7 +758,21 @@ function carryPharmacy(pulled: Product, prev: Product | undefined): Product {
   if (next.prescriptionOnly === undefined && prev.prescriptionOnly !== undefined) next.prescriptionOnly = prev.prescriptionOnly;
   if (next.controlled === undefined && prev.controlled !== undefined) next.controlled = prev.controlled;
   if (next.packs === undefined && prev.packs !== undefined) next.packs = prev.packs;
-  if (next.prescriptionOnly === pulled.prescriptionOnly && next.controlled === pulled.controlled && next.packs === pulled.packs) return pulled;
+  if (next.modifiers === undefined && prev.modifiers !== undefined) next.modifiers = prev.modifiers;
+  if (next.variants === undefined && prev.variants !== undefined) next.variants = prev.variants;
+  if (next.unavailableUntil === undefined && prev.unavailableUntil !== undefined) {
+    next.unavailableUntil = prev.unavailableUntil;
+  }
+  if (
+    next.prescriptionOnly === pulled.prescriptionOnly &&
+    next.controlled === pulled.controlled &&
+    next.packs === pulled.packs &&
+    next.modifiers === pulled.modifiers &&
+    next.variants === pulled.variants &&
+    next.unavailableUntil === pulled.unavailableUntil
+  ) {
+    return pulled;
+  }
   return next;
 }
 
@@ -637,6 +818,8 @@ function localStamp(table: Table, row: Record<string, unknown>): number {
   switch (table) {
     case "products": return n(row.updatedAt);
     case "product_batches": return n(row.updatedAt);
+    case "recipes": return n(row.updatedAt);
+    case "restaurant_tables": return n(row.updatedAt);
     case "customers": return n(row.createdAt);
     case "orders": return n((row.completedAt as number | null) ?? row.createdAt);
     case "stock_moves": return n(row.t);
@@ -649,6 +832,8 @@ function remoteStamp(table: Table, r: RemoteRow): number {
   switch (table) {
     case "products": return ms(r.updated_at) ?? 0;
     case "product_batches": return ms(r.updated_at) ?? 0;
+    case "recipes": return ms(r.updated_at) ?? 0;
+    case "restaurant_tables": return ms(r.updated_at) ?? 0;
     case "customers": return ms(r.created_at) ?? 0;
     case "orders": return ms(r.completed_at) ?? ms(r.created_at) ?? 0;
     case "stock_moves": return ms(r.occurred_at) ?? ms(r.created_at) ?? 0;
@@ -729,6 +914,11 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         packName: typeof r.pack_name === "string" && r.pack_name ? r.pack_name : undefined,
         prescriptionRef: typeof r.prescription_ref === "string" && r.prescription_ref ? r.prescription_ref : undefined,
         baseQty: r.base_qty === null || r.base_qty === undefined ? undefined : n(r.base_qty),
+        modifierIds: strListLocal(r.modifier_ids),
+        modifierNames: strListLocal(r.modifier_names),
+        variantId: typeof r.variant_id === "string" && r.variant_id ? r.variant_id : undefined,
+        variantName: typeof r.variant_name === "string" && r.variant_name ? r.variant_name : undefined,
+        recipeConsumption: consumptionLocal(r.recipe_consumption, revProd),
       });
       itemsByOrder.set(orderLocal, list);
     }
@@ -780,6 +970,23 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         }) as unknown as Product[],
         batches,
       );
+      const recipes = mergeLocal(
+        "recipes",
+        s.recipes as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.recipes ?? []).map((r) => recipeLocal(r, revProd)) as unknown as (Record<string, unknown> & { id: string })[],
+      ).map((r) => {
+        // A recipe that arrived before its menu item kept the server uuid; the
+        // product is known now, so the recipe can name it.
+        const row = r as unknown as Recipe;
+        const mapped = revProd[row.productId];
+        if (!mapped || mapped === row.productId) return r;
+        return ({ ...row, productId: mapped } as unknown as typeof r);
+      }) as unknown as Recipe[];
+      const tables = mergeLocal(
+        "restaurant_tables",
+        s.tables as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.restaurant_tables ?? []).map(tableLocal) as unknown as (Record<string, unknown> & { id: string })[],
+      ) as unknown as RestaurantTable[];
       const prodIds = new Set(products.map((x) => x.id));
       const prevCustomers = new Map(s.customers.map((x) => [x.id, x]));
       const customers = mergeLocal(
@@ -831,7 +1038,18 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         s.staff as unknown as (Record<string, unknown> & { id: string })[],
         (rows.staff ?? []).map(staffLocal) as unknown as (Record<string, unknown> & { id: string })[],
       );
-      return { ...s, categories, products, customers, orders, stockMoves, staff, batches } as unknown as typeof s;
+      return {
+        ...s,
+        categories,
+        products,
+        customers,
+        orders,
+        stockMoves,
+        staff,
+        batches,
+        recipes,
+        tables,
+      } as unknown as typeof s;
     });
 
     // Warm the local cache for portable images in the background so other
@@ -911,6 +1129,25 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
           const batches = putAt(s.batches, local);
           return { ...s, batches, products: deriveStock(s.products, batches) } as unknown as typeof s;
         }
+        case "recipes": {
+          const local = recipeLocal(row, revProd);
+          const cur = s.recipes.find((x) => x.id === local.id);
+          if (cur && cur.updatedAt >= local.updatedAt) return s;
+          const recipes = putAt(s.recipes, local);
+          // A recipe that arrived before its menu item kept the server uuid.
+          const mapped = revProd[local.productId];
+          const fixed =
+            mapped && mapped !== local.productId
+              ? recipes.map((r) => (r.id === local.id ? { ...r, productId: mapped } : r))
+              : recipes;
+          return { ...s, recipes: fixed } as unknown as typeof s;
+        }
+        case "restaurant_tables": {
+          const local = tableLocal(row);
+          const cur = s.tables.find((x) => x.id === local.id);
+          if (cur && cur.updatedAt >= local.updatedAt) return s;
+          return { ...s, tables: putAt(s.tables, local) } as unknown as typeof s;
+        }
         case "customers": {
           const local = custLocal(row);
           const cur = s.customers.find((x) => x.id === local.id);
@@ -969,7 +1206,7 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
     s.orders.map(
       (x): [string, string] => [
         x.id,
-        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price},${i.packName ?? ""},${i.prescriptionRef ?? ""},${i.baseQty ?? ""},${JSON.stringify(i.batchAllocations ?? [])}`))}`,
+        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${x.orderType ?? ""}|${x.tableId ?? ""}|${x.ticketStatus ?? ""}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price},${i.packName ?? ""},${i.prescriptionRef ?? ""},${i.baseQty ?? ""},${i.variantId ?? ""},${(i.modifierIds ?? []).join("+")},${JSON.stringify(i.batchAllocations ?? [])}`))}`,
       ],
     ),
   );
@@ -980,6 +1217,19 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
     s.staff.map((x): [string, string] => [x.id, `${x.name}|${x.role}|${x.phone ?? ""}|${x.photoId ?? ""}|${x.active}`]),
   );
   set("product_batches", s.batches.map((x): [string, string] => [x.id, `${x.batchNo}|${x.expiry}|${x.qty}|${x.cost}`]));
+  set(
+    "recipes",
+    s.recipes.map(
+      (x): [string, string] => [
+        x.id,
+        `${x.productId}|${JSON.stringify(x.lines.map((l) => [l.ingredientProductId, l.qty, l.wastePct ?? 0]))}`,
+      ],
+    ),
+  );
+  set(
+    "restaurant_tables",
+    s.tables.map((x): [string, string] => [x.id, `${x.name}|${x.seats}`]),
+  );
   return fp;
 }
 
@@ -1053,6 +1303,10 @@ export async function armSync(conn: SyncConnection) {
         ...s.categories.map((x) => ["categories", x.id] as [Table, string]),
         ...s.products.map((x) => ["products", x.id] as [Table, string]),
         ...s.batches.map((x) => ["product_batches", x.id] as [Table, string]),
+    ...s.recipes.map((x) => ["recipes", x.id] as [Table, string]),
+    ...s.tables.map((x) => ["restaurant_tables", x.id] as [Table, string]),
+        ...s.recipes.map((x) => ["recipes", x.id] as [Table, string]),
+        ...s.tables.map((x) => ["restaurant_tables", x.id] as [Table, string]),
         ...s.customers.map((x) => ["customers", x.id] as [Table, string]),
         ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
         ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
@@ -1134,7 +1388,7 @@ export async function armSync(conn: SyncConnection) {
       const next = fingerprint(s);
       void (async () => {
         const { enqueue } = await import("./outbox");
-        for (const t of ["categories", "products", "product_batches", "customers", "orders", "stock_moves", "staff"] as Table[]) {
+        for (const t of ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "stock_moves", "staff"] as Table[]) {
           const before = prev.get(t)!;
           const after = next.get(t)!;
           for (const [id, fp] of after) {

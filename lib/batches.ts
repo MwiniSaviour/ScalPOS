@@ -8,12 +8,23 @@ import type { Batch, BatchAllocation, CartLine, OrderItem, Product } from "./typ
  */
 
 /**
- * Cart line identity. A base-unit line is keyed by product id; a pack line is
- * keyed by product id + pack index so the same product can sit in the cart
- * once per pack size.
+ * Cart line identity.
+ *
+ * A base-unit line is keyed by product id; a pack line by product id + pack
+ * index; a restaurant line by product id + variant + the chosen modifiers. Two
+ * lines of the same dish with different options are different lines.
  */
-export function cartLineKey(l: { productId: string; packIdx?: number }): string {
-  return l.packIdx === undefined ? l.productId : `${l.productId}#${l.packIdx}`;
+export function cartLineKey(l: {
+  productId: string;
+  packIdx?: number;
+  variantId?: string;
+  modifierIds?: string[];
+}): string {
+  const parts = [l.productId];
+  if (l.packIdx !== undefined) parts.push(String(l.packIdx));
+  if (l.variantId) parts.push(l.variantId);
+  if (l.modifierIds && l.modifierIds.length) parts.push([...l.modifierIds].sort().join("+"));
+  return parts.join("#");
 }
 
 /** How many base units one sold unit of this line consumes. */
@@ -157,8 +168,10 @@ export function planSale(
   cart: CartLine[],
   products: Product[],
   batches: Batch[],
-  now: number = Date.now(),
+  opts: { now?: number; recipes?: { productId: string }[] } = {},
 ): SalePlan {
+  const now = opts.now ?? Date.now();
+  const recipeProducts = new Set((opts.recipes ?? []).map((r) => r.productId));
   const lines: CartLinePlan[] = [];
   const batchDraw = new Map<string, number>();
   const productSold = new Map<string, number>();
@@ -182,7 +195,9 @@ export function planSale(
       for (const a of allocations) {
         batchDraw.set(a.batchId, (batchDraw.get(a.batchId) ?? 0) + a.qty);
       }
-    } else {
+    } else if (!recipeProducts.has(p.id)) {
+      // a plated dish does not come off its own shelf — its recipe takes the
+      // ingredients instead
       productSold.set(p.id, (productSold.get(p.id) ?? 0) + baseQty);
     }
     const packName = linePackName(p, l.packIdx);
@@ -219,10 +234,13 @@ export function planRestock(items: OrderItem[]): RestockPlan {
       for (const a of allocations) {
         batchBack.set(a.batchId, (batchBack.get(a.batchId) ?? 0) + a.qty);
       }
-    } else {
-      const qty = i.baseQty ?? i.qty;
-      productBack.set(i.productId, (productBack.get(i.productId) ?? 0) + qty);
+      continue;
     }
+    // a plated dish never came off its own shelf — its ingredients are the
+    // stock that goes back
+    if (i.recipeConsumption && i.recipeConsumption.length) continue;
+    const qty = i.baseQty ?? i.qty;
+    productBack.set(i.productId, (productBack.get(i.productId) ?? 0) + qty);
   }
   return { batchBack, productBack };
 }

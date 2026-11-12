@@ -11,6 +11,8 @@ const DEPS: Record<string, string[]> = {
   categories: [],
   products: ["categories"],
   product_batches: ["products"],
+  recipes: ["products"],
+  restaurant_tables: [],
   customers: [],
   orders: ["customers"],
   order_items: ["orders", "products"],

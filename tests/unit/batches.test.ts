@@ -331,7 +331,7 @@ describe("expired stock is never sold", () => {
   test("a planned sale reports a shortfall instead of selling expired stock", () => {
     const product = mkProduct({ id: "p1", stock: 5 });
     const onlyExpired = [mkBatch({ id: "b-gone", expiry: "2026-10-01", qty: 5 })];
-    const plan = planSale([{ productId: "p1", qty: 3 }], [product], onlyExpired, now);
+    const plan = planSale([{ productId: "p1", qty: 3 }], [product], onlyExpired, { now });
     assert.equal(plan.shortfall, 3);
     assert.equal(plan.lines[0].allocations.length, 0);
   });

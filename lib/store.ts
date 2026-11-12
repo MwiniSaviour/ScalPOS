@@ -13,6 +13,13 @@ import {
   planSale,
   sellableStock,
 } from "./batches";
+import {
+  itemConsumption,
+  mergeTabItems,
+  planRestockIngredients,
+  recipeDelta,
+  recipeDraw,
+} from "./restaurant";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
@@ -29,9 +36,13 @@ import type {
   Payment,
   PaymentMethod,
   Product,
+  Recipe,
+  RecipeLine,
+  RestaurantTable,
   Settings,
   StockMove,
   StockReason,
+  TicketStatus,
 } from "./types";
 
 /* ------------------------------ derived helpers ------------------------------ */
@@ -182,6 +193,8 @@ type PosState = {
   customers: Customer[];
   stockMoves: StockMove[];
   batches: Batch[];
+  recipes: Recipe[];
+  tables: RestaurantTable[];
   staff: Staff[];
   currentStaffId: string | null;
   settings: Settings;
@@ -191,12 +204,32 @@ type PosState = {
   cartDiscount: number;
   draftPayments: CartDraftPayment[];
   toasts: Toast[];
+  /* restaurant — the service context of the cart in progress */
+  cartOrderType: string | null;
+  cartTableId: string | null;
+  cartTabOrderId: string | null;
 
   /* lifecycle */
   rehydrate: () => void;
 
   /* register */
-  addToCart: (productId: string, qty?: number, opts?: { packIdx?: number; price?: number }) => void;
+  addToCart: (
+    productId: string,
+    qty?: number,
+    opts?: {
+      packIdx?: number;
+      price?: number;
+      variantId?: string;
+      variantName?: string;
+      modifierIds?: string[];
+      modifierNames?: string[];
+    },
+  ) => void;
+  setCartContext: (patch: {
+    orderType?: string | null;
+    tableId?: string | null;
+    tabOrderId?: string | null;
+  }) => void;
   setCartQty: (key: string, qty: number) => void;
   clearCart: () => void;
   setCartCustomer: (cid: string | null) => void;
@@ -205,10 +238,19 @@ type PosState = {
   clearDraftPayments: () => void;
 
   /* orders */
-  placeOrder: (payments: Payment[], opts?: { prescriptionRef?: string }) => Order | null;
+  placeOrder: (
+    payments: Payment[],
+    opts?: {
+      prescriptionRef?: string;
+      orderType?: string | null;
+      tableId?: string | null;
+      tabOrderId?: string | null;
+    },
+  ) => Order | null;
   addPaymentsToOrder: (oid: string, payments: Array<{ method: PaymentMethod; amount: number; ref?: string }>) => void;
-  refundOrder: (oid: string, reason?: string) => void;
+  refundOrder: (oid: string, opts?: { skipRestock?: boolean; reason?: string }) => void;
   setPendingToCompleted: (oid: string) => void;
+  setTicketStatus: (oid: string, status: TicketStatus) => void;
 
   /* inventory */
   upsertProduct: (p: Partial<Product> & { name: string; price: number }) => Product;
@@ -220,6 +262,13 @@ type PosState = {
   /* batches (pharmacy) */
   upsertBatch: (b: Partial<Batch> & { productId: string; qty: number }) => Batch;
   deleteBatch: (id: string) => void;
+
+  /* restaurant */
+  upsertTable: (t: Partial<RestaurantTable> & { name: string }) => RestaurantTable;
+  deleteTable: (id: string) => void;
+  seedTables: (count: number) => void;
+  upsertRecipe: (r: Partial<Recipe> & { productId: string; lines: RecipeLine[] }) => Recipe;
+  deleteRecipe: (id: string) => void;
 
   /* customers */
   upsertCustomer: (c: Partial<Customer> & { name: string }) => Customer;
@@ -248,6 +297,8 @@ export const usePos = create<PosState>()(
       customers: [],
       stockMoves: [],
       batches: [],
+      recipes: [],
+      tables: [],
       staff: [],
       currentStaffId: null,
       settings: defaultSettings(),
@@ -257,6 +308,9 @@ export const usePos = create<PosState>()(
       cartDiscount: 0,
       draftPayments: [],
       toasts: [],
+      cartOrderType: null,
+      cartTableId: null,
+      cartTabOrderId: null,
 
       rehydrate: () => {
         const persisted =
@@ -315,6 +369,14 @@ export const usePos = create<PosState>()(
           qty: capped,
           ...(packIdx === undefined ? {} : { packIdx }),
           ...(opts?.price === undefined ? {} : { price: opts.price }),
+          ...(opts?.variantId ? { variantId: opts.variantId } : {}),
+          ...(opts?.variantName ? { variantName: opts.variantName } : {}),
+          ...(opts?.modifierIds && opts.modifierIds.length
+            ? { modifierIds: opts.modifierIds }
+            : {}),
+          ...(opts?.modifierNames && opts.modifierNames.length
+            ? { modifierNames: opts.modifierNames }
+            : {}),
         };
         if (i >= 0) cart[i] = { ...cart[i], ...line };
         else cart.push(line);
@@ -339,7 +401,25 @@ export const usePos = create<PosState>()(
       },
 
       clearCart: () =>
-        set({ cart: [], cartDiscount: 0, cartCustomerId: null, draftPayments: [], cartUpdatedAt: 0 }),
+        set({
+          cart: [],
+          cartDiscount: 0,
+          cartCustomerId: null,
+          draftPayments: [],
+          cartUpdatedAt: 0,
+          cartOrderType: null,
+          cartTableId: null,
+          cartTabOrderId: null,
+        }),
+
+      setCartContext: (patch) => {
+        set({
+          ...(patch.orderType !== undefined ? { cartOrderType: patch.orderType } : {}),
+          ...(patch.tableId !== undefined ? { cartTableId: patch.tableId } : {}),
+          ...(patch.tabOrderId !== undefined ? { cartTabOrderId: patch.tabOrderId } : {}),
+          cartUpdatedAt: Date.now(),
+        });
+      },
 
       setCartCustomer: (cid) => set({ cartCustomerId: cid, cartUpdatedAt: Date.now() }),
 
@@ -353,16 +433,20 @@ export const usePos = create<PosState>()(
         if (s.cart.length === 0) return null;
         const now = Date.now();
         const rxRef = opts?.prescriptionRef?.trim();
+        const orderType = opts?.orderType ?? s.cartOrderType ?? null;
+        const tableId = opts?.tableId ?? s.cartTableId ?? null;
+        const tabId = opts?.tabOrderId ?? s.cartTabOrderId ?? null;
+        const tab = tabId ? s.orders.find((o) => o.id === tabId && o.status === "pending") : undefined;
 
         // Work out the lines and the batch allocations (FEFO) up front.
-        const plan = planSale(s.cart, s.products, s.batches, now);
+        const plan = planSale(s.cart, s.products, s.batches, { now, recipes: s.recipes });
         if (plan.lines.length === 0) return null;
         if (plan.shortfall > 0) {
           get().toast(`Not enough stock for ${plan.shortageProduct ?? "an item"}`, "error");
           return null;
         }
 
-        const items: OrderItem[] = plan.lines.map((pl) => ({
+        const cartItems: OrderItem[] = plan.lines.map((pl) => ({
           productId: pl.product.id,
           name: pl.product.name,
           imageUrl: pl.product.imageUrl,
@@ -372,8 +456,31 @@ export const usePos = create<PosState>()(
           baseQty: pl.baseQty,
           ...(pl.allocations.length > 0 ? { batchAllocations: pl.allocations } : {}),
           ...(pl.packName ? { packName: pl.packName } : {}),
+          ...(pl.line.variantId ? { variantId: pl.line.variantId } : {}),
+          ...(pl.line.variantName ? { variantName: pl.line.variantName } : {}),
+          ...(pl.line.modifierIds && pl.line.modifierIds.length
+            ? { modifierIds: pl.line.modifierIds }
+            : {}),
+          ...(pl.line.modifierNames && pl.line.modifierNames.length
+            ? { modifierNames: pl.line.modifierNames }
+            : {}),
           ...(rxRef && pl.product.prescriptionOnly ? { prescriptionRef: rxRef } : {}),
+          ...(itemConsumption({ productId: pl.product.id, qty: pl.line.qty }, s.recipes).length
+            ? {
+                recipeConsumption: itemConsumption(
+                  { productId: pl.product.id, qty: pl.line.qty },
+                  s.recipes,
+                ),
+              }
+            : {}),
         }));
+
+        // An open tab keeps the items it already had; the cart only carries
+        // the difference.
+        const items: OrderItem[] = tab
+          ? mergeTabItems(tab.items, s.cart, s.products, s.recipes)
+          : cartItems;
+        if (items.length === 0) return null;
 
         const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
         const net = Math.max(0, subtotal - s.cartDiscount);
@@ -384,18 +491,21 @@ export const usePos = create<PosState>()(
         const credit = Math.max(0, total - paid);
         const status = credit > 0 ? "pending" : "completed";
         const order: Order = {
-          id: orderId(s.settings.nextOrderNo, now),
+          id: tab ? tab.id : orderId(s.settings.nextOrderNo, now),
           items,
-          customerId: s.cartCustomerId,
+          customerId: s.cartCustomerId ?? tab?.customerId ?? null,
           subtotal,
           discount: s.cartDiscount,
           total,
           tax,
           status,
-          payments,
+          payments: tab ? [...tab.payments, ...payments] : payments,
           payStatus: credit > 0 ? (paid > 0 ? "partial" : "unpaid") : "paid",
-          createdAt: now,
+          createdAt: tab ? tab.createdAt : now,
           completedAt: credit > 0 ? null : now,
+          ...(orderType ? { orderType } : {}),
+          ...(tableId ? { tableId } : {}),
+          ...(tab ? { ticketStatus: "queued" as const } : { ticketStatus: "queued" as const }),
         };
 
         // stock moves: one per order line, split per batch when the line was
@@ -426,6 +536,23 @@ export const usePos = create<PosState>()(
           }
         }
 
+        // Ingredients come off the shelf for every plated dish. On a tab only
+        // the change is drawn — the earlier items were already taken.
+        const draw = tab
+          ? recipeDelta(tab.items, items, s.recipes)
+          : recipeDraw(items, s.recipes);
+        for (const [ingredientId, qty] of draw) {
+          if (Math.abs(qty) < 1e-9) continue;
+          moves.push({
+            id: id("mv_"),
+            productId: ingredientId,
+            qty: -qty,
+            reason: qty > 0 ? "sale" : "return",
+            ref: order.id,
+            t: now,
+          });
+        }
+
         const batches = s.batches.map((b) => {
           const used = plan.batchDraw.get(b.id);
           return used ? { ...b, qty: b.qty - used, updatedAt: now } : b;
@@ -437,6 +564,11 @@ export const usePos = create<PosState>()(
             const derived = batchStock(batches, p.id);
             return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
           }
+          const ingredient = draw.get(p.id) ?? 0;
+          if (ingredient !== 0) {
+            const next = Math.max(0, p.stock - ingredient);
+            return next === p.stock ? p : { ...p, stock: next, updatedAt: now };
+          }
           const sold = plan.productSold.get(p.id) ?? 0;
           return sold > 0 ? { ...p, stock: Math.max(0, p.stock - sold), updatedAt: now } : p;
         });
@@ -444,16 +576,21 @@ export const usePos = create<PosState>()(
         const orderNo = s.settings.nextOrderNo + 1;
 
         set({
-          orders: [order, ...s.orders],
+          orders: tab
+            ? s.orders.map((o) => (o.id === order.id ? order : o))
+            : [order, ...s.orders],
           products,
           batches,
           stockMoves: [...moves, ...s.stockMoves],
-          settings: { ...s.settings, nextOrderNo: orderNo },
+          settings: tab ? s.settings : { ...s.settings, nextOrderNo: orderNo },
           cart: [],
           cartCustomerId: null,
           cartDiscount: 0,
           cartUpdatedAt: 0,
           draftPayments: [],
+          cartOrderType: null,
+          cartTableId: null,
+          cartTabOrderId: null,
         });
 
         fireLowStockAlerts(s.products, products);
@@ -492,12 +629,19 @@ export const usePos = create<PosState>()(
         if (nextPay === "paid" && prevPay !== "paid") get().toast("Fully paid", "ok");
       },
 
-      refundOrder: (oid) => {
+      refundOrder: (oid, opts) => {
         const s = get();
         const order = s.orders.find((o) => o.id === oid);
         if (!order || order.status === "refunded") return;
         const now = Date.now();
-        const plan = planRestock(order.items);
+        // a restaurant refund can leave the food off the shelf for good
+        const skipRestock = opts?.skipRestock === true;
+        const plan = skipRestock
+          ? { batchBack: new Map<string, number>(), productBack: new Map<string, number>() }
+          : planRestock(order.items);
+        const ingredients = skipRestock
+          ? new Map<string, number>()
+          : planRestockIngredients(order.items);
         const moves: StockMove[] = [];
         for (const i of order.items) {
           const allocations = i.batchAllocations ?? [];
@@ -526,6 +670,16 @@ export const usePos = create<PosState>()(
             });
           }
         }
+        for (const [ingredientId, qty] of ingredients) {
+          moves.push({
+            id: id("mv_"),
+            productId: ingredientId,
+            qty,
+            reason: "return",
+            ref: order.id,
+            t: now,
+          });
+        }
         const batches = s.batches.map((b) => {
           const back = plan.batchBack.get(b.id);
           return back ? { ...b, qty: b.qty + back, updatedAt: now } : b;
@@ -536,7 +690,7 @@ export const usePos = create<PosState>()(
             const derived = batchStock(batches, p.id);
             return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
           }
-          const back = plan.productBack.get(p.id) ?? 0;
+          const back = (plan.productBack.get(p.id) ?? 0) + (ingredients.get(p.id) ?? 0);
           return back > 0 ? { ...p, stock: p.stock + back, updatedAt: now } : p;
         });
         const orders = s.orders.map((o) =>
@@ -785,6 +939,93 @@ export const usePos = create<PosState>()(
         get().toast("Batch deleted", "ok");
       },
 
+      /* ---------------- restaurant ---------------- */
+
+      upsertTable: (patch) => {
+        const s = get();
+        const now = Date.now();
+        const existing = patch.id ? s.tables.find((t) => t.id === patch.id) : undefined;
+        const saved: RestaurantTable = existing
+          ? { ...existing, ...patch, updatedAt: now }
+          : {
+              id: patch.id ?? id("t_"),
+              name: patch.name,
+              seats: patch.seats ?? 4,
+              createdAt: now,
+              updatedAt: now,
+            };
+        set({
+          tables: existing
+            ? s.tables.map((t) => (t.id === saved.id ? saved : t))
+            : [saved, ...s.tables],
+        });
+        return saved;
+      },
+
+      deleteTable: (tid) => {
+        const s = get();
+        set({
+          tables: s.tables.filter((t) => t.id !== tid),
+          // a cart bound to a table that no longer exists loses its table
+          cartTableId: s.cartTableId === tid ? null : s.cartTableId,
+        });
+      },
+
+      seedTables: (count) => {
+        const s = get();
+        const n = Math.max(0, Math.floor(count));
+        const have = s.tables.length;
+        if (have >= n) return;
+        const now = Date.now();
+        const added: RestaurantTable[] = [];
+        for (let i = have + 1; i <= n; i++) {
+          added.push({
+            id: id("t_"),
+            name: `Table ${i}`,
+            seats: 4,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+        set({ tables: [...s.tables, ...added] });
+      },
+
+      upsertRecipe: (patch) => {
+        const s = get();
+        const now = Date.now();
+        // one recipe per menu item — an edit replaces the item's recipe
+        const existing =
+          s.recipes.find((r) => r.id === patch.id) ??
+          s.recipes.find((r) => r.productId === patch.productId);
+        const saved: Recipe = existing
+          ? { ...existing, ...patch, updatedAt: now }
+          : {
+              id: patch.id ?? id("r_"),
+              productId: patch.productId,
+              lines: patch.lines,
+              createdAt: now,
+              updatedAt: now,
+            };
+        set({
+          recipes: existing
+            ? s.recipes.map((r) => (r.id === saved.id ? saved : r))
+            : [saved, ...s.recipes],
+        });
+        return saved;
+      },
+
+      deleteRecipe: (rid) => {
+        const s = get();
+        set({ recipes: s.recipes.filter((r) => r.id !== rid) });
+      },
+
+      setTicketStatus: (oid, status) => {
+        const s = get();
+        set({
+          orders: s.orders.map((o) => (o.id === oid ? { ...o, ticketStatus: status } : o)),
+        });
+      },
+
       upsertCustomer: (patch) => {
         const s = get();
         const existing = patch.id ? s.customers.find((c) => c.id === patch.id) : undefined;
@@ -861,6 +1102,8 @@ export const usePos = create<PosState>()(
         customers: s.customers,
         stockMoves: s.stockMoves,
         batches: s.batches,
+        recipes: s.recipes,
+        tables: s.tables,
         staff: s.staff,
         currentStaffId: s.currentStaffId,
         settings: s.settings,
@@ -869,6 +1112,10 @@ export const usePos = create<PosState>()(
         cartCustomerId: s.cartCustomerId,
         cartDiscount: s.cartDiscount,
         cartUpdatedAt: s.cartUpdatedAt,
+        // the table and service type belong to the sale in progress
+        cartOrderType: s.cartOrderType,
+        cartTableId: s.cartTableId,
+        cartTabOrderId: s.cartTabOrderId,
       }),
       onRehydrateStorage: () => (state) => {
         state?.rehydrate();
