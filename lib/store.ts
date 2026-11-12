@@ -11,6 +11,7 @@ import {
   packFactor,
   planRestock,
   planSale,
+  sellableStock,
 } from "./batches";
 import { id, orderId, startOfDay } from "./format";
 import { pruneImages } from "./image-store";
@@ -298,8 +299,11 @@ export const usePos = create<PosState>()(
         const i = cart.findIndex((l) => cartLineKey(l) === key);
         const factor = packFactor(p, packIdx);
         const want = (i >= 0 ? cart[i].qty : 0) + qty;
-        // stock is held in base units — a pack line can only take whole packs
-        const available = p.stock <= 0 ? 0 : Math.floor(p.stock / factor);
+        // stock is held in base units — a pack line can only take whole packs.
+        // For a batched product only non-expired batches may be sold.
+        const onHand = sellableStock(get().batches, pid);
+        const base = get().batches.some((b) => b.productId === pid) ? onHand : p.stock;
+        const available = base <= 0 ? 0 : Math.floor(base / factor);
         const capped = Math.min(want, available);
         if (capped <= 0) {
           get().toast(p.stock <= 0 ? "Out of stock" : "Not enough stock for a full pack", "error");
@@ -325,7 +329,9 @@ export const usePos = create<PosState>()(
         const line = cart[i];
         const p = s.products.find((x) => x.id === line.productId);
         const factor = packFactor(p, line.packIdx);
-        const available = p && p.stock > 0 ? Math.floor(p.stock / factor) : 0;
+        const onHand = sellableStock(s.batches, line.productId);
+        const base = s.batches.some((b) => b.productId === line.productId) ? onHand : (p?.stock ?? 0);
+        const available = base > 0 ? Math.floor(base / factor) : 0;
         const capped = Math.max(0, Math.min(qty, available));
         if (capped === 0) cart = cart.filter((l) => cartLineKey(l) !== key);
         else cart[i] = { ...line, qty: capped };
@@ -349,7 +355,7 @@ export const usePos = create<PosState>()(
         const rxRef = opts?.prescriptionRef?.trim();
 
         // Work out the lines and the batch allocations (FEFO) up front.
-        const plan = planSale(s.cart, s.products, s.batches);
+        const plan = planSale(s.cart, s.products, s.batches, now);
         if (plan.lines.length === 0) return null;
         if (plan.shortfall > 0) {
           get().toast(`Not enough stock for ${plan.shortageProduct ?? "an item"}`, "error");

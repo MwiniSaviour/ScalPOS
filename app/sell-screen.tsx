@@ -12,6 +12,8 @@ import { Sheet } from "@/components/ui/sheet";
 import { cartLineKey, linePackName, packFactor } from "@/lib/batches";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
+import { sellableStock } from "@/lib/batches";
+import { useNow } from "@/lib/now";
 import { useCartTotals, usePos } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
@@ -42,7 +44,9 @@ export default function SellScreen() {
   const setCartQty = usePos((s) => s.setCartQty);
   const setCartCustomer = usePos((s) => s.setCartCustomer);
   const cart = usePos((s) => s.cart);
+  const batches = usePos((s) => s.batches);
   const totals = useCartTotals();
+  const now = useNow();
 
   const [query, setQuery] = useState("");
   const [catId, setCatId] = useState<string | null>(null);
@@ -74,6 +78,17 @@ export default function SellScreen() {
       (c) => q === "" || c.name.toLowerCase().includes(q) || c.phone.includes(q),
     );
   }, [customers, custQuery]);
+
+  // A batched product can only sell what has not expired — the shelf number
+  // includes expired stock, which must never be offered for sale.
+  const availableById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of products) {
+      const batched = batches.some((b) => b.productId === p.id);
+      m.set(p.id, batched ? sellableStock(batches, p.id, now) : p.stock);
+    }
+    return m;
+  }, [products, batches, now]);
 
   const qtyInCart = useMemo(() => {
     const m = new Map<string, number>();
@@ -150,7 +165,7 @@ export default function SellScreen() {
       .getState()
       .products.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
     if (hit) {
-      if (hit.stock <= 0) {
+      if ((availableById.get(hit.id) ?? hit.stock) <= 0) {
         usePos.getState().toast("Out of stock", "error");
         return;
       }
@@ -238,6 +253,7 @@ export default function SellScreen() {
               {filtered.map((p) => (
                 <ProductTile
                   key={p.id}
+                  available={availableById.get(p.id) ?? p.stock}
                   p={p}
                   qty={qtyInCart.get(p.id) ?? 0}
                   flash={flash === p.id}
@@ -295,7 +311,10 @@ export default function SellScreen() {
           {totals.lines.map((l) => {
             const key = cartLineKey(l);
             const packName = linePackName(l.product, l.packIdx);
-            const max = Math.floor(l.product.stock / packFactor(l.product, l.packIdx));
+            const max = Math.floor(
+              (availableById.get(l.product.id) ?? l.product.stock) /
+                packFactor(l.product, l.packIdx),
+            );
             return (
               <div key={key} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
                 <ProductArt
@@ -437,6 +456,9 @@ export default function SellScreen() {
         height="auto"
       >
         {packFor && (
+          (() => {
+            const packAvailable = availableById.get(packFor.id) ?? packFor.stock;
+            return (
           <Card inset>
             <div className="flex items-center gap-3 px-4 py-3.5">
               <span className="min-w-0 flex-1">
@@ -449,7 +471,7 @@ export default function SellScreen() {
               </span>
               <Button
                 size="sm"
-                disabled={packFor.stock <= 0}
+                disabled={(packAvailable ?? 0) <= 0}
                 onClick={() => addBaseUnit(packFor.id)}
               >
                 Add
@@ -457,7 +479,7 @@ export default function SellScreen() {
             </div>
             {packFor.packs?.map((pack, i) => {
               const factor = packFactor(packFor, i);
-              const packsLeft = Math.floor(packFor.stock / factor);
+              const packsLeft = Math.floor((packAvailable ?? 0) / factor);
               return (
                 <div key={`${i}-${pack.name}`} className="px-4 py-3.5">
                   <div className="flex items-baseline justify-between gap-3">
@@ -508,6 +530,8 @@ export default function SellScreen() {
               );
             })}
           </Card>
+            );
+          })()
         )}
       </Sheet>
 
@@ -572,19 +596,21 @@ export default function SellScreen() {
 
 function ProductTile({
   p,
+  available,
   qty,
   flash,
   onTap,
   onRemove,
 }: {
   p: Product;
+  available: number;
   qty: number;
   flash: boolean;
   onTap: () => void;
   onRemove: () => void;
 }) {
-  const out = p.stock <= 0;
-  const low = !out && p.stock <= p.lowStockAt;
+  const out = available <= 0;
+  const low = !out && available <= p.lowStockAt;
   const selected = qty > 0;
   return (
     <div
@@ -634,7 +660,7 @@ function ProductTile({
           {out ? (
             <span className="text-[12px] font-medium text-ink3">Out of stock</span>
           ) : low ? (
-            <span className="text-[12px] font-medium text-warn">{p.stock} left</span>
+            <span className="text-[12px] font-medium text-warn">{available} left</span>
           ) : null}
         </span>
       </span>

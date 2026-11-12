@@ -50,19 +50,45 @@ export function batchStock(batches: Batch[], productId: string): number {
 }
 
 /**
+ * Is a batch past its expiry date?
+ *
+ * The expiry date is the last day the batch may be sold, so a batch is
+ * expired only from the day AFTER it. A batch with no expiry never expires.
+ */
+export function isExpired(expiry: string, now: number = Date.now()): boolean {
+  const days = daysToExpiry(expiry, now);
+  return days !== null && days < 0;
+}
+
+/** Stock of a product that may actually be sold (expired batches excluded). */
+export function sellableStock(
+  batches: Batch[],
+  productId: string,
+  now: number = Date.now(),
+): number {
+  return batches
+    .filter((b) => b.productId === productId && !isExpired(b.expiry, now))
+    .reduce((s, b) => s + b.qty, 0);
+}
+
+/**
  * FEFO allocation: take `qty` base units from the earliest-expiring batches
  * that still hold stock.
+ *
+ * Expired batches are skipped — expired medicine must never be dispensed.
  */
 export function feofAllocate(
   batches: Batch[],
   productId: string,
   qty: number,
+  now: number = Date.now(),
 ): { allocations: BatchAllocation[]; taken: number } {
   const allocations: BatchAllocation[] = [];
   let left = Math.max(0, qty);
   for (const b of batchesOf(batches, productId)) {
     if (left <= 0) break;
     if (b.qty <= 0) continue;
+    if (isExpired(b.expiry, now)) continue;
     const take = Math.min(left, b.qty);
     allocations.push({ batchId: b.id, qty: take });
     left -= take;
@@ -131,6 +157,7 @@ export function planSale(
   cart: CartLine[],
   products: Product[],
   batches: Batch[],
+  now: number = Date.now(),
 ): SalePlan {
   const lines: CartLinePlan[] = [];
   const batchDraw = new Map<string, number>();
@@ -146,7 +173,7 @@ export function planSale(
     const isBatched = batches.some((b) => b.productId === p.id);
     let allocations: BatchAllocation[] = [];
     if (isBatched) {
-      const r = feofAllocate(batches, p.id, baseQty);
+      const r = feofAllocate(batches, p.id, baseQty, now);
       allocations = r.allocations;
       if (r.taken < baseQty) {
         shortfall += baseQty - r.taken;

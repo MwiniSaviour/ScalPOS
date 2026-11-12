@@ -7,10 +7,12 @@ import {
   daysToExpiry,
   expiryBucket,
   feofAllocate,
+  isExpired,
   linePackName,
   packFactor,
   planRestock,
   planSale,
+  sellableStock,
 } from "../../lib/batches.ts";
 import type { Batch, CartLine, OrderItem, Product } from "../../lib/types.ts";
 
@@ -286,5 +288,51 @@ describe("restock planning", () => {
       },
     ]);
     assert.equal(plan.productBack.get("p-packs"), 20);
+  });
+});
+
+describe("expired stock is never sold", () => {
+  const now = Date.UTC(2026, 10, 12); // 2026-11-12
+
+  const batches: Batch[] = [
+    mkBatch({ id: "b-gone", expiry: "2026-10-01", qty: 5 }),
+    mkBatch({ id: "b-today", expiry: "2026-11-12", qty: 7 }),
+    mkBatch({ id: "b-soon", expiry: "2026-12-15", qty: 20 }),
+  ];
+
+  test("a batch is expired only from the day after its expiry date", () => {
+    assert.equal(isExpired("2026-10-01", now), true);
+    assert.equal(isExpired("2026-11-12", now), false);
+    assert.equal(isExpired("2026-12-15", now), false);
+    assert.equal(isExpired("", now), false);
+  });
+
+  test("sellable stock excludes expired batches", () => {
+    assert.equal(sellableStock(batches, "p1", now), 27);
+    assert.equal(batchStock(batches, "p1"), 32);
+  });
+
+  test("allocation skips expired batches", () => {
+    const r = feofAllocate(batches, "p1", 10, now);
+    assert.deepEqual(r.allocations, [
+      { batchId: "b-today", qty: 7 },
+      { batchId: "b-soon", qty: 3 },
+    ]);
+    assert.equal(r.taken, 10);
+  });
+
+  test("a sale cannot be covered by expired stock alone", () => {
+    const onlyExpired = [mkBatch({ id: "b-gone", expiry: "2026-10-01", qty: 5 })];
+    const r = feofAllocate(onlyExpired, "p1", 5, now);
+    assert.deepEqual(r.allocations, []);
+    assert.equal(r.taken, 0);
+  });
+
+  test("a planned sale reports a shortfall instead of selling expired stock", () => {
+    const product = mkProduct({ id: "p1", stock: 5 });
+    const onlyExpired = [mkBatch({ id: "b-gone", expiry: "2026-10-01", qty: 5 })];
+    const plan = planSale([{ productId: "p1", qty: 3 }], [product], onlyExpired, now);
+    assert.equal(plan.shortfall, 3);
+    assert.equal(plan.lines[0].allocations.length, 0);
   });
 });
