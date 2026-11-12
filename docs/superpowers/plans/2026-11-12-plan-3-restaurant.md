@@ -50,9 +50,14 @@ printer integration; no multi-kitchen routing; no salon/pharmacy features.
   label + ticket number.
 - `lib/staff.ts` — staff roster exists (moved into synced store in Plan 1
   T7); server columns already exist via `0013` (`staff_local_id` groundwork).
-- `lib/features.ts` — restaurant set includes `tables`, `orderTypes`,
-  `kitchen`, `modifiers`, `recipes`; foodVendor = `orderTypes`+`kitchen`+
-  `modifiers` only (no `tables`). `hasFeature()` currently unused by screens.
+- `lib/features.ts` — the Feature union is kebab-case; the restaurant set is
+  `tables`, `order-types`, `kitchen`, `modifiers`, `recipes`,
+  `daily-availability`. **`modifiers` did not exist in the union** (the spec
+  §3 has it, Plan 1's union did not) — Plan 3 T1 adds it, to the union and to
+  the restaurant set, in `lib/features.ts` AND
+  `apps/desktop/src/lib/features.ts`. `hasFeature(bt, f)` takes **two**
+  arguments: `hasFeature(settings.businessType, "tables")`.
+  foodVendor = `order-types` + `kitchen` + `modifiers` only (no `tables`).
 - `app/stock-screen.tsx` `REASON_LABELS` (:22-30) — recipes consume with
   reason `sale` (existing), no new reason needed.
 - Sync registration checklist (`lib/sync/engine.ts`): `TABLES` (:35),
@@ -73,6 +78,9 @@ printer integration; no multi-kitchen routing; no salon/pharmacy features.
 
 ## Modeling decisions (fixed before tasks)
 
+- **`restaurantConfig`** (Plan 3 T1): `Settings.restaurantConfig?: { tables:
+  boolean; orderTypes: string[] }`. It did not exist before this plan — the
+  business type alone never carried the restaurant setup.
 - **Order types**: `orderType` is chosen once per cart on the sell screen
   (segmented strip, default = first configured type) and stamped on the Order
   at `placeOrder`. `restaurantConfig.orderTypes` lists the enabled ones.
@@ -112,11 +120,29 @@ printer integration; no multi-kitchen routing; no salon/pharmacy features.
   `restaurantConfig = { tables:false, orderTypes:["takeaway"] }`. Same feature
   flags minus `tables`; sell screen hides the table picker; kitchen board
   shows a running order-number column; daily menu toggle: per-item
-  `unavailableUntil` date stamp on Product (set from product edit/kitchen,
-  resets to available every morning because `placeOrder`/grid reads compare
-  `unavailableUntil` against today's start-of-day).
+  `unavailableUntil` date stamp on Product (set from product edit/kitchen).
+  `unavailableUntil` is the **last day** the item is off the menu, so marking
+  it off for today clears itself the next morning; the sell screen and the
+  kitchen board hide an unavailable item (they compare it against today's
+  start of day).
 - **Order numbers**: existing `nextNo` order id numbering is the ticket
   number; no separate counter.
+- **Open tab merge** (Plan 3 T1): the tab's items stay on the tab; the cart
+  carries the difference. A cart line that matches a tab line (same product,
+  variant and modifiers) changes that line by the delta — so lowering the
+  quantity on screen lowers it on the tab. A line that is not on the tab yet
+  is appended. `mergeTabItems()` in `lib/restaurant.ts` does this.
+- **Recipe consumption** is recorded per order line in
+  `OrderItem.recipeConsumption` so a refund credits exactly what the sale
+  took — a recipe edited after the sale cannot distort the credit. A plated
+  dish never comes off its own shelf; its ingredients do.
+- **Refund with `skipRestock`** (Plan 3 T1): `refundOrder(oid, { skipRestock:
+  true })` returns **no** stock at all — prices only. That is the honest
+  behaviour for a restaurant: the dish was cooked and the drink was poured.
+  The toggle only appears for orders that contain recipe items.
+- **New module `lib/restaurant.ts`**: the pure restaurant maths — option
+  matching, recipe draw and delta, tab merge, ingredient restock, daily
+  availability. Unit tested in `tests/unit/restaurant.test.ts`.
 
 ## Task 1 — Data core (types, migration 0015, store actions)
 
@@ -134,9 +160,11 @@ Files: `lib/types.ts`, `lib/store.ts`,
    option, recipe consumption in `placeOrder` per decision,
    open-tab update path (appending to a pending tabbed order instead of
    creating a new one — keyed on the loaded tab).
-3. `partialize` includes `recipes` and `tables`; cart gains transient
-   `cartOrderType`/`cartTableId` (cleared on `clearCart`, NOT persisted to
-   backup—session state only).
+3. `partialize` includes `recipes` and `tables`; the cart gains
+   `cartOrderType`/`cartTableId`/`cartTabOrderId` (cleared on `clearCart`).
+   **They ARE persisted with the cart** (deviation from the plan text): an
+   in-progress sale must survive a reload, and a table binding lost to a
+   reload would put a customer's order on the wrong table.
 4. Migration `0015_restaurant.sql`: `restaurant_tables` (id uuid, shop_id,
    name, seats int, timestamps) + RLS (`0002_rls.sql:121-129` pattern) +
    realtime (`0003` pattern); `recipes` (id uuid, shop_id, product_id FK,
