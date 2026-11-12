@@ -128,6 +128,7 @@ export interface StockMove {
 }
 
 export interface ShopSettings {
+  business_type: string
   shop_name: string
   address: string | null
   phone: string | null

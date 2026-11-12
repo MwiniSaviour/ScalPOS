@@ -98,6 +98,7 @@ type SaleRow = {
 }
 
 type SettingsRow = {
+  business_type: string | null
   shop_name: string | null
   address: string | null
   phone: string | null
@@ -732,6 +733,7 @@ export async function fetchSettings(): Promise<ShopSettings | null> {
 
 export function mapSettings(row: SettingsRow): ShopSettings {
   return {
+    business_type: row.business_type ?? "retail",
     shop_name: row.shop_name ?? "",
     address: row.address ?? null,
     phone: row.phone ?? null,
