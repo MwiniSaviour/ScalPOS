@@ -719,12 +719,16 @@ export const usePos = create<PosState>()(
           ? s.batches.map((b) => (b.id === saved.id ? saved : b))
           : [saved, ...s.batches];
         // a batched product's stock is derived from its batches
+        const prevStock = s.products.find((p) => p.id === saved.productId)?.stock ?? 0;
+        const derived = batchStock(batches, saved.productId);
         const products = s.products.map((p) => {
           if (p.id !== saved.productId) return p;
-          const derived = batchStock(batches, p.id);
           return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
         });
-        const delta = existing ? saved.qty - existing.qty : saved.qty;
+        // The move records the change in stock, not the change in the batch —
+        // otherwise a product opened with stock and then given its first batch
+        // would count the same units twice.
+        const delta = derived - prevStock;
         const moves: StockMove[] =
           delta !== 0
             ? [
@@ -732,7 +736,7 @@ export const usePos = create<PosState>()(
                   id: id("mv_"),
                   productId: saved.productId,
                   qty: delta,
-                  reason: existing ? "adjust" : "purchase",
+                  reason: existing ? "adjust" : delta > 0 ? "purchase" : "adjust",
                   ref: saved.batchNo ? `batch ${saved.batchNo}` : "batch",
                   t: now,
                   batchId: saved.id,
@@ -750,18 +754,20 @@ export const usePos = create<PosState>()(
         if (!b) return;
         const now = Date.now();
         const batches = s.batches.filter((x) => x.id !== bid);
+        const prevStock = s.products.find((p) => p.id === b.productId)?.stock ?? 0;
+        const derived = batchStock(batches, b.productId);
         const products = s.products.map((p) => {
           if (p.id !== b.productId) return p;
-          const derived = batchStock(batches, p.id);
           return derived === p.stock ? p : { ...p, stock: derived, updatedAt: now };
         });
+        const delta = derived - prevStock;
         const moves: StockMove[] =
-          b.qty !== 0
+          delta !== 0
             ? [
                 {
                   id: id("mv_"),
                   productId: b.productId,
-                  qty: -b.qty,
+                  qty: delta,
                   reason: "adjust",
                   ref: b.batchNo ? `batch ${b.batchNo}` : "batch",
                   t: now,
