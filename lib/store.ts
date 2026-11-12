@@ -351,7 +351,13 @@ export const usePos = create<PosState>()(
         if (!p) return;
         const cart = [...get().cart];
         const packIdx = opts?.packIdx;
-        const key = cartLineKey({ productId: pid, packIdx });
+        // a different variant or modifier set is a different line on the ticket
+        const key = cartLineKey({
+          productId: pid,
+          packIdx,
+          variantId: opts?.variantId,
+          modifierIds: opts?.modifierIds,
+        });
         const i = cart.findIndex((l) => cartLineKey(l) === key);
         const factor = packFactor(p, packIdx);
         const want = (i >= 0 ? cart[i].qty : 0) + qty;
