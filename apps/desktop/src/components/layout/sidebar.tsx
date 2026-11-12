@@ -34,20 +34,7 @@ function navLabel(label: string, terms: Terms): string {
 }
 
 function withBusinessNav(items: NavItem[], businessType: BusinessType): NavItem[] {
-  if (!hasFeature(businessType, "suppliers-po")) return items
-  const suppliersIndex = items.findIndex((item) => item.href === "/dashboard/suppliers")
-  const purchaseOrders: NavItem = {
-    label: "Purchase orders",
-    href: "/dashboard/suppliers",
-    icon: "ClipboardList",
-    soon: true,
-  }
-  if (suppliersIndex === -1) return [...items, purchaseOrders]
-  return [
-    ...items.slice(0, suppliersIndex + 1),
-    purchaseOrders,
-    ...items.slice(suppliersIndex + 1),
-  ]
+  return items.filter((item) => !item.feature || hasFeature(businessType, item.feature))
 }
 
 function NavItemComponent({

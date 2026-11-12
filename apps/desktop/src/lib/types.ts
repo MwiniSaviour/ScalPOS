@@ -1,3 +1,5 @@
+import type { Feature } from "./features"
+
 export type Role = "admin" | "employee"
 
 export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const
@@ -203,7 +205,31 @@ export type NavItem = {
   icon: string
   roles?: Role[]
   soon?: boolean
+  /** the business type has to carry this feature for the item to show */
+  feature?: Feature
   children?: NavItem[]
+}
+
+/**
+ * One ordered line of a purchase order. The qty is in base units — the pack
+ * name is only a label on the line, it never multiplies the quantity.
+ */
+export interface PurchaseOrderLine {
+  productId: string
+  packName: string | null
+  qty: number
+  unitCost: number
+}
+
+export interface PurchaseOrder {
+  id: string
+  supplier_id: string | null
+  status: "draft" | "sent" | "received"
+  lines: PurchaseOrderLine[]
+  total: number
+  received_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface CartItem {
