@@ -794,6 +794,7 @@ export const usePos = create<PosState>()(
           address: patch.address ?? "",
           note: patch.note ?? "",
           createdAt: patch.createdAt ?? Date.now(),
+          ...(patch.allergies ? { allergies: patch.allergies } : {}),
         };
         set({ customers: [c, ...s.customers] });
         return c;
