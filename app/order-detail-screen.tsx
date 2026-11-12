@@ -167,10 +167,16 @@ export default function OrderDetailScreen() {
                 <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[15px] font-medium text-ink">
-                    {i.packName ? `${i.name} — ${i.packName}` : i.name}{" "}
+                    {[i.name, i.variantName].filter(Boolean).join(" · ")}
+                    {i.packName ? ` — ${i.packName}` : ""}{" "}
                     <span className="text-ink3">× {i.qty}</span>
                   </span>
                   <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
+                  {i.modifierNames && i.modifierNames.length > 0 && (
+                    <span className="block truncate text-[12px] text-ink3">
+                      {i.modifierNames.join(", ")}
+                    </span>
+                  )}
                   {i.prescriptionRef && (
                     <span className="block text-[12px] text-ink3">Rx ref {i.prescriptionRef}</span>
                   )}
