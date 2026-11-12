@@ -36,6 +36,28 @@ alter table public.product_batches add column if not exists local_id text;
 create unique index if not exists product_batches_org_local_id_key
   on public.product_batches (org_id, local_id);
 
+-- ---------- purchase_orders ----------
+
+create table if not exists public.purchase_orders (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null references public.orgs(id) on delete cascade,
+  supplier_id uuid references public.suppliers(id) on delete set null,
+  status text not null default 'draft' check (status in ('draft','sent','received')),
+  -- lines: [{ "productId": "<uuid>", "packName": "Box" | null, "qty": 10, "unitCost": 3.5 }]
+  lines jsonb not null default '[]'::jsonb,
+  total numeric(12,2) not null default 0,
+  received_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz,
+  op_id uuid unique
+);
+create trigger purchase_orders_moddatetime
+  before update on public.purchase_orders
+  for each row execute function extensions.moddatetime('updated_at');
+create index purchase_orders_org_updated_idx on public.purchase_orders (org_id, updated_at);
+create index purchase_orders_org_active_idx on public.purchase_orders (org_id) where deleted_at is null;
+
 -- ---------- product / customer / order_item columns ----------
 
 alter table public.products add column if not exists prescription_only boolean not null default false;
@@ -74,9 +96,19 @@ create policy product_batches_update on public.product_batches for update
   with check (public.has_org_role(org_id, array['owner','supervisor']));
 create policy product_batches_delete on public.product_batches for delete using (false);
 
+create policy purchase_orders_select on public.purchase_orders for select
+  using (org_id in (select public.current_org_ids()));
+create policy purchase_orders_insert on public.purchase_orders for insert
+  with check (public.has_org_role(org_id, array['owner','supervisor']));
+create policy purchase_orders_update on public.purchase_orders for update
+  using (public.has_org_role(org_id, array['owner','supervisor']))
+  with check (public.has_org_role(org_id, array['owner','supervisor']));
+create policy purchase_orders_delete on public.purchase_orders for delete using (false);
+
 -- ---------- realtime ----------
 
 alter table public.product_batches replica identity full;
+alter table public.purchase_orders replica identity full;
 
 do $$
 begin
@@ -85,6 +117,12 @@ begin
     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'product_batches'
   ) then
     alter publication supabase_realtime add table public.product_batches;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'purchase_orders'
+  ) then
+    alter publication supabase_realtime add table public.purchase_orders;
   end if;
 end
 $$;
