@@ -5,6 +5,7 @@ import { Bell, BellDot, ChevronRight, CircleUserRound } from "lucide-react";
 import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { paidOf, usePos } from "@/lib/store";
+import { useTerms } from "@/lib/terms";
 import { useNow } from "@/lib/now";
 import { hasOnboarded } from "@/lib/first-run";
 import { cn } from "@/lib/ui";
@@ -28,6 +29,7 @@ export default function HomeScreen() {
   const products = usePos((s) => s.products);
   const customers = usePos((s) => s.customers);
   const settings = usePos((s) => s.settings);
+  const terms = useTerms();
   const now = useNow();
   const dayStart = startOfDay(now);
   const router = useRouter();
@@ -143,7 +145,7 @@ export default function HomeScreen() {
                 className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[17px] font-semibold text-ink">Pending orders</span>
+                  <span className="block text-[17px] font-semibold text-ink">Pending {terms.orders.toLowerCase()}</span>
                   <span className="block text-[14px] text-ink3">Waiting to be fulfilled</span>
                 </span>
                 <span className="tabnum text-[17px] font-bold text-ink">{kpis.pending}</span>
@@ -170,7 +172,7 @@ export default function HomeScreen() {
       {/* recent orders */}
       <section className="mt-6 pb-6">
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-[15px] font-medium text-ink2">Recent orders</h2>
+          <h2 className="text-[15px] font-medium text-ink2">Recent {terms.orders.toLowerCase()}</h2>
           <Link href="/orders" className="press whitespace-nowrap text-[15px] font-medium text-accent">
             View all
           </Link>

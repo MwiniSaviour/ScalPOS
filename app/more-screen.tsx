@@ -11,6 +11,7 @@ import {
   type SyncConnection,
 } from "@/lib/api/bootstrap";
 import { useSettings, usePos } from "@/lib/store";
+import { useTerms } from "@/lib/terms";
 import { useEntitlement, planAllowsEnterprise } from "@/lib/entitlement";
 import { isDemoMode, enableDemo, exitDemo } from "@/lib/demo";
 import { listConflicts } from "@/lib/sync/outbox";
@@ -63,6 +64,7 @@ export default function MoreScreen() {
   const [affiliateCode, setAffiliateCode] = useState("");
   const [codeDraft, setCodeDraft] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
+  const terms = useTerms();
 
   useEffect(() => {
     let cancelled = false;
@@ -177,7 +179,7 @@ export default function MoreScreen() {
           <RowLink
             href="/customers"
             icon={<Users className="size-[18px]" />}
-            label="Customers"
+            label={terms.customers}
             sub="Credit and contact details"
           />
           <RowLink
