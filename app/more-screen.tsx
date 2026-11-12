@@ -12,6 +12,7 @@ import {
 } from "@/lib/api/bootstrap";
 import { useSettings, usePos } from "@/lib/store";
 import { useTerms } from "@/lib/terms";
+import { hasFeature } from "@/lib/features";
 import { useEntitlement, planAllowsEnterprise } from "@/lib/entitlement";
 import { isDemoMode, enableDemo, exitDemo } from "@/lib/demo";
 import { listConflicts } from "@/lib/sync/outbox";
@@ -29,6 +30,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
+  ChefHat,
   ChevronRight,
   CircleUserRound,
   CreditCard,
@@ -176,6 +178,14 @@ export default function MoreScreen() {
             label="Stock"
             sub="Stock levels and movements"
           />
+          {hasFeature(settings.businessType, "kitchen") && (
+            <RowLink
+              href="/kitchen"
+              icon={<ChefHat className="size-[18px]" />}
+              label="Kitchen"
+              sub="Tickets through the kitchen"
+            />
+          )}
           <RowLink
             href="/customers"
             icon={<Users className="size-[18px]" />}
