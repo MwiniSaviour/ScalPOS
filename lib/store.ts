@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { defaultSettings } from "./seed";
+import { hasFeature } from "./features";
 import { isDemoMode } from "./demo";
 import {
   batchesOf,
@@ -14,6 +15,7 @@ import {
   sellableStock,
 } from "./batches";
 import {
+  isUnavailableToday,
   itemConsumption,
   mergeTabItems,
   planRestockIngredients,
@@ -433,9 +435,25 @@ export const usePos = create<PosState>()(
         if (s.cart.length === 0) return null;
         const now = Date.now();
         const rxRef = opts?.prescriptionRef?.trim();
-        const orderType = opts?.orderType ?? s.cartOrderType ?? null;
-        const tableId = opts?.tableId ?? s.cartTableId ?? null;
-        const tabId = opts?.tabOrderId ?? s.cartTabOrderId ?? null;
+        // The service context only means something to a restaurant. A shop
+        // that switched business type must not stamp a table on a retail sale.
+        const restaurant = hasFeature(s.settings.businessType, "order-types");
+        const orderType = restaurant ? (opts?.orderType ?? s.cartOrderType ?? null) : null;
+        const tableId =
+          restaurant && hasFeature(s.settings.businessType, "tables")
+            ? (opts?.tableId ?? s.cartTableId ?? null)
+            : null;
+        const tabId = restaurant ? (opts?.tabOrderId ?? s.cartTabOrderId ?? null) : null;
+
+        // an item the kitchen marked off cannot be sold — even if it was added
+        // to the cart before it went off the menu
+        for (const l of s.cart) {
+          const p = s.products.find((x) => x.id === l.productId);
+          if (p && isUnavailableToday(p, now)) {
+            get().toast(`${p.name} is not available today`, "error");
+            return null;
+          }
+        }
         const tab = tabId ? s.orders.find((o) => o.id === tabId && o.status === "pending") : undefined;
 
         // Work out the lines and the batch allocations (FEFO) up front.
