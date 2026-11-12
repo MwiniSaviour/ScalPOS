@@ -1,5 +1,9 @@
 export type Role = "admin" | "employee"
 
+export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const
+
+export type BusinessType = (typeof BUSINESS_TYPES)[number]
+
 export type OrderStatus = "pending" | "completed" | "refunded"
 export type OrderPayStatus = "unpaid" | "partial" | "paid" | "refunded"
 export type PaymentMethod = "cash" | "momo" | "card" | "credit"
@@ -173,6 +177,7 @@ export type NavItem = {
   href: string
   icon: string
   roles?: Role[]
+  soon?: boolean
   children?: NavItem[]
 }
 

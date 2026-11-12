@@ -9,10 +9,12 @@ import { cn } from "@/lib/utils"
 import { NAV_ITEMS, APP_NAME } from "@/lib/constants"
 import { useClerk, useUser } from "@clerk/clerk-react"
 import type { LucideIcon } from "lucide-react"
-import type { NavItem } from "@/lib/types"
+import type { BusinessType, NavItem } from "@/lib/types"
 import { ChevronDown } from "lucide-react"
 import { useOrg, readDemoOrg } from "@/lib/auth/org"
 import { useEntitlement, entitlementKind, isEnterpriseKind } from "@/lib/entitlement"
+import { hasFeature } from "@/lib/features"
+import { termsOf, useBusinessType, type Terms } from "@/lib/terms"
 
 const ROLE_LABEL: Record<string, string> = {
   owner: "Owner",
@@ -20,11 +22,61 @@ const ROLE_LABEL: Record<string, string> = {
   cashier: "Cashier",
 }
 
-function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string }) {
+const TRANSLATED_NAV_LABELS: Record<string, keyof Terms> = {
+  Customers: "customers",
+  Products: "products",
+  Orders: "orders",
+}
+
+function navLabel(label: string, terms: Terms): string {
+  const key = TRANSLATED_NAV_LABELS[label]
+  return key ? terms[key] : label
+}
+
+function withBusinessNav(items: NavItem[], businessType: BusinessType): NavItem[] {
+  if (!hasFeature(businessType, "suppliers-po")) return items
+  const suppliersIndex = items.findIndex((item) => item.href === "/dashboard/suppliers")
+  const purchaseOrders: NavItem = {
+    label: "Purchase orders",
+    href: "/dashboard/suppliers",
+    icon: "ClipboardList",
+    soon: true,
+  }
+  if (suppliersIndex === -1) return [...items, purchaseOrders]
+  return [
+    ...items.slice(0, suppliersIndex + 1),
+    purchaseOrders,
+    ...items.slice(suppliersIndex + 1),
+  ]
+}
+
+function NavItemComponent({
+  item,
+  pathname,
+  terms,
+}: {
+  item: NavItem
+  pathname: string
+  terms: Terms
+}) {
   const Icon = Icons[item.icon as keyof typeof Icons] as LucideIcon
   const hasChildren = item.children && item.children.length > 0
   const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
   const [expanded, setExpanded] = useState(isActive)
+
+  if (item.soon) {
+    return (
+      <li>
+        <span className="sidebar-link pointer-events-none cursor-default opacity-60" aria-disabled="true">
+          <Icon size={20} />
+          <span>{navLabel(item.label, terms)}</span>
+          <span className="ml-auto rounded-full bg-sidebar-hover px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted">
+            Soon
+          </span>
+        </span>
+      </li>
+    )
+  }
 
   if (hasChildren) {
     return (
@@ -38,7 +90,7 @@ function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string 
         >
           <span className="flex items-center gap-3">
             <Icon size={20} />
-            <span>{item.label}</span>
+            <span>{navLabel(item.label, terms)}</span>
           </span>
           <ChevronDown
             size={16}
@@ -62,7 +114,7 @@ function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string 
                     )}
                   >
                     <ChildIcon size={16} />
-                    <span>{child.label}</span>
+                    <span>{navLabel(child.label, terms)}</span>
                   </Link>
                 </li>
               )
@@ -80,7 +132,7 @@ function NavItemComponent({ item, pathname }: { item: NavItem; pathname: string 
         className={cn("sidebar-link", isActive && "sidebar-link-active")}
       >
         <Icon size={20} />
-        <span>{item.label}</span>
+        <span>{navLabel(item.label, terms)}</span>
       </Link>
     </li>
   )
@@ -95,6 +147,9 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
   const isDemo = !!shop && readDemoOrg(user?.id) === shop.id
   const ent = useEntitlement(isDemo ? null : (shop?.id ?? null))
   const allowEmployees = isDemo || isEnterpriseKind(entitlementKind(ent))
+  const businessType = useBusinessType()
+  const terms = termsOf(businessType)
+  const navItems = withBusinessNav(NAV_ITEMS, businessType)
 
   useEffect(() => {
     onClose?.()
@@ -130,13 +185,18 @@ export function Sidebar({ isOpen, onClose }: { isOpen?: boolean; onClose?: () =>
 
         <nav className="flex-1 overflow-y-auto p-4">
           <ul className="space-y-1">
-            {NAV_ITEMS.filter((item) => {
+            {navItems.filter((item) => {
               if (item.href === "/dashboard/employees" && !allowEmployees) return false
               if (!item.roles) return true
               const mapped = role === "owner" ? "admin" : "employee"
               return item.roles.includes(mapped)
             }).map((item) => (
-              <NavItemComponent key={item.label} item={item} pathname={pathname} />
+              <NavItemComponent
+                key={`${item.href}-${item.label}`}
+                item={item}
+                pathname={pathname}
+                terms={terms}
+              />
             ))}
           </ul>
         </nav>
