@@ -1,7 +1,7 @@
 "use client";
 
 import { Button, IconButton } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
+import { Card, CardTitle } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { Confirm } from "@/components/ui/confirm";
 import { EmptyState } from "@/components/ui/emptystate";
@@ -11,12 +11,15 @@ import { ScreenHeader } from "@/components/shell/screenheader";
 import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
 import { StatusPill } from "@/components/ui/statuspill";
+import { batchesOf, batchStock, daysToExpiry } from "@/lib/batches";
+import { hasFeature } from "@/lib/features";
 import { dateShort, dateTime, timeOf } from "@/lib/format";
-import { fmtMoney, parsePrice } from "@/lib/money";
-import { usePos } from "@/lib/store";
-import type { StockReason } from "@/lib/types";
+import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
+import { useNow } from "@/lib/now";
+import { usePos, useSettings } from "@/lib/store";
+import type { Batch, StockReason } from "@/lib/types";
 import { cn, hueColor } from "@/lib/ui";
-import { ArrowDownToLine, ArrowUpFromLine, ArrowUpDown, Package, Pencil, Trash2, TriangleAlert } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, ArrowUpDown, Layers, Package, Pencil, Plus, Trash2, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
@@ -48,11 +51,20 @@ export default function ProductDetailScreen() {
   const product = usePos((s) => s.products.find((p) => p.id === pid));
   const categories = usePos((s) => s.categories);
   const allMoves = usePos((s) => s.stockMoves);
+  const batches = usePos((s) => s.batches);
+  const settings = useSettings();
+  const now = useNow(60_000);
+
+  const isPharmacy = hasFeature(settings.businessType, "batches");
 
   const moves = useMemo(
     () => allMoves.filter((m) => m.productId === pid).slice().reverse(),
     [allMoves, pid],
   );
+
+  const productBatches = useMemo(() => batchesOf(batches, pid), [batches, pid]);
+
+  const batchNoById = useMemo(() => new Map(batches.map((b) => [b.id, b.batchNo])), [batches]);
 
   const [confirmDel, setConfirmDel] = useState(false);
   const [adjOpen, setAdjOpen] = useState(false);
@@ -60,6 +72,14 @@ export default function ProductDetailScreen() {
   const [adjQty, setAdjQty] = useState("");
   const [adjReason, setAdjReason] = useState<StockReason | null>(null);
   const [adjNote, setAdjNote] = useState("");
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [editBatch, setEditBatch] = useState<Batch | null>(null);
+  const [batchNo, setBatchNo] = useState("");
+  const [batchExpiry, setBatchExpiry] = useState("");
+  const [batchQty, setBatchQty] = useState("");
+  const [batchCost, setBatchCost] = useState("");
+  const [batchTouched, setBatchTouched] = useState(false);
+  const [confirmBatch, setConfirmBatch] = useState<string | null>(null);
 
   if (!hydrated) return null;
 
@@ -85,6 +105,17 @@ export default function ProductDetailScreen() {
   const adjQtyN = Math.floor(parsePrice(adjQty));
   const adjDelta = adjMode === "add" ? adjQtyN : -adjQtyN;
   const newStock = Math.max(0, product.stock + adjDelta);
+  // a batched product's on-hand figure is the sum of its batches, never a
+  // separate number that can drift away from them; a product that owns no
+  // batch yet still holds its own count
+  const ownsBatches = productBatches.length > 0;
+  const onHand = ownsBatches ? batchStock(batches, pid) : product.stock;
+  const batchQtyN = Math.round(parsePrice(batchQty));
+  const batchNoOk = batchNo.trim().length > 0;
+  const batchQtyOk =
+    batchQty.trim() !== "" && batchQtyN >= 0 && (editBatch !== null || batchQtyN > 0);
+  const batchOk = batchNoOk && batchQtyOk;
+  const batchToDelete = confirmBatch ? batches.find((b) => b.id === confirmBatch) : undefined;
 
   const openAdj = () => {
     setAdjMode("add");
@@ -99,6 +130,40 @@ export default function ProductDetailScreen() {
     usePos.getState().adjustStock(product.id, adjDelta, adjReason, adjNote.trim() || undefined);
     usePos.getState().toast(`Stock ${adjMode === "add" ? "added" : "removed"} — now ${newStock}`, "ok");
     setAdjOpen(false);
+  };
+
+  const openAddBatch = () => {
+    setEditBatch(null);
+    setBatchNo("");
+    setBatchExpiry("");
+    setBatchQty("");
+    setBatchCost(product.cost > 0 ? String(product.cost) : "");
+    setBatchTouched(false);
+    setBatchOpen(true);
+  };
+
+  const openEditBatch = (b: Batch) => {
+    setEditBatch(b);
+    setBatchNo(b.batchNo);
+    setBatchExpiry(b.expiry);
+    setBatchQty(String(b.qty));
+    setBatchCost(b.cost > 0 ? String(b.cost) : "");
+    setBatchTouched(false);
+    setBatchOpen(true);
+  };
+
+  const saveBatch = () => {
+    setBatchTouched(true);
+    if (!batchOk) return;
+    usePos.getState().upsertBatch({
+      ...(editBatch ? { id: editBatch.id } : {}),
+      productId: product.id,
+      batchNo: batchNo.trim(),
+      expiry: batchExpiry,
+      qty: batchQtyN,
+      cost: Math.max(0, parsePrice(batchCost)),
+    });
+    setBatchOpen(false);
   };
 
   return (
@@ -184,27 +249,100 @@ export default function ProductDetailScreen() {
             <div>
               <p className="text-[14px] text-ink2">On hand</p>
               <p className="mt-1 tabnum text-[30px]/8 font-extrabold tracking-[-0.03em] text-ink">
-                {product.stock}
+                {onHand}
                 <span className="ml-1.5 text-[14px] font-semibold text-ink3">{product.unit}</span>
               </p>
               <p className="mt-1 text-[12px] text-ink3">
-                Alert at {product.lowStockAt} {product.unit}
+                {isPharmacy
+                  ? `${productBatches.length} batch${productBatches.length === 1 ? "" : "es"} · Alert at ${product.lowStockAt} ${product.unit}`
+                  : `Alert at ${product.lowStockAt} ${product.unit}`}
               </p>
             </div>
             <div className="flex flex-col items-end gap-2">
-              {product.stock <= 0 ? <StatusPill status="out" /> : product.stock <= product.lowStockAt ? <StatusPill status="low" /> : null}
-              {product.stock <= product.lowStockAt && (
+              {onHand <= 0 ? <StatusPill status="out" /> : onHand <= product.lowStockAt ? <StatusPill status="low" /> : null}
+              {onHand <= product.lowStockAt && (
                 <span className="flex items-center gap-1 text-[13px] font-medium text-warn">
                   <TriangleAlert className="size-3.5" />
-                  {product.stock > 0 ? "Running low" : "Out of stock"}
+                  {onHand > 0 ? "Running low" : "Out of stock"}
                 </span>
               )}
             </div>
           </div>
-          <Button block icon={<ArrowUpDown className="size-4" />} className="mt-3" onClick={openAdj}>
-            Adjust stock
-          </Button>
+          {/* a batched product owns its stock through its batches — the rows
+              below are the only place its quantity can be changed */}
+          {!isPharmacy && (
+            <Button block icon={<ArrowUpDown className="size-4" />} className="mt-3" onClick={openAdj}>
+              Adjust stock
+            </Button>
+          )}
         </Card>
+
+        {isPharmacy && (
+          <Card inset className="mt-2.5">
+            <CardTitle
+              right={
+                <Button variant="soft" size="sm" icon={<Plus className="size-4" />} onClick={openAddBatch}>
+                  Add batch
+                </Button>
+              }
+            >
+              Batches
+            </CardTitle>
+            {productBatches.length === 0 ? (
+              <EmptyState
+                icon={<Layers className="size-7" />}
+                title="No batches yet"
+                hint="Add the batch a delivery came in with — its number, expiry and quantity."
+                action={<Button onClick={openAddBatch}>Add batch</Button>}
+                className="py-10"
+              />
+            ) : (
+              productBatches.map((b) => {
+                const days = daysToExpiry(b.expiry, now);
+                const expired = days !== null && days < 0;
+                const risky = expired || (days !== null && days <= 90);
+                const when =
+                  days === null
+                    ? "No expiry"
+                    : expired
+                      ? `Expired ${expiryDate(b.expiry)}`
+                      : days <= 90
+                        ? `Expires in ${days}d · ${expiryDate(b.expiry)}`
+                        : `Expires ${expiryDate(b.expiry)}`;
+                return (
+                  <div key={b.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
+                    <span
+                      className={cn(
+                        "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                        risky ? "bg-danger/10 text-danger" : "bg-accentsoft text-accent",
+                      )}
+                    >
+                      <Layers className="size-[17px]" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[17px] font-semibold leading-tight text-ink">
+                        {b.batchNo || "Unnumbered batch"}
+                      </p>
+                      <p className={cn("mt-0.5 truncate text-[14px]", risky ? "text-danger" : "text-ink3")}>
+                        {when}
+                        <span className="tabnum text-ink3"> · {fmtMoney(b.cost)}</span>
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center">
+                      <span className="tabnum mr-1 text-[17px] font-bold text-ink">{b.qty}</span>
+                      <IconButton label={`Edit batch ${b.batchNo}`} onClick={() => openEditBatch(b)}>
+                        <Pencil className="size-[17px]" />
+                      </IconButton>
+                      <IconButton label={`Delete batch ${b.batchNo}`} onClick={() => setConfirmBatch(b.id)}>
+                        <Trash2 className="size-[17px]" />
+                      </IconButton>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </Card>
+        )}
 
         <Card inset className="mt-2.5">
           <div className="px-4 pt-4 pb-1">
@@ -219,34 +357,44 @@ export default function ProductDetailScreen() {
               className="py-10"
             />
           ) : (
-            moves.map((m) => (
-              <div key={m.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
-                <span
-                  className={cn(
-                    "flex size-9 shrink-0 items-center justify-center rounded-xl",
-                    m.qty > 0 ? "bg-accentsoft text-accent" : m.qty < 0 ? "bg-danger/10 text-danger" : "bg-ink2/10 text-ink2",
-                  )}
-                >
-                  {m.qty > 0 ? <ArrowUpFromLine className="size-[17px]" /> : <ArrowDownToLine className="size-[17px]" />}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[17px] font-semibold leading-tight text-ink">{moveLabel[m.reason]}</p>
-                  <p className="mt-0.5 truncate text-[14px] text-ink3">{m.ref || "—"}</p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <p
+            moves.map((m) => {
+              const batchNo = m.batchId ? batchNoById.get(m.batchId) : undefined;
+              // a batch move's ref repeats the batch number already shown beside
+              // the label, so it is dropped rather than printed twice
+              const ref = m.ref ?? "";
+              const showRef = ref !== "" && ref !== (batchNo ? `batch ${batchNo}` : "");
+              return (
+                <div key={m.id} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
+                  <span
                     className={cn(
-                      "tabnum text-[17px] font-bold",
-                      m.qty > 0 ? "text-accent" : m.qty < 0 ? "text-danger" : "text-ink3",
+                      "flex size-9 shrink-0 items-center justify-center rounded-xl",
+                      m.qty > 0 ? "bg-accentsoft text-accent" : m.qty < 0 ? "bg-danger/10 text-danger" : "bg-ink2/10 text-ink2",
                     )}
                   >
-                    {m.qty > 0 ? "+" : ""}
-                    {m.qty}
-                  </p>
-                  <p className="text-[14px] text-ink3">{timeOf(m.t)} · {dateShort(m.t)}</p>
+                    {m.qty > 0 ? <ArrowUpFromLine className="size-[17px]" /> : <ArrowDownToLine className="size-[17px]" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[17px] font-semibold leading-tight text-ink">
+                      {moveLabel[m.reason]}
+                      {batchNo && <span className="ml-1.5 text-[14px] font-medium text-ink2">{batchNo}</span>}
+                    </p>
+                    <p className="mt-0.5 truncate text-[14px] text-ink3">{showRef ? ref : "—"}</p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p
+                      className={cn(
+                        "tabnum text-[17px] font-bold",
+                        m.qty > 0 ? "text-accent" : m.qty < 0 ? "text-danger" : "text-ink3",
+                      )}
+                    >
+                      {m.qty > 0 ? "+" : ""}
+                      {m.qty}
+                    </p>
+                    <p className="text-[14px] text-ink3">{timeOf(m.t)} · {dateShort(m.t)}</p>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </Card>
       </section>
@@ -311,6 +459,71 @@ export default function ProductDetailScreen() {
         />
       </Sheet>
 
+      <Sheet
+        open={batchOpen}
+        onClose={() => setBatchOpen(false)}
+        title={editBatch ? "Edit batch" : "Add batch"}
+        footer={
+          <Button block onClick={saveBatch} disabled={!batchOk}>
+            {editBatch ? "Save batch" : "Add batch"}
+          </Button>
+        }
+      >
+        <div className="flex flex-col gap-3.5 pb-2">
+          <Input
+            label="Batch number"
+            placeholder="e.g. B-2411"
+            value={batchNo}
+            onChange={(e) => setBatchNo(e.target.value)}
+            onBlur={() => setBatchTouched(true)}
+            error={batchTouched && !batchNoOk ? "Batch number is required" : undefined}
+          />
+          <Input
+            label="Expiry date"
+            type="date"
+            value={batchExpiry}
+            onChange={(e) => setBatchExpiry(e.target.value)}
+            hint="Leave empty if this product has no expiry."
+          />
+          <div className="grid grid-cols-2 gap-2.5">
+            <Input
+              label="Quantity"
+              inputMode="numeric"
+              className="tabnum"
+              placeholder="0"
+              value={batchQty}
+              onChange={(e) => setBatchQty(e.target.value)}
+              onBlur={() => setBatchTouched(true)}
+              error={batchTouched && !batchQtyOk ? "Enter a quantity" : undefined}
+            />
+            <Input
+              label="Cost"
+              inputMode="decimal"
+              money
+              leading={<span className="text-[15px] font-semibold text-ink3">{CURRENCY_SYMBOL}</span>}
+              placeholder="0.00"
+              value={batchCost}
+              onChange={(e) => setBatchCost(e.target.value)}
+            />
+          </div>
+          <p className="text-[13px] leading-5 text-ink3">
+            Stock on hand is the sum of every batch of this product.
+          </p>
+        </div>
+      </Sheet>
+
+      <Confirm
+        open={confirmBatch !== null}
+        onClose={() => setConfirmBatch(null)}
+        onConfirm={() => {
+          if (confirmBatch) usePos.getState().deleteBatch(confirmBatch);
+        }}
+        title="Delete batch?"
+        body={`Batch "${batchToDelete?.batchNo || "—"}" will be removed and its ${batchToDelete?.qty ?? 0} ${product.unit} taken off the shelf.`}
+        confirmLabel="Delete"
+        tone="danger"
+      />
+
       <Confirm
         open={confirmDel}
         onClose={() => setConfirmDel(false)}
@@ -334,4 +547,16 @@ function DataRow({ label, value }: { label: string; value: ReactNode }) {
       <p className="mt-0.5 truncate text-[15px] font-semibold text-ink">{value}</p>
     </div>
   );
+}
+
+/** "2027-03-12" → "12 Mar 2027" (parsed as UTC so the day never shifts) */
+function expiryDate(expiry: string): string {
+  const d = new Date(`${expiry}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return expiry;
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
