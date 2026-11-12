@@ -13,7 +13,8 @@ import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import { getSupabase } from "@/lib/api/supabase";
-import type { Settings } from "@/lib/types";
+import { BUSINESS_TYPES } from "@/lib/types";
+import type { BusinessType, Settings } from "@/lib/types";
 
 type RemoteSettings = {
   shop_name?: unknown;
@@ -27,6 +28,7 @@ type RemoteSettings = {
   receipt_footer?: unknown;
   theme?: unknown;
   next_order_no?: unknown;
+  business_type?: unknown;
 };
 
 async function client() {
@@ -70,6 +72,7 @@ export async function pushSettings(conn?: SyncConnection | null): Promise<boolea
     receipt_footer: s.receiptFooter,
     theme: s.theme,
     next_order_no: s.nextOrderNo,
+    business_type: s.businessType,
     updated_at: new Date().toISOString(),
   };
 
@@ -128,6 +131,13 @@ export async function pullSettings(conn?: SyncConnection | null): Promise<void> 
   const remoteNo = Number(r.next_order_no);
   if (Number.isFinite(remoteNo) && remoteNo > 1 && s.nextOrderNo <= 1) {
     patch.nextOrderNo = remoteNo;
+  }
+  if (
+    typeof r.business_type === "string" &&
+    BUSINESS_TYPES.includes(r.business_type as BusinessType) &&
+    !s.businessType
+  ) {
+    patch.businessType = r.business_type as BusinessType;
   }
 
   if (Object.keys(patch).length > 0) usePos.getState().updateSettings(patch);

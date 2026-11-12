@@ -80,7 +80,9 @@ export type StockMove = {
 
 export type StockReason = "purchase" | "sale" | "adjust" | "damage" | "return" | "count" | "opening";
 
-export type BusinessType = "retail" | "pharmacy" | "restaurant" | "salon";
+export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const;
+
+export type BusinessType = (typeof BUSINESS_TYPES)[number];
 
 export type Settings = {
   businessType: BusinessType;
