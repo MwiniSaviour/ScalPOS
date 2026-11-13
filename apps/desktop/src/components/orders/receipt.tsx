@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { cn, formatCurrency } from "@/lib/utils"
 import { paidOf, dueOf } from "@/lib/orders-ui"
+import { ticketNumber, orderTypeLabel, itemChoices } from "@/lib/restaurant"
 import type { Sale, PaymentMethod, ShopSettings } from "@/lib/types"
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
@@ -15,16 +16,20 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
 export function OrderReceipt({
   sale,
   settings,
+  tableName,
   className,
 }: {
   sale: Sale
   settings: ShopSettings | null
+  /** Name of the order's dining table, resolved by the parent (restaurant). */
+  tableName?: string | null
   className?: string
 }) {
   const due = dueOf(sale)
   const paid = paidOf(sale)
   const name = settings?.shop_name?.trim() || "ScalPOS"
   const when = new Date(sale.sale_date)
+  const restaurant = settings?.business_type === "restaurant"
 
   useEffect(() => {
     const onBefore = () => document.body.classList.add("nova-print-receipt")
@@ -67,6 +72,17 @@ export function OrderReceipt({
             {when.toLocaleDateString()} · {when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           </span>
         </div>
+        {restaurant && (sale.order_type || sale.table_id) ? (
+          <p className="mt-0.5 text-center text-[12px] font-semibold text-gray-700">
+            {[
+              `Ticket ${ticketNumber(sale.invoice_no)}`,
+              sale.order_type ? orderTypeLabel(sale.order_type) : null,
+              sale.table_id && tableName ? `Table ${tableName}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        ) : null}
         {sale.customer?.name ? (
           <p className="mt-0.5 text-[12px] text-gray-700">Customer: {sale.customer.name}</p>
         ) : null}
@@ -74,14 +90,18 @@ export function OrderReceipt({
         <div className="my-3 border-t border-dashed border-gray-400" />
 
         <div className="space-y-1.5">
-          {(sale.items ?? []).map((i) => (
-            <div key={i.id} className="flex items-start justify-between gap-3">
-              <span className="min-w-0 flex-1">
-                {i.product_name} <span className="text-gray-500">× {i.quantity}</span>
-              </span>
-              <span className="shrink-0 font-semibold">{formatCurrency(i.subtotal)}</span>
-            </div>
-          ))}
+          {(sale.items ?? []).map((i) => {
+            const choices = restaurant ? itemChoices(i) : ""
+            return (
+              <div key={i.id} className="flex items-start justify-between gap-3">
+                <span className="min-w-0 flex-1">
+                  {i.product_name} <span className="text-gray-500">× {i.quantity}</span>
+                  {choices ? <span className="block pl-3 text-[11px] text-gray-500">{choices}</span> : null}
+                </span>
+                <span className="shrink-0 font-semibold">{formatCurrency(i.subtotal)}</span>
+              </div>
+            )
+          })}
         </div>
 
         <div className="my-3 border-t border-dashed border-gray-400" />

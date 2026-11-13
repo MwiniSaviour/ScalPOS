@@ -46,13 +46,15 @@ insert into public.products (org_id, name, price, stock) values
 select plan(12);
 
 -- ---------- owner of org A: sees only org A ----------
+-- auth.jwt() reads the whole claims GUC (request.jwt.claims) as jsonb;
+-- the pre-GoTrue request.jwt.claim.sub GUC is NOT consulted by our helpers.
 set local role authenticated;
-set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111"}';
 select is((select count(*) from public.products), 1::bigint, 'owner sees only rows from their own org');
 select is((select name from public.products limit 1), 'Kivo', 'owner sees their own product');
 
 -- ---------- cashier of org A: same read scope, no catalog writes ----------
-set local request.jwt.claim.sub = '22222222-2222-2222-2222-222222222222';
+set local request.jwt.claims = '{"sub":"22222222-2222-2222-2222-222222222222"}';
 select is((select count(*) from public.products), 1::bigint, 'cashier cannot see other orgs rows');
 select throws_ok(
   $$ insert into public.products (org_id, name, price, stock)
@@ -69,7 +71,7 @@ select lives_ok(
 );
 
 -- ---------- owner may write catalog data ----------
-set local request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
+set local request.jwt.claims = '{"sub":"11111111-1111-1111-1111-111111111111"}';
 select lives_ok(
   $$ insert into public.products (org_id, name, price, stock)
      values ('aaaaaaaa-0000-0000-0000-000000000001', 'Legit', 5, 3) $$,
@@ -109,7 +111,7 @@ select is(
 );
 
 -- ---------- outsider sees only their own org ----------
-set local request.jwt.claim.sub = '33333333-3333-3333-3333-333333333333';
+set local request.jwt.claims = '{"sub":"33333333-3333-3333-3333-333333333333"}';
 select is((select count(*) from public.products), 1::bigint, 'outsider sees only their own org rows');
 select is(
   (select name from public.products limit 1),

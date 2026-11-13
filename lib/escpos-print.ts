@@ -6,7 +6,9 @@ export type ReceiptPrintData = {
   refunded: boolean;
   orderId: string;
   orderDate: string;
-  items: { name: string; qty: number; amount: string }[];
+  /** the service context of a restaurant order — "Ticket 0004 · Table 4" */
+  context: string | null;
+  items: { name: string; qty: number; amount: string; detail?: string }[];
   subtotal: string;
   discount: string | null;
   tax: { label: string; amount: string } | null;
@@ -72,6 +74,9 @@ export function receiptToEscposBytes(receipt: ReceiptPrintData): Uint8Array {
   gap();
 
   for (const seg of wrap(`${receipt.orderId}  ${receipt.orderDate}`, WIDTH)) line(seg);
+  if (receipt.context) {
+    for (const seg of wrap(receipt.context, WIDTH)) line(seg);
+  }
   gap();
 
   for (const item of receipt.items) {
@@ -84,6 +89,9 @@ export function receiptToEscposBytes(receipt: ReceiptPrintData): Uint8Array {
         line(seg);
       }
     });
+    if (item.detail) {
+      for (const seg of wrap(`  ${item.detail}`, WIDTH)) line(seg);
+    }
   }
   gap();
 

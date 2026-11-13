@@ -42,11 +42,15 @@ export default function OrderDetailScreen() {
   const hydrated = store.usePos((s) => s.hydrated);
   const orders = store.usePos((s) => s.orders);
   const customers = store.usePos((s) => s.customers);
+  const batches = store.usePos((s) => s.batches);
+  const recipes = store.usePos((s) => s.recipes);
   const settings = store.useSettings();
   const addPaymentsToOrder = store.usePos((s) => s.addPaymentsToOrder);
   const refundOrder = store.usePos((s) => s.refundOrder);
 
   const [refundOpen, setRefundOpen] = useState(false);
+  const [refundOptionsOpen, setRefundOptionsOpen] = useState(false);
+  const [skipRestock, setSkipRestock] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [method, setMethod] = useState<PaymentMethod>("cash");
@@ -58,6 +62,19 @@ export default function OrderDetailScreen() {
   const tax = order ? orderTax(order) : null;
   const canRecord = !!order && order.status !== "refunded" && due > 0;
   const customer = order?.customerId ? customers.find((c) => c.id === order.customerId) : undefined;
+  const hasRecipeItems =
+    !!order &&
+    (order.items.some((i) => (i.recipeConsumption?.length ?? 0) > 0) ||
+      recipes.some((r) => order.items.some((i) => i.productId === r.productId)));
+
+  const openRefund = () => {
+    if (hasRecipeItems) {
+      setSkipRestock(false);
+      setRefundOptionsOpen(true);
+    } else {
+      setRefundOpen(true);
+    }
+  };
 
   const closePay = () => {
     setPayOpen(false);
@@ -111,7 +128,7 @@ export default function OrderDetailScreen() {
         onBack
         right={
           order.status !== "refunded" ? (
-            <IconButton label="Refund order" onClick={() => setRefundOpen(true)} className="text-danger">
+            <IconButton label="Refund order" onClick={openRefund} className="text-danger">
               <Trash2 className="size-[19px]" />
             </IconButton>
           ) : (
@@ -137,18 +154,43 @@ export default function OrderDetailScreen() {
       <main className="flex flex-col gap-3 px-5 pt-3 pb-32">
         <Card inset>
           <CardTitle>{order.items.length} item{order.items.length === 1 ? "" : "s"}</CardTitle>
-          {order.items.map((i) => (
-            <div key={i.productId} className="flex items-center gap-3 px-4 py-3">
-              <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15px] font-medium text-ink">
-                  {i.name} <span className="text-ink3">× {i.qty}</span>
+          {order.items.map((i, idx) => {
+            const allocations = (i.batchAllocations ?? []).map((a) => {
+              const b = batches.find((x) => x.id === a.batchId);
+              return { batchNo: b?.batchNo || a.batchId, expiry: b?.expiry ?? "", qty: a.qty };
+            });
+            return (
+              <div
+                key={`${i.productId}-${i.packName ?? ""}-${idx}`}
+                className="flex items-center gap-3 px-4 py-3"
+              >
+                <ProductArt imageUrl={i.imageUrl} name={i.name} className="size-10 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-medium text-ink">
+                    {[i.name, i.variantName].filter(Boolean).join(" · ")}
+                    {i.packName ? ` — ${i.packName}` : ""}{" "}
+                    <span className="text-ink3">× {i.qty}</span>
+                  </span>
+                  <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
+                  {i.modifierNames && i.modifierNames.length > 0 && (
+                    <span className="block truncate text-[12px] text-ink3">
+                      {i.modifierNames.join(", ")}
+                    </span>
+                  )}
+                  {i.prescriptionRef && (
+                    <span className="block text-[12px] text-ink3">Rx ref {i.prescriptionRef}</span>
+                  )}
+                  {allocations.map((b, idx) => (
+                    <span key={`${b.batchNo}-${idx}`} className="block text-[12px] text-ink3">
+                      {b.batchNo}
+                      {b.expiry ? ` · exp ${b.expiry}` : ""} × {b.qty}
+                    </span>
+                  ))}
                 </span>
-                <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
-              </span>
-              <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(i.price * i.qty)}</span>
-            </div>
-          ))}
+                <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{fmtMoney(i.price * i.qty)}</span>
+              </div>
+            );
+          })}
           <div className="flex items-center justify-between px-4 py-3">
             <span className="text-[14px] text-ink3">Subtotal</span>
             <span className="tabnum text-[15px] font-semibold text-ink">{fmtMoney(order.subtotal)}</span>
@@ -306,6 +348,52 @@ export default function OrderDetailScreen() {
         confirmLabel="Refund"
         tone="danger"
       />
+
+      <Sheet
+        open={refundOptionsOpen}
+        onClose={() => setRefundOptionsOpen(false)}
+        title="Refund order"
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="secondary" block onClick={() => setRefundOptionsOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              block
+              onClick={() => {
+                refundOrder(order.id, { skipRestock });
+                setRefundOptionsOpen(false);
+              }}
+            >
+              Refund
+            </Button>
+          </div>
+        }
+      >
+        <p className="pb-4 text-[14px] leading-6 text-ink2">
+          Refund order {order.id}? The sale is marked refunded. Payments already collected stay
+          in the ledger.
+        </p>
+        <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-line2 bg-surface px-4 py-3.5">
+          <input
+            type="checkbox"
+            checked={skipRestock}
+            onChange={(e) => setSkipRestock(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]"
+          />
+          <span>
+            <span className="block text-[15px] font-medium text-ink">
+              Do not put anything back in stock
+            </span>
+            <span className="mt-0.5 block text-[13px] leading-5 text-ink3">
+              {skipRestock
+                ? "Stock is not touched — the food is already gone."
+                : "All items and ingredients return to stock."}
+            </span>
+          </span>
+        </label>
+      </Sheet>
     </div>
   );
 }

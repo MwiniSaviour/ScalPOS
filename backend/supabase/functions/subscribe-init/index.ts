@@ -1,6 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { verifyClerkToken } from "./clerk.ts";
-import { preflight, CORS_HEADERS, json } from "./cors.ts";
+import { preflight, json } from "./cors.ts";
 
 const PRICES: Record<string, number> = {
   standard: 12000,

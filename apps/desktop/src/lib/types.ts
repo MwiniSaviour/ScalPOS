@@ -1,4 +1,10 @@
+import type { Feature } from "./features"
+
 export type Role = "admin" | "employee"
+
+export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const
+
+export type BusinessType = (typeof BUSINESS_TYPES)[number]
 
 export type OrderStatus = "pending" | "completed" | "refunded"
 export type OrderPayStatus = "unpaid" | "partial" | "paid" | "refunded"
@@ -26,6 +32,58 @@ export interface Category {
   product_count?: number
 }
 
+/**
+ * A sellable pack of a product: "Box of 10 strips" of a base unit.
+ * `factor` is how many base units one pack holds.
+ */
+export interface Pack {
+  name: string
+  factor: number
+}
+
+/**
+ * A choice on a menu item: "no onions", "extra cheese" (restaurant).
+ * Matches the mobile app's jsonb payload exactly, including `priceDelta`.
+ */
+export interface Modifier {
+  id: string
+  name: string
+  priceDelta: number
+}
+
+/** A size option on a menu item: "Large +50" (restaurant). Same jsonb shape. */
+export interface Variant {
+  id: string
+  name: string
+  priceDelta: number
+}
+
+/** What stage a kitchen ticket is at (restaurant). */
+export type TicketStatus = "queued" | "preparing" | "ready" | "served"
+
+/** One ingredient line of a recipe: how much of a product one menu item uses. */
+export interface RecipeLine {
+  ingredientProductId: string
+  qty: number
+  wastePct?: number
+}
+
+/** The recipe of a menu item: the ingredients consumed when it is sold. */
+export interface Recipe {
+  id: string
+  product_id: string
+  lines: RecipeLine[]
+  created_at: string
+}
+
+/** A dining table (restaurant). */
+export interface RestaurantTable {
+  id: string
+  name: string
+  seats: number
+  created_at: string
+}
+
 export interface Product {
   id: string
   name: string
@@ -41,8 +99,28 @@ export interface Product {
   unit: string
   low_stock_at: number
   active: boolean
+  prescription_only: boolean
+  controlled: boolean
+  packs: Pack[] | null
+  modifiers: Modifier[] | null
+  variants: Variant[] | null
+  /** The item is off the menu until this date (inclusive), or null. */
+  unavailable_until: string | null
   created_at: string
   updated_at: string
+}
+
+/**
+ * A batch of a product with its own expiry (pharmacy).
+ * `expiry` is a "YYYY-MM-DD" date or null when the product does not expire.
+ */
+export interface ProductBatch {
+  id: string
+  product_id: string
+  batch_no: string
+  expiry: string | null
+  qty: number
+  cost: number
 }
 
 export interface Customer {
@@ -74,6 +152,10 @@ export interface SaleItem {
   quantity: number
   unit_price: number
   subtotal: number
+  variant_id?: string | null
+  variant_name?: string | null
+  modifier_ids?: string[] | null
+  modifier_names?: string[] | null
 }
 
 export interface Sale {
@@ -92,6 +174,10 @@ export interface Sale {
   status: OrderStatus
   pay_status: OrderPayStatus
   payments: { method: PaymentMethod; amount: number }[]
+  /** Dine-in / Takeaway / Delivery (restaurant); null for other shops. */
+  order_type: string | null
+  table_id: string | null
+  ticket_status: TicketStatus | null
   sale_date: string
   created_at: string
   items?: SaleItem[]
@@ -128,6 +214,7 @@ export interface StockMove {
 }
 
 export interface ShopSettings {
+  business_type: string
   shop_name: string
   address: string | null
   phone: string | null
@@ -172,7 +259,32 @@ export type NavItem = {
   href: string
   icon: string
   roles?: Role[]
+  soon?: boolean
+  /** the business type has to carry this feature for the item to show */
+  feature?: Feature
   children?: NavItem[]
+}
+
+/**
+ * One ordered line of a purchase order. The qty is in base units — the pack
+ * name is only a label on the line, it never multiplies the quantity.
+ */
+export interface PurchaseOrderLine {
+  productId: string
+  packName: string | null
+  qty: number
+  unitCost: number
+}
+
+export interface PurchaseOrder {
+  id: string
+  supplier_id: string | null
+  status: "draft" | "sent" | "received"
+  lines: PurchaseOrderLine[]
+  total: number
+  received_at: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface CartItem {

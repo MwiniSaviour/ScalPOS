@@ -5,7 +5,7 @@ import tseslint from "typescript-eslint";
 import { defineConfig, globalIgnores } from "eslint/config";
 
 export default defineConfig([
-  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "node_modules/**", "android/**"]),
+  globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts", "node_modules/**", "android/**", "apps/**", ".vercel/**"]),
   {
     files: ["**/*.{js,mjs,cjs}"],
     ...js.configs.recommended,

@@ -1,16 +1,25 @@
 import type {
   Category,
   Customer,
+  Modifier,
   OrderPayStatus,
   OrderStatus,
+  Pack,
   PaymentMethod,
   Product,
+  ProductBatch,
+  PurchaseOrder,
+  PurchaseOrderLine,
+  Recipe,
+  RecipeLine,
+  RestaurantTable,
   Sale,
   SaleItem,
   ShopSettings,
   Staff,
   StockMove,
   Supplier,
+  Variant,
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { getOrgId } from "@/lib/auth/org"
@@ -35,8 +44,23 @@ type ProductRow = {
   unit: string | null
   low_stock_at: number | string | null
   active: boolean | null
+  prescription_only: boolean | null
+  controlled: boolean | null
+  packs: unknown
+  modifiers: unknown
+  variants: unknown
+  unavailable_until: string | null
   created_at: string
   updated_at: string
+}
+
+type ProductBatchRow = {
+  id: string
+  product_id: string
+  batch_no: string | null
+  expiry: string | null
+  qty: number | string | null
+  cost: number | string | null
 }
 
 type CategoryRow = { id: string; name: string; color: string | null; created_at: string }
@@ -60,6 +84,17 @@ type SupplierRow = {
   created_at: string
 }
 
+type PurchaseOrderRow = {
+  id: string
+  supplier_id: string | null
+  status: string | null
+  lines: unknown
+  total: number | string | null
+  received_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 type StaffRow = {
   id: string
   name: string
@@ -77,6 +112,10 @@ type SaleItemRow = {
   name: string | null
   qty: number | string
   price: number | string
+  variant_id: string | null
+  variant_name: string | null
+  modifier_ids: unknown
+  modifier_names: unknown
 }
 
 type PaymentRow = { method?: string; amount?: number | string }
@@ -92,12 +131,16 @@ type SaleRow = {
   payments: PaymentRow[] | null
   pay_status: string | null
   status: string | null
+  order_type: string | null
+  table_id: string | null
+  ticket_status: string | null
   completed_at: string | null
   created_at: string
   customer?: CustomerRow | CustomerRow[] | null
 }
 
 type SettingsRow = {
+  business_type: string | null
   shop_name: string | null
   address: string | null
   phone: string | null
@@ -156,6 +199,19 @@ export interface ProductInput {
   unit?: string
   low_stock_at?: number
   active?: boolean
+  prescription_only?: boolean
+  controlled?: boolean
+  packs?: Pack[] | null
+  modifiers?: Modifier[] | null
+  variants?: Variant[] | null
+  unavailable_until?: string | null
+}
+
+export interface ProductBatchInput {
+  batch_no?: string
+  expiry?: string | null
+  qty?: number
+  cost?: number
 }
 
 export interface CustomerInput {
@@ -174,6 +230,12 @@ export interface SupplierInput {
   address?: string | null
 }
 
+export interface PurchaseOrderInput {
+  supplier_id?: string | null
+  lines?: PurchaseOrderLine[]
+  status?: PurchaseOrder["status"]
+}
+
 export interface StaffInput {
   name: string
   role: "owner" | "supervisor" | "cashier"
@@ -183,6 +245,64 @@ export interface StaffInput {
 }
 
 export const PRODUCT_SELECT = "*, category:categories(id,name,color)"
+
+const BATCH_SELECT = "id,product_id,batch_no,expiry,qty,cost"
+
+/**
+ * The packs column is jsonb, so it can hold anything: a bare array, an object
+ * or nothing at all. Only well-formed entries are kept, and a product with no
+ * usable pack reads back as null.
+ */
+function mapPacks(raw: unknown): Pack[] | null {
+  if (!Array.isArray(raw)) return null
+  const packs: Pack[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const pack = entry as { name?: unknown; factor?: unknown }
+    const name = typeof pack.name === "string" ? pack.name.trim() : ""
+    const factor = Number(pack.factor)
+    if (!name || !Number.isFinite(factor) || factor <= 0) continue
+    packs.push({ name, factor })
+  }
+  return packs.length > 0 ? packs : null
+}
+
+/**
+ * Modifiers / variants are jsonb arrays of { id, name, priceDelta } written by
+ * the mobile app. Only well-formed entries are kept; an empty or malformed
+ * array reads back as null.
+ */
+function mapOptions(raw: unknown): { id: string; name: string; priceDelta: number }[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: { id: string; name: string; priceDelta: number }[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const opt = entry as { id?: unknown; name?: unknown; priceDelta?: unknown }
+    const id = typeof opt.id === "string" ? opt.id.trim() : ""
+    const name = typeof opt.name === "string" ? opt.name.trim() : ""
+    if (!id || !name) continue
+    const delta = Number(opt.priceDelta ?? 0)
+    out.push({ id, name, priceDelta: Number.isFinite(delta) ? delta : 0 })
+  }
+  return out.length > 0 ? out : null
+}
+
+function mapStringList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const out = raw.filter((v): v is string => typeof v === "string" && v !== "")
+  return out.length > 0 ? out : null
+}
+
+function mapBatch(row: ProductBatchRow): ProductBatch {
+  return {
+    id: row.id,
+    product_id: row.product_id,
+    batch_no: row.batch_no ?? "",
+    expiry: row.expiry ?? null,
+    qty: Number(row.qty ?? 0),
+    cost: Number(row.cost ?? 0),
+  }
+}
 
 function mapRow(row: ProductRow): Product {
   const cat = row.category
@@ -211,6 +331,12 @@ function mapRow(row: ProductRow): Product {
     unit: row.unit ?? "pcs",
     low_stock_at: Number(row.low_stock_at ?? 5),
     active: row.active !== false,
+    prescription_only: row.prescription_only === true,
+    controlled: row.controlled === true,
+    packs: mapPacks(row.packs),
+    modifiers: mapOptions(row.modifiers) as Modifier[] | null,
+    variants: mapOptions(row.variants) as Variant[] | null,
+    unavailable_until: row.unavailable_until ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -252,6 +378,60 @@ export function mapSupplier(row: SupplierRow): Supplier {
   }
 }
 
+/**
+ * The lines of a purchase order live in one jsonb column, so anything can be
+ * sitting in there. Only well-formed lines are kept.
+ */
+function mapPurchaseOrderLines(raw: unknown): PurchaseOrderLine[] {
+  if (!Array.isArray(raw)) return []
+  const lines: PurchaseOrderLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const line = entry as { productId?: unknown; packName?: unknown; qty?: unknown; unitCost?: unknown }
+    const productId = typeof line.productId === "string" ? line.productId.trim() : ""
+    if (!productId) continue
+    const qty = Number(line.qty)
+    const unitCost = Number(line.unitCost)
+    const packName = typeof line.packName === "string" ? line.packName.trim() : ""
+    lines.push({
+      productId,
+      packName: packName || null,
+      qty: Number.isFinite(qty) ? qty : 0,
+      unitCost: Number.isFinite(unitCost) ? unitCost : 0,
+    })
+  }
+  return lines
+}
+
+/** The jsonb shape the column stores: only these four keys, nothing else. */
+function purchaseOrderLinesPayload(lines: PurchaseOrderLine[]): PurchaseOrderLine[] {
+  return lines.map((line) => ({
+    productId: line.productId,
+    packName: line.packName && line.packName.trim() ? line.packName.trim() : null,
+    qty: Number.isFinite(Number(line.qty)) ? Number(line.qty) : 0,
+    unitCost: Number.isFinite(Number(line.unitCost)) ? Number(line.unitCost) : 0,
+  }))
+}
+
+function purchaseOrderTotal(lines: PurchaseOrderLine[]): number {
+  const total = lines.reduce((sum, line) => sum + Number(line.qty) * Number(line.unitCost), 0)
+  return Math.round(total * 100) / 100
+}
+
+export function mapPurchaseOrder(row: PurchaseOrderRow): PurchaseOrder {
+  const status = row.status === "sent" || row.status === "received" ? row.status : "draft"
+  return {
+    id: row.id,
+    supplier_id: row.supplier_id ?? null,
+    status,
+    lines: mapPurchaseOrderLines(row.lines),
+    total: Number(row.total ?? 0),
+    received_at: row.received_at ?? null,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
 export function mapStaff(row: StaffRow): Staff {
   return {
     id: row.id,
@@ -275,6 +455,10 @@ function mapSaleItem(row: SaleItemRow): SaleItem {
     quantity: qty,
     unit_price: price,
     subtotal: qty * price,
+    variant_id: row.variant_id ?? null,
+    variant_name: row.variant_name ?? null,
+    modifier_ids: mapStringList(row.modifier_ids),
+    modifier_names: mapStringList(row.modifier_names),
   }
 }
 
@@ -303,6 +487,11 @@ export function mapSale(row: SaleRow, items?: SaleItem[]): Sale {
     status: (row.status === "completed" || row.status === "refunded" ? row.status : "pending") as OrderStatus,
     pay_status: payStatus,
     payments,
+    order_type: row.order_type ?? null,
+    table_id: row.table_id ?? null,
+    ticket_status: (row.ticket_status === "queued" || row.ticket_status === "preparing"
+      || row.ticket_status === "ready" || row.ticket_status === "served"
+      ? row.ticket_status : null) as Sale["ticket_status"],
     sale_date: row.completed_at ?? row.created_at,
     created_at: row.created_at,
     items: items,
@@ -329,7 +518,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
   if (orderIds.length === 0) return map
   const { data, error } = await db()
     .from("order_items")
-    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at")
+    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names")
     .in("order_id", orderIds)
     .order("position", { ascending: true })
   if (error) throw new Error(error.message)
@@ -391,6 +580,12 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     unit: input.unit ?? "pcs",
     low_stock_at: input.low_stock_at ?? 5,
     active: input.active !== false,
+    prescription_only: input.prescription_only === true,
+    controlled: input.controlled === true,
+    packs: input.packs ?? null,
+    modifiers: input.modifiers ?? null,
+    variants: input.variants ?? null,
+    unavailable_until: input.unavailable_until ?? null,
   }
   const { data, error } = await db().from("products").insert(payload).select(PRODUCT_SELECT).single()
   const row = check<ProductRow>(data, error)
@@ -415,6 +610,12 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
   if (input.unit !== undefined) patch.unit = input.unit
   if (input.low_stock_at !== undefined) patch.low_stock_at = input.low_stock_at
   if (input.active !== undefined) patch.active = input.active
+  if (input.prescription_only !== undefined) patch.prescription_only = input.prescription_only
+  if (input.controlled !== undefined) patch.controlled = input.controlled
+  if (input.packs !== undefined) patch.packs = input.packs
+  if (input.modifiers !== undefined) patch.modifiers = input.modifiers
+  if (input.variants !== undefined) patch.variants = input.variants
+  if (input.unavailable_until !== undefined) patch.unavailable_until = input.unavailable_until
   const client = db()
   if (Object.keys(patch).length > 0) {
     const { data, error } = await client
@@ -599,6 +800,163 @@ export async function deleteCustomer(id: string): Promise<void> {
   check(null, error as unknown as { message: string } | null)
 }
 
+// ---------- restaurant ----------
+
+type RestaurantTableRow = {
+  id: string
+  name: string | null
+  seats: number | string | null
+  created_at: string
+}
+
+function mapTable(row: RestaurantTableRow): RestaurantTable {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    seats: Number(row.seats ?? 4),
+    created_at: row.created_at,
+  }
+}
+
+export async function fetchRestaurantTables(): Promise<RestaurantTable[]> {
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .select("id,name,seats,created_at")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+  const rows = check<RestaurantTableRow[]>(data, error)
+  return rows.map(mapTable)
+}
+
+export async function createRestaurantTable(input: { name: string; seats: number }): Promise<RestaurantTable> {
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .insert({ org_id: orgId(), local_id: makeLocalId(), name: input.name, seats: input.seats })
+    .select("id,name,seats,created_at")
+    .single()
+  const row = check<RestaurantTableRow>(data, error)
+  return mapTable(row)
+}
+
+export async function updateRestaurantTable(
+  id: string,
+  input: { name?: string; seats?: number },
+): Promise<RestaurantTable> {
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined) patch.name = input.name
+  if (input.seats !== undefined) patch.seats = input.seats
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("id,name,seats,created_at")
+    .single()
+  const row = check<RestaurantTableRow>(data, error)
+  return mapTable(row)
+}
+
+export async function deleteRestaurantTable(id: string): Promise<void> {
+  const { error } = await db()
+    .from("restaurant_tables")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+type RecipeRow = {
+  id: string
+  product_id: string
+  lines: unknown
+  created_at: string
+}
+
+function mapRecipe(row: RecipeRow): Recipe {
+  const raw = Array.isArray(row.lines) ? row.lines : []
+  const lines: RecipeLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const l = entry as { ingredientProductId?: unknown; qty?: unknown; wastePct?: unknown }
+    const ingredientProductId = typeof l.ingredientProductId === "string" ? l.ingredientProductId : ""
+    const qty = Number(l.qty)
+    if (!ingredientProductId || !Number.isFinite(qty) || qty <= 0) continue
+    const waste = Number(l.wastePct ?? 0)
+    lines.push({
+      ingredientProductId,
+      qty,
+      ...(Number.isFinite(waste) && waste > 0 ? { wastePct: waste } : {}),
+    })
+  }
+  return { id: row.id, product_id: row.product_id, lines, created_at: row.created_at }
+}
+
+export async function fetchRecipes(productIds?: string[]): Promise<Recipe[]> {
+  let query = db()
+    .from("recipes")
+    .select("id,product_id,lines,created_at")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+  if (productIds && productIds.length > 0) query = query.in("product_id", productIds)
+  const { data, error } = await query
+  const rows = check<RecipeRow[]>(data, error)
+  return rows.map(mapRecipe)
+}
+
+export async function upsertRecipe(productId: string, lines: RecipeLine[]): Promise<Recipe> {
+  const payload = lines
+    .filter((l) => l.ingredientProductId && l.qty > 0)
+    .map((l) => ({
+      ingredientProductId: l.ingredientProductId,
+      qty: l.qty,
+      ...(l.wastePct ? { wastePct: l.wastePct } : {}),
+    }))
+  const existing = await db()
+    .from("recipes")
+    .select("id")
+    .eq("org_id", orgId())
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .maybeSingle()
+  if (existing.error) throw new Error(existing.error.message)
+  if (payload.length === 0) {
+    if (existing.data?.id) {
+      await db()
+        .from("recipes")
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("org_id", orgId())
+        .eq("id", existing.data.id)
+    }
+    return { id: existing.data?.id ?? "", product_id: productId, lines: [], created_at: "" }
+  }
+  const { data, error } = existing.data?.id
+    ? await db()
+        .from("recipes")
+        .update({ lines: payload, updated_at: new Date().toISOString() })
+        .eq("org_id", orgId())
+        .eq("id", existing.data.id)
+        .select("id,product_id,lines,created_at")
+        .single()
+    : await db()
+        .from("recipes")
+        .insert({ org_id: orgId(), product_id: productId, lines: payload })
+        .select("id,product_id,lines,created_at")
+        .single()
+  const row = check<RecipeRow>(data, error)
+  return mapRecipe(row)
+}
+
+/** Advance a kitchen ticket: queued → preparing → ready → served. */
+export async function setTicketStatus(orderId: string, status: Sale["ticket_status"]): Promise<void> {
+  const { error } = await db()
+    .from("orders")
+    .update({ ticket_status: status, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", orderId)
+  check(null, error as unknown as { message: string } | null)
+}
+
 export interface SaleInput {
   customer_id?: string | null
   items: { product_id: string | null; name: string; image_path?: string | null; qty: number; price: number; cost?: number }[]
@@ -732,6 +1090,7 @@ export async function fetchSettings(): Promise<ShopSettings | null> {
 
 export function mapSettings(row: SettingsRow): ShopSettings {
   return {
+    business_type: row.business_type ?? "retail",
     shop_name: row.shop_name ?? "",
     address: row.address ?? null,
     phone: row.phone ?? null,
@@ -873,6 +1232,294 @@ export async function deleteSupplier(id: string): Promise<void> {
     .eq("org_id", orgId())
     .eq("id", id)
   check(null, error as unknown as { message: string } | null)
+}
+
+/* ------------------------------- purchase orders ------------------------------- */
+
+export async function fetchPurchaseOrders(): Promise<PurchaseOrder[]> {
+  const { data, error } = await db()
+    .from("purchase_orders")
+    .select("*")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+  const rows = check<PurchaseOrderRow[]>(data, error)
+  return rows.map(mapPurchaseOrder)
+}
+
+export async function fetchPurchaseOrder(id: string): Promise<PurchaseOrder | null> {
+  const { data, error } = await db()
+    .from("purchase_orders")
+    .select("*")
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle()
+  const row = check<PurchaseOrderRow | null>(data, error)
+  return row ? mapPurchaseOrder(row) : null
+}
+
+export async function upsertPurchaseOrder(
+  id: string | null,
+  input: PurchaseOrderInput,
+): Promise<PurchaseOrder> {
+  const patch: Row = {}
+  if (input.supplier_id !== undefined) patch.supplier_id = input.supplier_id
+  if (input.status !== undefined) patch.status = input.status
+  if (input.lines !== undefined) {
+    const lines = purchaseOrderLinesPayload(input.lines)
+    patch.lines = lines
+    patch.total = purchaseOrderTotal(lines)
+  }
+  if (id) {
+    const { data, error } = await db()
+      .from("purchase_orders")
+      .update(patch)
+      .eq("org_id", orgId())
+      .eq("id", id)
+      .select("*")
+      .single()
+    return mapPurchaseOrder(check<PurchaseOrderRow>(data, error))
+  }
+  const payload: Row = { org_id: orgId(), ...patch }
+  payload.status = input.status ?? "draft"
+  payload.lines = patch.lines ?? []
+  payload.total = patch.total ?? 0
+  const { data, error } = await db().from("purchase_orders").insert(payload).select("*").single()
+  return mapPurchaseOrder(check<PurchaseOrderRow>(data, error))
+}
+
+export async function deletePurchaseOrder(id: string): Promise<void> {
+  const { error } = await db()
+    .from("purchase_orders")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+/**
+ * Receiving adds the ordered units to stock. A line's qty is in base units —
+ * the pack name on the line is only a label, it never multiplies the qty.
+ *
+ * A product that owns batches receives the units in a new batch, so its stock
+ * stays the sum of its batches; every other product gets the units added to
+ * its own stock. Either way the movement is written once, as a purchase.
+ *
+ * The stock is moved first and the order is only marked received afterwards,
+ * so a line that fails outright (a cashier without the owner role, a product
+ * that has gone) leaves the order open instead of marking stock that never
+ * arrived. Once a single line has landed the order is marked, so its units
+ * can never be applied a second time.
+ */
+export async function receivePurchaseOrder(id: string): Promise<PurchaseOrder> {
+  const po = await fetchPurchaseOrder(id)
+  if (!po) throw new Error("Purchase order not found")
+  if (po.status === "received") throw new Error("This purchase order was already received")
+
+  const failed: string[] = []
+  let applied = 0
+  let applicable = 0
+  for (const line of po.lines) {
+    const qty = Number(line.qty)
+    if (!Number.isFinite(qty) || qty <= 0) continue
+    applicable += 1
+    let product: Product | null = null
+    try {
+      product = await fetchProduct(line.productId)
+      if (!product) throw new Error("the product is no longer in the catalogue")
+      const batches = await fetchProductBatches(line.productId)
+      if (batches.length > 0) {
+        await createProductBatch(
+          line.productId,
+          {
+            batch_no: line.packName ?? "",
+            expiry: null,
+            qty,
+            cost: line.unitCost > 0 ? line.unitCost : product.cost_price ?? 0,
+          },
+          po.id,
+        )
+      } else {
+        await adjustStock(line.productId, qty, "purchase", po.id)
+      }
+      applied += 1
+      if (line.unitCost > 0) await updateProduct(line.productId, { cost_price: line.unitCost })
+    } catch (err) {
+      failed.push(`${product?.name ?? line.productId}: ${err instanceof Error ? err.message : "failed"}`)
+    }
+  }
+  if (applicable > 0 && applied === 0) {
+    throw new Error(`Nothing was received — ${failed.join("; ")}`)
+  }
+
+  const { data, error } = await db()
+    .from("purchase_orders")
+    .update({ status: "received", received_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("*")
+    .single()
+  const received = mapPurchaseOrder(check<PurchaseOrderRow>(data, error))
+  if (failed.length > 0) {
+    throw new Error(`Some lines could not be received — ${failed.join("; ")}`)
+  }
+  return received
+}
+
+/* ------------------------------- pharmacy batches ------------------------------- */
+
+function sortBatches(batches: ProductBatch[]): ProductBatch[] {
+  return batches.slice().sort((a, b) => {
+    const ea = a.expiry ?? "9999-12-31"
+    const eb = b.expiry ?? "9999-12-31"
+    if (ea !== eb) return ea < eb ? -1 : 1
+    return a.batch_no.localeCompare(b.batch_no)
+  })
+}
+
+/** The expiry column is a date: only a plain YYYY-MM-DD is stored. */
+function normalizeExpiry(expiry: string | null | undefined): string | null {
+  if (!expiry) return null
+  const trimmed = expiry.trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null
+}
+
+export async function fetchProductBatches(productId: string): Promise<ProductBatch[]> {
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+  const rows = check<ProductBatchRow[]>(data, error)
+  return sortBatches(rows.map(mapBatch))
+}
+
+export async function fetchProductBatchesForProducts(productIds: string[]): Promise<ProductBatch[]> {
+  if (productIds.length === 0) return []
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .in("product_id", productIds)
+    .is("deleted_at", null)
+  const rows = check<ProductBatchRow[]>(data, error)
+  return rows.map(mapBatch)
+}
+
+export async function createProductBatch(
+  productId: string,
+  input: ProductBatchInput,
+  moveRef?: string,
+): Promise<ProductBatch> {
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    product_id: productId,
+    batch_no: input.batch_no ?? "",
+    expiry: normalizeExpiry(input.expiry),
+    qty: input.qty ?? 0,
+    cost: input.cost ?? 0,
+  }
+  const { data, error } = await db()
+    .from("product_batches")
+    .insert(payload)
+    .select(BATCH_SELECT)
+    .single()
+  const batch = mapBatch(check<ProductBatchRow>(data, error))
+  await applyDerivedStock(batch.product_id, batch.id, batch.batch_no, true, moveRef)
+  return batch
+}
+
+export async function updateProductBatch(id: string, input: ProductBatchInput): Promise<ProductBatch> {
+  const patch: Row = {}
+  if (input.batch_no !== undefined) patch.batch_no = input.batch_no
+  if (input.expiry !== undefined) patch.expiry = normalizeExpiry(input.expiry)
+  if (input.qty !== undefined) patch.qty = input.qty
+  if (input.cost !== undefined) patch.cost = input.cost
+  if (Object.keys(patch).length === 0) {
+    const { data, error } = await db()
+      .from("product_batches")
+      .select(BATCH_SELECT)
+      .eq("org_id", orgId())
+      .eq("id", id)
+      .maybeSingle()
+    return mapBatch(check<ProductBatchRow>(data, error))
+  }
+  const { data, error } = await db()
+    .from("product_batches")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select(BATCH_SELECT)
+    .single()
+  const batch = mapBatch(check<ProductBatchRow>(data, error))
+  await applyDerivedStock(batch.product_id, batch.id, batch.batch_no, false)
+  return batch
+}
+
+export async function deleteProductBatch(id: string): Promise<void> {
+  const { data, error } = await db()
+    .from("product_batches")
+    .select(BATCH_SELECT)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .maybeSingle()
+  const row = check<ProductBatchRow | null>(data, error)
+  const { error: deleteError } = await db()
+    .from("product_batches")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, deleteError as unknown as { message: string } | null)
+  if (row) await applyDerivedStock(row.product_id, row.id, row.batch_no ?? "", false)
+}
+
+/**
+ * A batched product's stock is derived: it is the sum of its batches. After any
+ * batch change the product row is brought back in line, and the change is
+ * written as a stock move so the history still explains the number.
+ */
+async function applyDerivedStock(
+  productId: string,
+  batchId: string,
+  batchNo: string,
+  isNew: boolean,
+  moveRef?: string,
+): Promise<void> {
+  const batches = await fetchProductBatches(productId)
+  const derived = batches.reduce((sum, b) => sum + b.qty, 0)
+  const { data, error } = await db()
+    .from("products")
+    .select("stock")
+    .eq("org_id", orgId())
+    .eq("id", productId)
+    .maybeSingle()
+  check<ProductRow | null>(data, error)
+  const previous = Number((data as { stock?: number | string } | null)?.stock ?? 0)
+  const delta = derived - previous
+  if (delta === 0) return
+  const { error: updateError } = await db()
+    .from("products")
+    .update({ stock: derived, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", productId)
+  check(null, updateError as unknown as { message: string } | null)
+  // the move column holds whole units, so a fractional change has no move to write
+  const moveQty = Math.round(delta)
+  if (moveQty === 0) return
+  const { error: moveError } = await db()
+    .from("stock_moves")
+    .insert({
+      org_id: orgId(),
+      product_id: productId,
+      qty: moveQty,
+      reason: isNew && delta > 0 ? "purchase" : "adjust",
+      ref: moveRef ?? (batchNo ? `batch ${batchNo}` : "batch"),
+      batch_id: batchId,
+    })
+  check(null, moveError as unknown as { message: string } | null)
 }
 
 export async function findProductByBarcode(barcode: string): Promise<Product | null> {

@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { Input, SearchBar, TextArea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
-import { dueOf, usePos } from "@/lib/store";
+import { hasFeature } from "@/lib/features";
+import { dueOf, usePos, useSettings } from "@/lib/store";
 import { fmtMoneyCompact } from "@/lib/money";
 import { ChevronRight, Plus, Users } from "lucide-react";
 import Link from "next/link";
@@ -123,15 +124,18 @@ function CustomerFormSheet({
   onClose,
   onSaved,
 }: {
-  customer: { id: string; name: string; phone: string; address: string; note: string } | null;
+  customer: { id: string; name: string; phone: string; address: string; note: string; allergies?: string } | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const upsertCustomer = usePos((s) => s.upsertCustomer);
+  const settings = useSettings();
+  const isRx = hasFeature(settings.businessType, "rx");
   const [name, setName] = useState(customer?.name ?? "");
   const [phone, setPhone] = useState(customer?.phone ?? "");
   const [address, setAddress] = useState(customer?.address ?? "");
   const [note, setNote] = useState(customer?.note ?? "");
+  const [allergies, setAllergies] = useState(customer?.allergies ?? "");
   const [nameError, setNameError] = useState("");
 
   function save() {
@@ -139,13 +143,20 @@ function CustomerFormSheet({
       setNameError("Name is required");
       return;
     }
-    upsertCustomer({
+    const allergyNote = allergies.trim();
+    const saved = upsertCustomer({
       id: customer?.id,
       name: name.trim(),
       phone: phone.trim(),
       address: address.trim(),
       note: note.trim(),
+      allergies: allergyNote,
     });
+    /* the store's create path doesn't copy `allergies` yet — write it onto the
+       saved record so a new patient keeps their allergies */
+    if (!customer?.id && allergyNote && saved.allergies !== allergyNote) {
+      upsertCustomer({ id: saved.id, name: saved.name, allergies: allergyNote });
+    }
     onSaved();
   }
 
@@ -197,6 +208,16 @@ function CustomerFormSheet({
           placeholder="Anything to remember about this customer"
           className="[&_textarea]:min-h-[72px]"
         />
+        {isRx && (
+          <TextArea
+            label="Allergies"
+            value={allergies}
+            onChange={(e) => setAllergies(e.target.value)}
+            placeholder="Penicillin, latex…"
+            hint="Anything this patient reacts to — shown on their record."
+            className="[&_textarea]:min-h-[72px]"
+          />
+        )}
       </div>
     </Sheet>
   );

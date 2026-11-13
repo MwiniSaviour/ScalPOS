@@ -9,12 +9,18 @@ import { EmptyState } from "@/components/ui/emptystate";
 import { Input, SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
 import { Sheet } from "@/components/ui/sheet";
+import { cartLineKey, linePackName, packFactor } from "@/lib/batches";
+import { hasFeature } from "@/lib/features";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
-import { useCartTotals, usePos } from "@/lib/store";
+import { sellableStock } from "@/lib/batches";
+import { useNow } from "@/lib/now";
+import { isUnavailableToday, orderTypeLabel } from "@/lib/restaurant";
+import { useCartTotals, usePos, useSettings } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
   BadgePercent,
+  Check,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -22,13 +28,14 @@ import {
   PackageOpen,
   Plus,
   SearchX,
+  SlidersHorizontal,
   User,
   Users,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import type { Product } from "@/lib/types";
+import { useEffect, useMemo, useState } from "react";
+import type { CartLine, Order, Product, RestaurantTable } from "@/lib/types";
 
 export default function SellScreen() {
   const router = useRouter();
@@ -41,7 +48,17 @@ export default function SellScreen() {
   const setCartQty = usePos((s) => s.setCartQty);
   const setCartCustomer = usePos((s) => s.setCartCustomer);
   const cart = usePos((s) => s.cart);
+  const batches = usePos((s) => s.batches);
+  const settings = useSettings();
+  const tables = usePos((s) => s.tables);
+  const orders = usePos((s) => s.orders);
+  const cartOrderType = usePos((s) => s.cartOrderType);
+  const cartTableId = usePos((s) => s.cartTableId);
+  const cartTabOrderId = usePos((s) => s.cartTabOrderId);
+  const setCartContext = usePos((s) => s.setCartContext);
+  const seedTables = usePos((s) => s.seedTables);
   const totals = useCartTotals();
+  const now = useNow();
 
   const [query, setQuery] = useState("");
   const [catId, setCatId] = useState<string | null>(null);
@@ -52,6 +69,77 @@ export default function SellScreen() {
   const [discountOpen, setDiscountOpen] = useState(false);
   const [discountDraft, setDiscountDraft] = useState("");
   const [confirmClear, setConfirmClear] = useState(false);
+  const [packFor, setPackFor] = useState<Product | null>(null);
+  const [packPrice, setPackPrice] = useState<Record<number, string>>({});
+  const [optionFor, setOptionFor] = useState<Product | null>(null);
+  const [optionVariantId, setOptionVariantId] = useState<string | null>(null);
+  const [optionModIds, setOptionModIds] = useState<string[]>([]);
+  const [tabPrompt, setTabPrompt] = useState<{ table: RestaurantTable; order: Order } | null>(
+    null,
+  );
+
+  /* ------------------------------ restaurant ------------------------------ */
+
+  const orderTypesOn = hasFeature(settings.businessType, "order-types");
+  const tablesOn = hasFeature(settings.businessType, "tables");
+
+  // a shop configures the service types it takes; without a list a
+  // restaurant still serves at the table and over the counter
+  const orderTypes = useMemo(() => {
+    const cfg = settings.restaurantConfig?.orderTypes ?? [];
+    return cfg.length > 0 ? cfg : ["dine-in", "takeaway"];
+  }, [settings.restaurantConfig]);
+
+  const activeType = orderTypesOn
+    ? cartOrderType && orderTypes.includes(cartOrderType)
+      ? cartOrderType
+      : orderTypes[0]
+    : null;
+
+  const showTables =
+    tablesOn && settings.restaurantConfig?.tables !== false && isDineIn(activeType);
+
+  const table = tables.find((t) => t.id === cartTableId) ?? null;
+  const onTab = cartTabOrderId !== null;
+  const typeText = activeType ? orderTypeLabel(activeType) : null;
+  const chargeContext = table ? table.name : typeText;
+  const cartContext = onTab
+    ? [table?.name ?? null, "open tab"].filter(Boolean).join(" · ")
+    : [table?.name ?? null, typeText].filter(Boolean).join(" · ");
+  const tabCount = tabPrompt
+    ? tabPrompt.order.items.reduce((s, i) => s + i.qty, 0)
+    : 0;
+
+  // a table with a pending order holds an open tab
+  const tabByTable = useMemo(() => {
+    const m = new Map<string, Order>();
+    for (const o of orders) {
+      if (o.status !== "pending" || !o.tableId) continue;
+      if (!m.has(o.tableId)) m.set(o.tableId, o);
+    }
+    return m;
+  }, [orders]);
+
+  // the service type belongs to the sale — default it to the first configured
+  useEffect(() => {
+    if (!orderTypesOn) return;
+    if (cartOrderType && orderTypes.includes(cartOrderType)) return;
+    setCartContext({ orderType: orderTypes[0] });
+  }, [orderTypesOn, cartOrderType, orderTypes, setCartContext]);
+
+  // a restaurant with no tables yet gets eight to pick from
+  useEffect(() => {
+    if (!showTables) return;
+    if (tables.length > 0) return;
+    seedTables(8);
+  }, [showTables, tables.length, seedTables]);
+
+  // an item the kitchen marked off is not sold today
+  const offMenu = useMemo(() => {
+    const m = new Map<string, boolean>();
+    for (const p of products) m.set(p.id, isUnavailableToday(p, now));
+    return m;
+  }, [products, now]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -72,20 +160,210 @@ export default function SellScreen() {
     );
   }, [customers, custQuery]);
 
+  // A batched product can only sell what has not expired — the shelf number
+  // includes expired stock, which must never be offered for sale.
+  const availableById = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of products) {
+      const batched = batches.some((b) => b.productId === p.id);
+      m.set(p.id, batched ? sellableStock(batches, p.id, now) : p.stock);
+    }
+    return m;
+  }, [products, batches, now]);
+
   const qtyInCart = useMemo(() => {
     const m = new Map<string, number>();
-    for (const line of cart) m.set(line.productId, line.qty);
+    for (const line of cart) {
+      const p = products.find((x) => x.id === line.productId);
+      const base = line.qty * packFactor(p, line.packIdx);
+      m.set(line.productId, (m.get(line.productId) ?? 0) + base);
+    }
     return m;
-  }, [cart]);
+  }, [cart, products]);
+
+  // the options sheet's live price — variant delta plus every ticked modifier
+  const optionVariants = optionFor?.variants ?? [];
+  const optionModifiers = optionFor?.modifiers ?? [];
+  const optionVariant = optionVariants.find((v) => v.id === optionVariantId) ?? null;
+  const optionChosenMods = optionModifiers.filter((m) => optionModIds.includes(m.id));
+  const optionPrice = optionFor
+    ? optionFor.price +
+      (optionVariant?.priceDelta ?? 0) +
+      optionChosenMods.reduce((s, m) => s + m.priceDelta, 0)
+    : 0;
 
   if (!hydrated) return null;
 
   const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
 
-  const tap = (pid: string) => {
-    addToCart(pid, 1);
+  const flashTile = (pid: string) => {
     setFlash(pid);
     window.setTimeout(() => setFlash((f) => (f === pid ? null : f)), 400);
+  };
+
+  /* ---------------------------- restaurant actions ---------------------------- */
+
+  /** Leaving a tab keeps the table's items on the tab and empties the cart. */
+  const releaseTab = () => {
+    usePos.setState({ cart: [], cartDiscount: 0, cartUpdatedAt: 0 });
+    setCartContext({ tabOrderId: null });
+  };
+
+  const pickType = (t: string) => {
+    if (t === activeType) return;
+    if (cartTabOrderId) {
+      releaseTab();
+      usePos.getState().toast("Tab released — the table keeps its items", "warn");
+    }
+    setCartContext({ orderType: t, tableId: isDineIn(t) ? cartTableId : null });
+  };
+
+  const pickTable = (t: RestaurantTable) => {
+    const open = tabByTable.get(t.id);
+    if (open) {
+      setTabPrompt({ table: t, order: open });
+      return;
+    }
+    if (cartTabOrderId) {
+      releaseTab();
+      usePos.getState().toast("Tab released — the table keeps its items", "warn");
+    }
+    setCartContext({ tableId: t.id, tabOrderId: null });
+  };
+
+  /** Load the tab's items into the cart and keep selling on that order. */
+  const continueTab = () => {
+    if (!tabPrompt) return;
+    const { table: t, order } = tabPrompt;
+    const lines: CartLine[] = order.items.map((i) => ({
+      productId: i.productId,
+      qty: i.qty,
+      price: i.price,
+      ...(i.variantId ? { variantId: i.variantId } : {}),
+      ...(i.variantName ? { variantName: i.variantName } : {}),
+      ...(i.modifierIds && i.modifierIds.length ? { modifierIds: i.modifierIds } : {}),
+      ...(i.modifierNames && i.modifierNames.length ? { modifierNames: i.modifierNames } : {}),
+    }));
+    usePos.setState({ cart: lines, cartDiscount: 0, cartUpdatedAt: Date.now() });
+    // the tab keeps the service it was opened with — the cashier's current
+    // selection must not rewrite it
+    setCartContext({
+      tabOrderId: order.id,
+      tableId: t.id,
+      orderType: order.orderType ?? activeType,
+    });
+    setTabPrompt(null);
+  };
+
+  /** Start a fresh sale on the table — the open tab stays as it is. */
+  const startNew = () => {
+    if (!tabPrompt) return;
+    const { table: t } = tabPrompt;
+    releaseTab();
+    setCartContext({ tableId: t.id, tabOrderId: null });
+    setTabPrompt(null);
+  };
+
+  /* ------------------------------- options ------------------------------- */
+
+  /** Open the variant/modifier picker with a clean selection every time. */
+  const openOptions = (p: Product) => {
+    setOptionFor(p);
+    setOptionVariantId(p.variants?.[0]?.id ?? null);
+    setOptionModIds([]);
+  };
+
+  const toggleOptionMod = (id: string) => {
+    setOptionModIds((ids) =>
+      ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id],
+    );
+  };
+
+  const addConfigured = () => {
+    if (!optionFor) return;
+    const p = optionFor;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    addToCart(p.id, 1, {
+      price: optionPrice,
+      ...(optionVariant
+        ? { variantId: optionVariant.id, variantName: optionVariant.name }
+        : {}),
+      ...(optionChosenMods.length
+        ? {
+            modifierIds: optionChosenMods.map((m) => m.id),
+            modifierNames: optionChosenMods.map((m) => m.name),
+          }
+        : {}),
+    });
+    setOptionFor(null);
+    flashTile(p.id);
+  };
+
+  const tap = (pid: string) => {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    // options only apply to items sold on their own; a product with packs
+    // takes the pack picker instead (the two never meet in practice)
+    if (!p.packs?.length && (p.variants?.length || p.modifiers?.length)) {
+      openOptions(p);
+      return;
+    }
+    if (p.packs?.length) {
+      setPackFor(p);
+      setPackPrice(
+        Object.fromEntries(
+          p.packs.map((_, i) => [i, trimNum(p.price * packFactor(p, i))]),
+        ),
+      );
+      return;
+    }
+    addToCart(pid, 1);
+    flashTile(pid);
+  };
+
+  const closePack = () => {
+    setPackFor(null);
+    setPackPrice({});
+  };
+
+  const addBaseUnit = (pid: string) => {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    addToCart(pid, 1);
+    closePack();
+    flashTile(pid);
+  };
+
+  const addPack = (pid: string, packIdx: number) => {
+    const p = products.find((x) => x.id === pid);
+    if (!p) return;
+    if (isUnavailableToday(p, now)) {
+      usePos.getState().toast("Not available today", "warn");
+      return;
+    }
+    const fallback = trimNum(p.price * packFactor(p, packIdx));
+    const draft = (packPrice[packIdx] ?? fallback).trim();
+    addToCart(pid, 1, { packIdx, price: parsePrice(draft === "" ? fallback : draft) });
+    closePack();
+    flashTile(pid);
+  };
+
+  const removeOne = (pid: string) => {
+    const lines = cart.filter((l) => l.productId === pid);
+    const target = lines.find((l) => l.packIdx === undefined) ?? lines[0];
+    if (!target) return;
+    setCartQty(cartLineKey(target), target.qty - 1);
   };
 
   const openDiscount = () => {
@@ -101,7 +379,7 @@ export default function SellScreen() {
       .getState()
       .products.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
     if (hit) {
-      if (hit.stock <= 0) {
+      if ((availableById.get(hit.id) ?? hit.stock) <= 0) {
         usePos.getState().toast("Out of stock", "error");
         return;
       }
@@ -143,7 +421,48 @@ export default function SellScreen() {
       </header>
 
       <div className="px-5 pt-4 pb-32">
+        {orderTypesOn && (
+          <>
+            <div className="edge-fade no-scrollbar -mx-5 overflow-x-auto px-5">
+              <div className="flex w-max gap-1.5">
+                {orderTypes.map((t) => (
+                  <Chip key={t} active={t === activeType} onClick={() => pickType(t)}>
+                    {orderTypeLabel(t)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            {showTables && (
+              <div className="mt-3">
+                <div className="mb-2 flex items-baseline justify-between px-0.5">
+                  <p className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                    Table
+                  </p>
+                  {table && <p className="text-[13px] font-medium text-ink2">{table.name}</p>}
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {tables.map((t) => (
+                    <Chip
+                      key={t.id}
+                      active={t.id === cartTableId}
+                      onClick={() => pickTable(t)}
+                      className="justify-center"
+                    >
+                      <span className="truncate">{t.name}</span>
+                      {tabByTable.has(t.id) && (
+                        <span className="size-1.5 shrink-0 rounded-full bg-accent" />
+                      )}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         <SearchBar
+          className={orderTypesOn ? "mt-2.5" : undefined}
           value={query}
           onChange={setQuery}
           placeholder="Search products…"
@@ -189,11 +508,13 @@ export default function SellScreen() {
               {filtered.map((p) => (
                 <ProductTile
                   key={p.id}
+                  available={availableById.get(p.id) ?? p.stock}
                   p={p}
                   qty={qtyInCart.get(p.id) ?? 0}
                   flash={flash === p.id}
+                  unavailable={offMenu.get(p.id) ?? false}
                   onTap={() => tap(p.id)}
-                  onRemove={() => setCartQty(p.id, (qtyInCart.get(p.id) ?? 1) - 1)}
+                  onRemove={() => removeOne(p.id)}
                 />
               ))}
             </div>
@@ -206,17 +527,20 @@ export default function SellScreen() {
           <div className="mx-auto flex max-w-[440px] items-center gap-3 px-4 pb-[max(var(--nova-sab),8px)] pt-3">
             <button
               onClick={() => setCartOpen(true)}
-              aria-label={`Open cart, ${totals.count} items, ${fmtMoney(totals.total)}`}
+              aria-label={`Open cart, ${totals.count} items, ${fmtMoney(totals.total)}${
+                table ? `, ${table.name}` : ""
+              }`}
               className="press flex min-w-0 flex-1 items-baseline gap-2 text-left"
             >
               <span className="tabnum min-w-0 truncate text-[17px] font-bold text-ink">
                 {fmtMoney(totals.total)}
               </span>
-              <span className="shrink-0 text-[14px] text-ink3">
+              <span className="min-w-0 truncate text-[14px] text-ink3">
+                {chargeContext ? `${chargeContext} · ` : ""}
                 {totals.count} item{totals.count === 1 ? "" : "s"}
               </span>
             </button>
-            <Button onClick={() => router.push("/pay")}>Charge</Button>
+            <Button onClick={() => router.push("/pay")}>{onTab ? "Settle tab" : "Charge"}</Button>
           </div>
         </div>
       )}
@@ -237,53 +561,80 @@ export default function SellScreen() {
                 router.push("/pay");
               }}
             >
-              Charge
+              {onTab ? "Settle tab" : "Charge"}
             </Button>
           </div>
         }
       >
+        {cartContext && (
+          <p className="px-1 pb-2 text-[14px] font-medium text-ink2">{cartContext}</p>
+        )}
+
         <Card inset>
-          {totals.lines.map((l) => (
-            <div key={l.productId} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
-              <ProductArt
-                imageUrl={l.product.imageUrl}
-                name={l.product.name}
-                className="size-10 shrink-0 rounded-xl"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
-                  {l.product.name}
+          {totals.lines.map((l) => {
+            const key = cartLineKey(l);
+            const packName = linePackName(l.product, l.packIdx);
+            const max = Math.floor(
+              (availableById.get(l.product.id) ?? l.product.stock) /
+                packFactor(l.product, l.packIdx),
+            );
+            return (
+              <div key={key} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
+                <ProductArt
+                  imageUrl={l.product.imageUrl}
+                  name={l.product.name}
+                  className="size-10 shrink-0 rounded-xl"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[17px] font-semibold leading-tight text-ink">
+                    {lineTitle(l, packName)}
+                  </span>
+                  <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
+                    {fmtMoney(l.price ?? l.product.price)} each
+                  </span>
+                  {l.modifierNames && l.modifierNames.length > 0 && (
+                    <span className="mt-0.5 block truncate text-[12px] text-ink3">
+                      {l.modifierNames.join(", ")}
+                    </span>
+                  )}
                 </span>
-                <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
-                  {fmtMoney(l.product.price)} each
+                <span className="flex items-center gap-1.5">
+                  <StepBtn
+                    label="Decrease quantity"
+                    onClick={() => setCartQty(key, l.qty - 1)}
+                  >
+                    <Minus className="size-3.5" />
+                  </StepBtn>
+                  <span className="tabnum w-6 text-center text-[15px] font-bold text-ink">
+                    {l.qty}
+                  </span>
+                  <StepBtn
+                    label="Increase quantity"
+                    disabled={l.qty >= max}
+                    onClick={() =>
+                      addToCart(l.productId, 1, {
+                        packIdx: l.packIdx,
+                        price: l.price,
+                        ...(l.variantId ? { variantId: l.variantId } : {}),
+                        ...(l.variantName ? { variantName: l.variantName } : {}),
+                        ...(l.modifierIds && l.modifierIds.length
+                          ? { modifierIds: l.modifierIds }
+                          : {}),
+                        ...(l.modifierNames && l.modifierNames.length
+                          ? { modifierNames: l.modifierNames }
+                          : {}),
+                      })
+                    }
+                  >
+                    <Plus className="size-3.5" />
+                  </StepBtn>
+                  <IconButton label="Remove line" onClick={() => setCartQty(key, 0)}>
+                    <X className="size-4" />
+                  </IconButton>
                 </span>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <StepBtn
-                  label="Decrease quantity"
-                  onClick={() => setCartQty(l.productId, l.qty - 1)}
-                >
-                  <Minus className="size-3.5" />
-                </StepBtn>
-                <span className="tabnum w-6 text-center text-[15px] font-bold text-ink">
-                  {l.qty}
-                </span>
-                <StepBtn
-                  label="Increase quantity"
-                  disabled={l.qty >= l.product.stock}
-                  onClick={() => addToCart(l.productId, 1)}
-                >
-                  <Plus className="size-3.5" />
-                </StepBtn>
-                <IconButton
-                  label="Remove line"
-                  onClick={() => setCartQty(l.productId, 0)}
-                >
-                  <X className="size-4" />
-                </IconButton>
-              </span>
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </Card>
 
         <Card inset className="mt-2.5">
@@ -378,6 +729,193 @@ export default function SellScreen() {
       </Sheet>
 
       <Sheet
+        open={packFor !== null}
+        onClose={closePack}
+        title={packFor ? `Sell ${packFor.name}` : ""}
+        height="auto"
+      >
+        {packFor && (
+          (() => {
+            const packAvailable = availableById.get(packFor.id) ?? packFor.stock;
+            return (
+          <Card inset>
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[17px] font-semibold text-ink">
+                  {baseLabel(packFor)}
+                </span>
+                <span className="tabnum block text-[14px] text-ink3">
+                  {fmtMoney(packFor.price)} each
+                </span>
+              </span>
+              <Button
+                size="sm"
+                disabled={(packAvailable ?? 0) <= 0}
+                onClick={() => addBaseUnit(packFor.id)}
+              >
+                Add
+              </Button>
+            </div>
+            {packFor.packs?.map((pack, i) => {
+              const factor = packFactor(packFor, i);
+              const packsLeft = Math.floor((packAvailable ?? 0) / factor);
+              return (
+                <div key={`${i}-${pack.name}`} className="px-4 py-3.5">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 flex-1 truncate text-[17px] font-semibold text-ink">
+                      {pack.name}
+                    </span>
+                    <span className="tabnum shrink-0 text-[14px] text-ink3">
+                      = {factor} {unitWord(packFor)}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-end gap-2">
+                    <Input
+                      money
+                      inputMode="decimal"
+                      label="Pack price"
+                      placeholder="0.00"
+                      leading={
+                        <span className="tabnum text-[15px] font-semibold text-ink3">
+                          {CURRENCY_SYMBOL}
+                        </span>
+                      }
+                      value={packPrice[i] ?? ""}
+                      onChange={(e) =>
+                        setPackPrice((d) => ({ ...d, [i]: e.target.value }))
+                      }
+                      className="flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      className="mb-0.5"
+                      disabled={packsLeft <= 0}
+                      onClick={() => addPack(packFor.id, i)}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <p
+                    className={cn(
+                      "mt-1 text-[12px]",
+                      packsLeft > 0 ? "text-ink3" : "text-danger",
+                    )}
+                  >
+                    {packsLeft > 0
+                      ? `${packsLeft} pack${packsLeft === 1 ? "" : "s"} in stock`
+                      : "Not enough stock for a full pack"}
+                  </p>
+                </div>
+              );
+            })}
+          </Card>
+            );
+          })()
+        )}
+      </Sheet>
+
+      <Sheet
+        open={optionFor !== null}
+        onClose={() => setOptionFor(null)}
+        title={optionFor ? `Sell ${optionFor.name}` : ""}
+        height="auto"
+        footer={
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium text-ink3">Unit price</p>
+              <p className="tabnum truncate text-[19px] font-bold text-ink">
+                {fmtMoney(optionPrice)}
+              </p>
+            </div>
+            <Button
+              disabled={
+                (optionFor ? (availableById.get(optionFor.id) ?? optionFor.stock) : 0) <= 0
+              }
+              onClick={addConfigured}
+            >
+              Add
+            </Button>
+          </div>
+        }
+      >
+        {optionFor && (
+          <div className="space-y-2.5">
+            {optionVariants.length > 0 && (
+              <div>
+                <p className="px-1 pb-1.5 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                  Size
+                </p>
+                <Card inset>
+                  {optionVariants.map((v) => {
+                    const selected = v.id === optionVariantId;
+                    return (
+                      <button
+                        key={v.id}
+                        onClick={() => setOptionVariantId(v.id)}
+                        className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-full border",
+                            selected ? "border-accent" : "border-line2",
+                          )}
+                        >
+                          {selected && <span className="size-2.5 rounded-full bg-accent" />}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left text-[17px] font-semibold text-ink">
+                          {v.name}
+                        </span>
+                        <span className="tabnum shrink-0 text-[14px] text-ink3">
+                          {deltaText(v.priceDelta)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </Card>
+              </div>
+            )}
+
+            {optionModifiers.length > 0 && (
+              <div>
+                <p className="px-1 pb-1.5 text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                  Modifiers
+                </p>
+                <Card inset>
+                  {optionModifiers.map((m) => {
+                    const checked = optionModIds.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        onClick={() => toggleOptionMod(m.id)}
+                        className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                      >
+                        <span
+                          className={cn(
+                            "flex size-5 shrink-0 items-center justify-center rounded-md border",
+                            checked
+                              ? "border-accent bg-accent text-accentink"
+                              : "border-line2",
+                          )}
+                        >
+                          {checked && <Check className="size-3.5" strokeWidth={3} />}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-left text-[17px] font-semibold text-ink">
+                          {m.name}
+                        </span>
+                        <span className="tabnum shrink-0 text-[14px] text-ink3">
+                          {deltaText(m.priceDelta)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </Card>
+              </div>
+            )}
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet
         open={custOpen}
         onClose={() => setCustOpen(false)}
         title="Attach customer"
@@ -418,6 +956,31 @@ export default function SellScreen() {
         </Card>
       </Sheet>
 
+      <Sheet
+        open={tabPrompt !== null}
+        onClose={() => setTabPrompt(null)}
+        title={tabPrompt ? `${tabPrompt.table.name} is open` : ""}
+        height="auto"
+        footer={
+          <div className="flex gap-2.5">
+            <Button variant="secondary" block onClick={startNew}>
+              Start new
+            </Button>
+            <Button block onClick={continueTab}>
+              Continue tab
+            </Button>
+          </div>
+        }
+      >
+        {tabPrompt && (
+          <p className="pb-4 text-[14px] leading-6 text-ink2">
+            {tabPrompt.table.name} already has an open tab ({tabPrompt.order.id}) with{" "}
+            {tabCount} item{tabCount === 1 ? "" : "s"}. Continue it to add more items, or start
+            a new sale on this table — the current cart is cleared.
+          </p>
+        )}
+      </Sheet>
+
       <Confirm
         open={confirmClear}
         onClose={() => setConfirmClear(false)}
@@ -438,26 +1001,39 @@ export default function SellScreen() {
 
 function ProductTile({
   p,
+  available,
   qty,
   flash,
+  unavailable,
   onTap,
   onRemove,
 }: {
   p: Product;
+  available: number;
   qty: number;
   flash: boolean;
+  unavailable: boolean;
   onTap: () => void;
   onRemove: () => void;
 }) {
-  const out = p.stock <= 0;
-  const low = !out && p.stock <= p.lowStockAt;
+  const out = available <= 0;
+  const low = !out && available <= p.lowStockAt;
   const selected = qty > 0;
+  const hasOptions =
+    !p.packs?.length &&
+    ((p.variants?.length ?? 0) > 0 || (p.modifiers?.length ?? 0) > 0);
   return (
     <div
       role="button"
       tabIndex={out ? undefined : 0}
-      aria-disabled={out}
-      aria-label={selected ? `${p.name}, ${qty} in cart` : p.name}
+      aria-disabled={out || unavailable}
+      aria-label={
+        unavailable
+          ? `${p.name}, not available today`
+          : selected
+            ? `${p.name}, ${qty} in cart`
+            : p.name
+      }
       onClick={() => !out && onTap()}
       onKeyDown={(e) => {
         if (!out && (e.key === "Enter" || e.key === " ")) {
@@ -471,6 +1047,7 @@ function ProductTile({
           ? "border-accent bg-accent/10"
           : "border-line bg-surface hover:bg-surface2/50",
         out && "cursor-default opacity-50",
+        unavailable && !out && "opacity-60",
       )}
     >
       <ProductArt
@@ -496,12 +1073,21 @@ function ProductTile({
           {p.name}
         </span>
         <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
-        <span className="mt-0.5 flex h-[16px] items-center">
-          {out ? (
+        <span className="mt-0.5 flex h-[16px] items-center gap-1">
+          {unavailable ? (
+            <span className="text-[12px] font-medium text-warn">Not available today</span>
+          ) : out ? (
             <span className="text-[12px] font-medium text-ink3">Out of stock</span>
           ) : low ? (
-            <span className="text-[12px] font-medium text-warn">{p.stock} left</span>
+            <span className="text-[12px] font-medium text-warn">{available} left</span>
           ) : null}
+          {hasOptions && !unavailable && !out && (
+            <span className="flex items-center gap-0.5 text-[12px] font-medium text-ink3">
+              {low && <span className="text-ink3">·</span>}
+              <SlidersHorizontal className="size-3 shrink-0" />
+              <span>options</span>
+            </span>
+          )}
         </span>
       </span>
     </div>
@@ -533,4 +1119,38 @@ function StepBtn({
 
 function trimNum(n: number): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
+}
+
+/** How an option's price delta reads — "Included", "+₵5.00" or "−₵2.00". */
+function deltaText(n: number): string {
+  if (n === 0) return "Included";
+  return `${n > 0 ? "+" : "−"}${fmtMoney(Math.abs(n))}`;
+}
+
+/** A cart line's title — dish, chosen variant and pack, e.g. "Jollof · Large". */
+function lineTitle(l: CartLine & { product: Product }, packName: string | undefined): string {
+  return [l.product.name, l.variantName, packName].filter(Boolean).join(" · ");
+}
+
+/** The base-unit row of the pack picker — the product sold on its own. */
+function baseLabel(p: Product): string {
+  if (p.unit === "pcs") return "Single unit";
+  if (p.unit === "kg") return "Per kg";
+  if (p.unit === "ltr") return "Per litre";
+  return `Single ${p.unit}`;
+}
+
+/** The unit a pack multiplies — "Box of 10 strips" reads "= 10 strips". */
+function unitWord(p: Product): string {
+  if (p.unit === "pcs") return "units";
+  if (p.unit === "kg") return "kg";
+  if (p.unit === "ltr") return "litres";
+  if (p.unit === "bag") return "bags";
+  if (p.unit === "box") return "boxes";
+  return p.unit;
+}
+
+/** Dine-in is the service that eats at a table — only it needs one. */
+function isDineIn(orderType: string | null | undefined): boolean {
+  return (orderType ?? "").trim().toLowerCase() === "dine-in";
 }

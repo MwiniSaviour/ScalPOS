@@ -25,6 +25,7 @@ import {
   fetchCustomers,
   fetchSettings,
   createCustomer,
+  fetchRestaurantTables,
   placeSale,
 } from "@/lib/api/data"
 import type { Product, Customer, CartItem, Category, Sale, ShopSettings } from "@/lib/types"
@@ -63,6 +64,7 @@ export default function PosPage() {
   const [showReceipt, setShowReceipt] = useState(false)
   const [lastSale, setLastSale] = useState<Sale | null>(null)
   const [posSettings, setPosSettings] = useState<ShopSettings | null>(null)
+  const [posTables, setPosTables] = useState<Record<string, string>>({})
   const [paymentMethod, setPaymentMethod] = useState<string>("cash")
   const [discount, setDiscount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -95,6 +97,9 @@ export default function PosPage() {
   useEffect(() => {
     const t0 = setTimeout(() => {
       void fetchSettings().then(setPosSettings).catch(() => {})
+      void fetchRestaurantTables()
+        .then((ts) => setPosTables(Object.fromEntries(ts.map((t) => [t.id, t.name]))))
+        .catch(() => {})
     }, 0)
     return () => clearTimeout(t0)
   }, [])
@@ -612,7 +617,7 @@ export default function PosPage() {
 
       {showReceipt && lastSale && (
         <>
-          <OrderReceipt sale={lastSale} settings={posSettings} className="hidden print:block" />
+          <OrderReceipt sale={lastSale} settings={posSettings} tableName={lastSale.table_id ? posTables[lastSale.table_id] ?? null : null} className="hidden print:block" />
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 print:hidden">
             <div className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-xl">
               <div className="mb-4 text-center">
@@ -623,7 +628,7 @@ export default function PosPage() {
                 <p className="text-xs text-muted">{lastSale.invoice_no}</p>
               </div>
 
-              <OrderReceipt sale={lastSale} settings={posSettings} className="rounded-xl border border-border" />
+              <OrderReceipt sale={lastSale} settings={posSettings} tableName={lastSale.table_id ? posTables[lastSale.table_id] ?? null : null} className="rounded-xl border border-border" />
 
               <div className="mt-4 flex gap-3">
                 <button

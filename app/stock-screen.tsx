@@ -10,6 +10,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ScreenHeader } from "@/components/shell/screenheader";
 import { ProductArt } from "@/components/ui/productart";
+import { daysToExpiry } from "@/lib/batches";
 import { dateShort, dayGap, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { useNow } from "@/lib/now";
@@ -27,6 +28,7 @@ const REASON_LABELS: Record<StockReason, string> = {
   return: "Return",
   count: "Count",
   opening: "Opening",
+  expiry: "Expiry",
 };
 
 const DIRS: { value: Dir; label: string }[] = [
@@ -40,6 +42,7 @@ export default function StockScreen() {
   const moves = usePos((s) => s.stockMoves);
   const products = usePos((s) => s.products);
   const orders = usePos((s) => s.orders);
+  const batches = usePos((s) => s.batches);
   const now = useNow(60_000);
 
   const [query, setQuery] = useState("");
@@ -55,6 +58,20 @@ export default function StockScreen() {
     for (const m of moves) set.add(m.reason);
     return set;
   }, [moves]);
+
+  /* soonest expiry still on the shelf, per product — a batch sitting empty
+     is not a risk and must not raise an alarm */
+  const soonestExpiry = useMemo(() => {
+    const map = new Map<string, { days: number; expiry: string }>();
+    for (const b of batches) {
+      if (b.qty <= 0 || !b.expiry) continue;
+      const days = daysToExpiry(b.expiry, now);
+      if (days === null) continue;
+      const cur = map.get(b.productId);
+      if (!cur || days < cur.days) map.set(b.productId, { days, expiry: b.expiry });
+    }
+    return map;
+  }, [batches, now]);
 
   const resolve = (productId: string) =>
     products.find((x) => x.id === productId) ?? null;
@@ -137,6 +154,7 @@ export default function StockScreen() {
               const gap = dayGap(m.t, now);
               /* one time signal per row: relative for the last week, the date beyond it */
               const absolute = gap >= 1 && gap < 7 ? dateShort(m.t) : null;
+              const expiry = p ? soonestExpiry.get(p.id) : undefined;
               return (
                 <div key={m.id} className="flex items-start gap-3 px-4 py-3.5 hover:bg-surface2/50">
                   <ProductArt
@@ -145,7 +163,16 @@ export default function StockScreen() {
                     className="size-10 shrink-0 rounded-xl"
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[17px] font-semibold leading-tight text-ink">{p?.name ?? "Deleted product"}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="min-w-0 truncate text-[17px] font-semibold leading-tight text-ink">
+                        {p?.name ?? "Deleted product"}
+                      </span>
+                      {expiry && expiry.days <= 90 && (
+                        <span className="tabnum inline-flex h-6 shrink-0 items-center rounded-full bg-danger/10 px-2 text-[12px] font-bold text-danger">
+                          {expiry.days < 0 ? "Expired" : `Exp ${expiryShort(expiry.expiry, now)}`}
+                        </span>
+                      )}
+                    </span>
                     <span className="mt-1 block truncate text-[14px] text-ink3">
                       {`SKU ${p?.sku ?? "—"} · ${REASON_LABELS[m.reason]}${m.ref ? ` · ${shortRef(m.ref)}` : ""}`}
                     </span>
@@ -185,4 +212,17 @@ export default function StockScreen() {
 function shortRef(ref: string): string {
   if (ref.startsWith("ORD")) return `#${ref.slice(-4)}`;
   return ref;
+}
+
+/** "2027-03-12" → "12 Mar" (parsed as UTC so the day never shifts). */
+function expiryShort(expiry: string, now: number): string {
+  const d = new Date(`${expiry}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return expiry;
+  const sameYear = d.getUTCFullYear() === new Date(now).getUTCFullYear();
+  return d.toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: "UTC",
+  });
 }

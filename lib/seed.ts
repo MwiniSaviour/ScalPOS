@@ -6,6 +6,7 @@ const H = 3600000;
 export function defaultSettings(): Settings {
   const now = Date.now();
   return {
+    businessType: "retail",
     shopName: "My Shop",
     address: "",
     phone: "",
@@ -144,6 +145,7 @@ export function demoData(): DemoState {
   ];
 
   const settings: Settings = {
+    businessType: "retail",
     shopName: "Bright Corner Stores",
     address: "12 Osu Badu Street, Airport West, Accra",
     phone: "+233 24 555 1020",
