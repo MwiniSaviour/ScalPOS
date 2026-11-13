@@ -14,7 +14,7 @@ import {
   planSale,
   sellableStock,
 } from "../../lib/batches.ts";
-import type { Batch, CartLine, OrderItem, Product } from "../../lib/types.ts";
+import type { Batch, OrderItem, Product } from "../../lib/types.ts";
 
 const mkBatch = (over: Partial<Batch> & { id: string }): Batch => ({
   productId: "p1",
