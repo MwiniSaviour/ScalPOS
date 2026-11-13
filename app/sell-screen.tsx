@@ -15,7 +15,7 @@ import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
 import { sellableStock } from "@/lib/batches";
 import { useNow } from "@/lib/now";
-import { isUnavailableToday } from "@/lib/restaurant";
+import { isUnavailableToday, orderTypeLabel } from "@/lib/restaurant";
 import { useCartTotals, usePos, useSettings } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
@@ -101,7 +101,7 @@ export default function SellScreen() {
 
   const table = tables.find((t) => t.id === cartTableId) ?? null;
   const onTab = cartTabOrderId !== null;
-  const typeText = activeType ? typeLabel(activeType) : null;
+  const typeText = activeType ? orderTypeLabel(activeType) : null;
   const chargeContext = table ? table.name : typeText;
   const cartContext = onTab
     ? [table?.name ?? null, "open tab"].filter(Boolean).join(" · ")
@@ -427,7 +427,7 @@ export default function SellScreen() {
               <div className="flex w-max gap-1.5">
                 {orderTypes.map((t) => (
                   <Chip key={t} active={t === activeType} onClick={() => pickType(t)}>
-                    {typeLabel(t)}
+                    {orderTypeLabel(t)}
                   </Chip>
                 ))}
               </div>
@@ -1153,13 +1153,4 @@ function unitWord(p: Product): string {
 /** Dine-in is the service that eats at a table — only it needs one. */
 function isDineIn(orderType: string | null | undefined): boolean {
   return (orderType ?? "").trim().toLowerCase() === "dine-in";
-}
-
-/** How a service type reads on screen — "dine-in" becomes "Dine-in". */
-function typeLabel(orderType: string): string {
-  const key = orderType.trim().toLowerCase();
-  if (key === "dine-in") return "Dine-in";
-  if (key === "takeaway" || key === "take-away" || key === "take away") return "Takeaway";
-  if (key === "delivery") return "Delivery";
-  return orderType.replace(/(^|[\s-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
 }

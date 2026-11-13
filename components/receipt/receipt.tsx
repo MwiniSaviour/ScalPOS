@@ -12,11 +12,14 @@ import {
   type PrinterDevice,
 } from "@/lib/bluetooth";
 import { receiptToEscposBytes, type ReceiptPrintData } from "@/lib/escpos-print";
+import { hasFeature } from "@/lib/features";
 import { dateShort, timeOf } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
+import { itemChoices, orderTypeLabel, ticketNumber } from "@/lib/restaurant";
 import { dueOf, paidOf, usePos } from "@/lib/store";
+import { termsOf } from "@/lib/terms";
 import { cn } from "@/lib/ui";
-import type { Batch, Order, PaymentMethod, Settings } from "@/lib/types";
+import type { Batch, Order, PaymentMethod, RestaurantTable, Settings } from "@/lib/types";
 import { Printer, Share2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -87,6 +90,27 @@ function itemName(item: Order["items"][number]): string {
 }
 
 /**
+ * The service context of a restaurant order — "Ticket 0004 · Table 4 · Takeaway".
+ *
+ * Retail and pharmacy receipts carry no context line: there is no table to
+ * seat anyone at and no kitchen waiting on the ticket.
+ */
+function orderContext(
+  order: Order,
+  settings: Settings,
+  tables: RestaurantTable[],
+): string | null {
+  if (!hasFeature(settings.businessType, "order-types")) return null;
+  const parts: string[] = [];
+  parts.push(`${termsOf(settings.businessType).order} ${ticketNumber(order.id)}`);
+  const table = order.tableId ? tables.find((t) => t.id === order.tableId) : undefined;
+  if (table) parts.push(`Table ${table.name}`);
+  const type = orderTypeLabel(order.orderType);
+  if (type) parts.push(type);
+  return parts.join(" · ");
+}
+
+/**
  * Plain-text receipt — this is what the shop copies and sends to the customer,
  * so it must carry the same information as the printed receipt: shop details,
  * subtotal, discount, tax, total, payments and the balance.
@@ -96,6 +120,7 @@ export function receiptText(order: Order, settings?: Settings): string {
   const due = dueOf(order);
   const tax = orderTax(order);
   const allocations = batchLines(order, usePos.getState().batches);
+  const context = settings ? orderContext(order, settings, usePos.getState().tables) : null;
   const lines: string[] = [];
   if (settings) {
     lines.push(settings.shopName);
@@ -109,10 +134,13 @@ export function receiptText(order: Order, settings?: Settings): string {
   lines.push("ScalPOS receipt");
   lines.push(order.id);
   lines.push(`${dateShort(order.createdAt)} ${timeOf(order.createdAt)}`);
+  if (context) lines.push(context);
   lines.push("");
   for (const i of order.items) {
     lines.push(`${itemName(i)} × ${i.qty} — ${fmtMoney(i.price * i.qty)}`);
     if (i.prescriptionRef) lines.push(`  Rx ref ${i.prescriptionRef}`);
+    const choices = itemChoices(i);
+    if (choices) lines.push(`  ${choices}`);
   }
   lines.push("");
   lines.push(`Subtotal ${fmtMoney(order.subtotal)}`);
@@ -149,7 +177,9 @@ export function Receipt({
   const due = dueOf(order);
   const tax = orderTax(order);
   const batches = usePos((s) => s.batches);
+  const tables = usePos((s) => s.tables);
   const allocations = batchLines(order, batches);
+  const context = orderContext(order, settings, tables);
 
   return (
     <div
@@ -187,29 +217,41 @@ export function Receipt({
         </span>
       </div>
 
+      {context && (
+        <p className="mt-1 text-center text-[12px] font-semibold leading-5 text-ink2">
+          {context}
+        </p>
+      )}
+
       <div className="receipt-rule my-3 border-t border-dashed border-line" />
 
       <div className="flex flex-col gap-1.5">
-        {order.items.map((i, idx) => (
-          <div
-            key={`${i.productId}-${i.packName ?? ""}-${idx}`}
-            className="flex items-start justify-between gap-3"
-          >
-            <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
-              <span className="block">
-                {itemName(i)} <span className="text-ink3">× {i.qty}</span>
-              </span>
-              {i.prescriptionRef && (
-                <span className="block text-[11px] leading-4 text-ink3">
-                  Rx ref {i.prescriptionRef}
+        {order.items.map((i, idx) => {
+          const choices = itemChoices(i);
+          return (
+            <div
+              key={`${i.productId}-${i.packName ?? ""}-${idx}`}
+              className="flex items-start justify-between gap-3"
+            >
+              <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
+                <span className="block">
+                  {itemName(i)} <span className="text-ink3">× {i.qty}</span>
                 </span>
-              )}
-            </span>
-            <span className="tabnum shrink-0 text-[13px] leading-5 font-semibold text-ink">
-              {fmtMoney(i.price * i.qty)}
-            </span>
-          </div>
-        ))}
+                {i.prescriptionRef && (
+                  <span className="block text-[11px] leading-4 text-ink3">
+                    Rx ref {i.prescriptionRef}
+                  </span>
+                )}
+                {choices ? (
+                  <span className="block text-[11px] leading-4 text-ink3">{choices}</span>
+                ) : null}
+              </span>
+              <span className="tabnum shrink-0 text-[13px] leading-5 font-semibold text-ink">
+                {fmtMoney(i.price * i.qty)}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       <div className="receipt-rule my-3 border-t border-dashed border-line" />
@@ -286,6 +328,7 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
   const due = dueOf(order);
   const tax = orderTax(order);
   const allocations = batchLines(order, usePos.getState().batches);
+  const context = orderContext(order, settings, usePos.getState().tables);
   const batchFooter = allocations
     .map((b) => `Batch ${b.batchNo}${b.expiry ? ` exp ${b.expiry}` : ""} x${b.qty}`)
     .join(" · ");
@@ -301,10 +344,12 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
     refunded: order.status === "refunded",
     orderId: order.id,
     orderDate: `${dateShort(order.createdAt)} - ${timeOf(order.createdAt)}`,
+    context,
     items: order.items.map((i) => ({
       name: itemName(i),
       qty: i.qty,
       amount: fmtMoney(i.price * i.qty),
+      detail: itemChoices(i) || undefined,
     })),
     subtotal: fmtMoney(order.subtotal),
     discount: order.discount > 0 ? fmtMoney(order.discount) : null,

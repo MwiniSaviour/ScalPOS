@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { hasFeature } from "@/lib/features";
 import { useNow } from "@/lib/now";
-import { isUnavailableToday } from "@/lib/restaurant";
+import { isUnavailableToday, orderTypeLabel, ticketNumber } from "@/lib/restaurant";
 import { usePos, useSettings } from "@/lib/store";
 import { useTerms } from "@/lib/terms";
 import type { Order, OrderItem, Product, TicketStatus } from "@/lib/types";
@@ -67,6 +67,7 @@ export default function KitchenScreen() {
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const tableById = useMemo(() => new Map(tables.map((t) => [t.id, t])), [tables]);
+  const tablesOn = settings.restaurantConfig?.tables !== false;
 
   const groups = useMemo(() => {
     const live = orders.filter(isKitchenTicket);
@@ -85,7 +86,7 @@ export default function KitchenScreen() {
     if (!next) return;
     usePos.getState().setTicketStatus(order.id, next);
     if (next === "served") {
-      usePos.getState().toast(`${terms.order} #${shortNo(order.id)} served`, "ok");
+      usePos.getState().toast(`${terms.order} #${ticketNumber(order.id)} served`, "ok");
     }
     read();
   }
@@ -146,7 +147,7 @@ export default function KitchenScreen() {
                     key={o.id}
                     order={o}
                     items={visibleItems(o, productById, now)}
-                    table={o.tableId ? tableById.get(o.tableId)?.name : undefined}
+                    table={tablesOn && o.tableId ? tableById.get(o.tableId)?.name : undefined}
                     now={now}
                     action={g.action}
                     onAdvance={() => advance(o)}
@@ -192,24 +193,9 @@ function itemDetail(i: OrderItem): string {
 
 /** "Dine-in · Table 3" — the service type and the table the order sits on. */
 function orderMeta(order: Order, table?: string): string {
-  const type = typeLabel(order.orderType);
+  const type = orderTypeLabel(order.orderType);
   if (table) return type ? `${type} · ${table}` : table;
   return type;
-}
-
-function typeLabel(orderType?: string): string {
-  if (!orderType) return "";
-  return orderType
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-/** The ticket number off the order id — "ORD-20261112-0004" → "0004". */
-function shortNo(id: string): string {
-  return id.slice(-4);
 }
 
 /** How long a ticket has been waiting — "now", "12m", "1h 05m". */
@@ -252,7 +238,7 @@ function TicketCard({
         <span className="flex items-start gap-3">
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline gap-2">
-              <span className="tabnum text-[17px] font-bold text-ink">#{shortNo(order.id)}</span>
+              <span className="tabnum text-[17px] font-bold text-ink">#{ticketNumber(order.id)}</span>
               {meta && <span className="min-w-0 truncate text-[14px] text-ink3">{meta}</span>}
             </span>
           </span>

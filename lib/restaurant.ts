@@ -1,4 +1,4 @@
-import type { CartLine, OrderItem, Product, Recipe } from "./types";
+import type { CartLine, OrderItem, Product, Recipe, Settings } from "./types";
 
 /**
  * Restaurant helpers — pure functions over recipes, tabs and menu options.
@@ -6,6 +6,75 @@ import type { CartLine, OrderItem, Product, Recipe } from "./types";
  * Kept free of store/browser imports so they can be unit tested and reused by
  * the sync engine and the desktop.
  */
+
+/** The restaurant setup a shop runs with — see `Settings.restaurantConfig`. */
+export type RestaurantSetup = NonNullable<Settings["restaurantConfig"]>;
+
+/**
+ * A food vendor is a takeaway-only shop: it has no tables to seat guests, and
+ * every order leaves the counter. Same feature set as a restaurant minus
+ * `tables` — the kitchen queue, modifiers and recipes all still work.
+ */
+export function foodVendorSetup(): RestaurantSetup {
+  return { tables: false, orderTypes: ["takeaway"] };
+}
+
+/** A full restaurant seats guests at tables and also serves takeaway. */
+export function restaurantSetup(): RestaurantSetup {
+  return { tables: true, orderTypes: ["dine-in", "takeaway"] };
+}
+
+/**
+ * The setup for a shop — a food vendor is a restaurant with the tables off.
+ *
+ * A fresh object every call, so a shop's settings never share the config with
+ * another shop.
+ */
+export function restaurantSetupFor(foodVendor: boolean): RestaurantSetup {
+  return foodVendor ? foodVendorSetup() : restaurantSetup();
+}
+
+/** Is this shop a takeaway-only food vendor? */
+export function isFoodVendor(setup?: RestaurantSetup | null): boolean {
+  return !!setup && setup.tables === false;
+}
+
+/**
+ * The ticket number a restaurant calls an order by — "0004" out of
+ * "ORD-20261112-0004". The full id stays on the receipt as the reference;
+ * this is the short number the staff shouts across the room.
+ */
+export function ticketNumber(orderId: string): string {
+  const parts = (orderId ?? "").trim().split("-");
+  return parts[parts.length - 1] || orderId;
+}
+
+/**
+ * How a service type reads on screen — "dine-in" becomes "Dine-in".
+ * An unknown type keeps its own words, just capitalised.
+ */
+export function orderTypeLabel(orderType?: string | null): string {
+  const raw = (orderType ?? "").trim();
+  const key = raw.toLowerCase();
+  if (!key) return "";
+  if (key === "dine-in") return "Dine-in";
+  if (key === "takeaway" || key === "take-away" || key === "take away") return "Takeaway";
+  if (key === "delivery") return "Delivery";
+  return raw.replace(/(^|[\s-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
+}
+
+/**
+ * The choices on a menu item line — the size and the extras the customer
+ * picked, as they read on a receipt: "Large · Extra plantain".
+ */
+export function itemChoices(item: {
+  variantName?: string;
+  modifierNames?: string[];
+}): string {
+  return [item.variantName, ...(item.modifierNames ?? [])]
+    .filter((s): s is string => !!s && !!s.trim())
+    .join(" · ");
+}
 
 /** Options that make two order lines the same dish. */
 export function sameOptions(

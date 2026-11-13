@@ -9,10 +9,11 @@ import { daysToExpiry, expiryBucket } from "@/lib/batches";
 import { hasFeature } from "@/lib/features";
 import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
+import { orderTypeLabel } from "@/lib/restaurant";
 import { dueOf, usePos, useSettings } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, Smartphone, TriangleAlert, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, Smartphone, TriangleAlert, Utensils, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
@@ -37,6 +38,7 @@ export default function ReportsScreen() {
   const [period, setPeriod] = useState<Period>("today");
 
   const showExpiry = hasFeature(settings.businessType, "expiry");
+  const showMenuMix = hasFeature(settings.businessType, "order-types");
 
   const periodInfo = useMemo(() => {
     const days = PERIOD_DAYS[period];
@@ -129,6 +131,54 @@ export default function ReportsScreen() {
     }
     const rows = [...byProduct.values()].sort((a, b) => b.revenue - a.revenue).slice(0, 5);
     return { rows, max: rows[0]?.revenue ?? 0 };
+  }, [sold]);
+
+  /**
+   * Menu mix — a restaurant reads its own menu, not a product list: what sells
+   * by units, what the customers pick, and where the money came from.
+   */
+  const menuMix = useMemo(() => {
+    const items = new Map<string, { id: string; name: string; qty: number; revenue: number }>();
+    const options = new Map<string, number>();
+    const types = new Map<string, { label: string; tickets: number; revenue: number }>();
+
+    for (const o of sold) {
+      const key = (o.orderType ?? "").trim().toLowerCase() || "counter";
+      const t = types.get(key) ?? {
+        label: orderTypeLabel(o.orderType) || "Counter",
+        tickets: 0,
+        revenue: 0,
+      };
+      t.tickets += 1;
+      t.revenue += o.total;
+      types.set(key, t);
+
+      for (const it of o.items) {
+        const cur = items.get(it.productId) ?? { id: it.productId, name: it.name, qty: 0, revenue: 0 };
+        cur.qty += it.qty;
+        cur.revenue += it.price * it.qty;
+        items.set(it.productId, cur);
+        /* a line of 3 carries its choice 3 times */
+        for (const m of it.modifierNames ?? []) {
+          if (m) options.set(m, (options.get(m) ?? 0) + it.qty);
+        }
+      }
+    }
+
+    const itemRows = [...items.values()]
+      .sort((a, b) => b.qty - a.qty || b.revenue - a.revenue)
+      .slice(0, 6);
+    const optionTotal = [...options.values()].reduce((s, n) => s + n, 0);
+    const optionRows = [...options.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+      .slice(0, 6);
+    const typeTotal = [...types.values()].reduce((s, t) => s + t.revenue, 0);
+    const typeRows = [...types.values()]
+      .map((t) => ({ ...t, pct: typeTotal > 0 ? Math.round((t.revenue / typeTotal) * 100) : 0 }))
+      .sort((a, b) => b.revenue - a.revenue);
+
+    return { itemRows, optionRows, optionTotal, typeRows };
   }, [sold]);
 
   const lowStock = useMemo(
@@ -329,6 +379,97 @@ export default function ReportsScreen() {
           )}
         </Card>
       </section>
+
+      {/* menu mix */}
+      {showMenuMix && (
+        <section className="mt-6">
+          <Card inset>
+            <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
+              <h3 className="text-[15px] font-medium text-ink2">Menu mix</h3>
+              <span className="text-[14px] text-ink3">units, options, service</span>
+            </div>
+            {menuMix.itemRows.length === 0 && menuMix.typeRows.length === 0 ? (
+              <EmptyState
+                icon={<Utensils className="size-7" />}
+                title="No tickets in this period"
+                hint="Sell a dish and its mix will show here."
+              />
+            ) : (
+              <>
+                <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+                  <span className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                    Items sold
+                  </span>
+                  <span className="tabnum text-[12px] text-ink3">by units</span>
+                </div>
+                {menuMix.itemRows.map((r) => (
+                  <div key={r.id} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+                      {r.name}
+                    </span>
+                    <span className="tabnum shrink-0 text-[15px] font-semibold text-ink">
+                      {r.qty}
+                    </span>
+                    <span className="tabnum w-20 shrink-0 text-right text-[13px] text-ink3">
+                      {fmtShort(r.revenue)}
+                    </span>
+                  </div>
+                ))}
+
+                {menuMix.optionRows.length > 0 && (
+                  <>
+                    <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+                      <span className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                        Options chosen
+                      </span>
+                      <span className="tabnum text-[12px] text-ink3">times picked</span>
+                    </div>
+                    {menuMix.optionRows.map((r) => (
+                      <div key={r.name} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+                          {r.name}
+                        </span>
+                        <span className="tabnum shrink-0 text-[15px] font-semibold text-ink">
+                          {r.count}
+                        </span>
+                        <span className="tabnum w-20 shrink-0 text-right text-[13px] text-ink3">
+                          {menuMix.optionTotal > 0
+                            ? Math.round((r.count / menuMix.optionTotal) * 100)
+                            : 0}
+                          %
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
+
+                <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3">
+                  <span className="text-[12px] font-semibold uppercase tracking-[.06em] text-ink3">
+                    Revenue by service type
+                  </span>
+                  <span className="tabnum text-[12px] text-ink3">share</span>
+                </div>
+                {menuMix.typeRows.map((r) => (
+                  <div key={r.label} className="flex items-center gap-3 px-4 py-2.5">
+                    <span className="min-w-0 flex-1 truncate text-[15px] font-medium text-ink">
+                      {r.label}
+                    </span>
+                    <span className="tabnum shrink-0 text-[13px] text-ink3">
+                      {r.tickets} {r.tickets === 1 ? "ticket" : "tickets"}
+                    </span>
+                    <span className="tabnum shrink-0 text-[15px] font-semibold text-ink">
+                      {fmtShort(r.revenue)}
+                    </span>
+                    <span className="tabnum w-10 shrink-0 text-right text-[13px] text-ink3">
+                      {r.pct}%
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+          </Card>
+        </section>
+      )}
 
       {/* expiry risk */}
       {showExpiry && batches.length > 0 && now > 0 && (

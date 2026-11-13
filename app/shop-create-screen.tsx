@@ -7,7 +7,9 @@ import { Button, IconButton } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { BusinessTypePicker } from "@/components/ui/business-type-picker";
+import { Segmented } from "@/components/ui/segmented";
 import { usePos } from "@/lib/store";
+import { restaurantSetupFor } from "@/lib/restaurant";
 import { createStaff, setCurrentStaff, upsertStaff } from "@/lib/staff";
 import { markOnboarded, useHasOnboarded } from "@/lib/first-run";
 import { savePin, setSessionUnlocked } from "@/lib/pin";
@@ -22,6 +24,7 @@ export default function ShopCreateScreen() {
   const updateSettings = usePos((s) => s.updateSettings);
   const [shopName, setShopName] = useState("");
   const [businessType, setBusinessType] = useState<BusinessType>("retail");
+  const [foodVendor, setFoodVendor] = useState(false);
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
   const [ownerName, setOwnerName] = useState("");
@@ -38,6 +41,11 @@ export default function ShopCreateScreen() {
   const pinOk = pin.trim().length >= 4 && pin === confirm;
   const emailTrim = email.trim();
   const emailOk = emailTrim === "" || SHOP_EMAIL_RE.test(emailTrim);
+
+  function pickBusinessType(next: BusinessType) {
+    setBusinessType(next);
+    if (next !== "restaurant") setFoodVendor(false);
+  }
 
   function handleBack() {
     router.back();
@@ -64,6 +72,9 @@ export default function ShopCreateScreen() {
       updateSettings({
         shopName: shopName.trim(),
         businessType,
+        ...(businessType === "restaurant"
+          ? { restaurantConfig: restaurantSetupFor(foodVendor) }
+          : {}),
         phone: phone.trim(),
         address: address.trim(),
         ownerId: owner.name.trim(),
@@ -130,8 +141,26 @@ export default function ShopCreateScreen() {
             <p className="mb-2 text-[13px] text-ink3">
               Sets the wording and tools across the app.
             </p>
-            <BusinessTypePicker value={businessType} onChange={setBusinessType} />
+            <BusinessTypePicker value={businessType} onChange={pickBusinessType} />
           </div>
+          {businessType === "restaurant" && (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium text-ink2">Service style</p>
+              <Segmented
+                value={foodVendor ? "vendor" : "full"}
+                onChange={(v) => setFoodVendor(v === "vendor")}
+                options={[
+                  { value: "full", label: "Dine-in & tables" },
+                  { value: "vendor", label: "Takeaway only" },
+                ]}
+              />
+              <p className="mt-2 text-[13px] text-ink3">
+                {foodVendor
+                  ? "Counter pickup only — no table map or open tickets."
+                  : "Tables and open tabs on the register and kitchen board."}
+              </p>
+            </div>
+          )}
           <TextArea
             label="Address"
             value={address}

@@ -444,12 +444,10 @@ export const usePos = create<PosState>()(
         // The service context only means something to a restaurant. A shop
         // that switched business type must not stamp a table on a retail sale.
         const restaurant = hasFeature(s.settings.businessType, "order-types");
+        const tablesOn = restaurant && s.settings.restaurantConfig?.tables !== false;
         const orderType = restaurant ? (opts?.orderType ?? s.cartOrderType ?? null) : null;
-        const tableId =
-          restaurant && hasFeature(s.settings.businessType, "tables")
-            ? (opts?.tableId ?? s.cartTableId ?? null)
-            : null;
-        const tabId = restaurant ? (opts?.tabOrderId ?? s.cartTabOrderId ?? null) : null;
+        const tableId = tablesOn ? (opts?.tableId ?? s.cartTableId ?? null) : null;
+        const tabId = tablesOn ? (opts?.tabOrderId ?? s.cartTabOrderId ?? null) : null;
 
         // an item the kitchen marked off cannot be sold — even if it was added
         // to the cart before it went off the menu

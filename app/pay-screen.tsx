@@ -12,6 +12,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { ReceiptSheet, orderTax } from "@/components/receipt/receipt";
 import { hasFeature } from "@/lib/features";
 import { id } from "@/lib/format";
+import { orderTypeLabel } from "@/lib/restaurant";
 import { cashierDenominations, fmtMoney, fmtMoneyCompact, parsePrice } from "@/lib/money";
 import { useCartTotals, usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
@@ -60,15 +61,6 @@ function round2(n: number): number {
 
 function trimNum(n: number): string {
   return String(Number.isInteger(n) ? n : Number(n.toFixed(2)));
-}
-
-/** How a service type reads on screen — "dine-in" becomes "Dine-in". */
-function typeLabel(orderType: string): string {
-  const key = orderType.trim().toLowerCase();
-  if (key === "dine-in") return "Dine-in";
-  if (key === "takeaway" || key === "take-away" || key === "take away") return "Takeaway";
-  if (key === "delivery") return "Delivery";
-  return orderType.replace(/(^|[\s-])([a-z])/g, (_, p: string, c: string) => p + c.toUpperCase());
 }
 
 export default function PayScreen() {
@@ -152,7 +144,7 @@ export default function PayScreen() {
   const onTab = cartTabOrderId !== null;
   const contextLine = [
     table?.name ?? null,
-    cartOrderType ? typeLabel(cartOrderType) : null,
+    cartOrderType ? orderTypeLabel(cartOrderType) : null,
   ]
     .filter(Boolean)
     .join(" · ");

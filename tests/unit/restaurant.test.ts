@@ -1,13 +1,19 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
+  isFoodVendor,
   isUnavailableToday,
+  itemChoices,
   itemConsumption,
   mergeTabItems,
+  orderTypeLabel,
   planRestockIngredients,
   recipeDelta,
   recipeDraw,
+  restaurantSetup,
+  restaurantSetupFor,
   sameOptions,
+  ticketNumber,
 } from "../../lib/restaurant.ts";
 import { planRestock } from "../../lib/batches.ts";
 import type { CartLine, OrderItem, Product, Recipe } from "../../lib/types.ts";
@@ -210,5 +216,60 @@ describe("daily availability", () => {
 
   test("an item with no date is always available", () => {
     assert.equal(isUnavailableToday(mkProduct({ id: "p1" }), now), false);
+  });
+});
+
+describe("food vendor setup", () => {
+  test("foodVendor is takeaway-only with no table map", () => {
+    const setup = restaurantSetupFor(true);
+    assert.deepEqual(setup, { tables: false, orderTypes: ["takeaway"] });
+    assert.equal(isFoodVendor(setup), true);
+  });
+
+  test("a full restaurant keeps tables and dine-in", () => {
+    const setup = restaurantSetupFor(false);
+    assert.deepEqual(setup, { tables: true, orderTypes: ["dine-in", "takeaway"] });
+    assert.equal(isFoodVendor(setup), false);
+  });
+
+  test("a full setup is the default when a restaurant is created", () => {
+    assert.equal(isFoodVendor(restaurantSetup()), false);
+  });
+
+  test("an absent config means a full restaurant", () => {
+    assert.equal(isFoodVendor(undefined), false);
+  });
+});
+
+describe("receipt labels", () => {
+  test("the ticket number is the last part of the order id", () => {
+    assert.equal(ticketNumber("ORD-20261112-0004"), "0004");
+    assert.equal(ticketNumber("0004"), "0004");
+  });
+
+  test("a service type reads as a word", () => {
+    assert.equal(orderTypeLabel("dine-in"), "Dine-in");
+    assert.equal(orderTypeLabel("takeaway"), "Takeaway");
+    assert.equal(orderTypeLabel("take-away"), "Takeaway");
+    assert.equal(orderTypeLabel("delivery"), "Delivery");
+  });
+
+  test("an unset service type reads as nothing", () => {
+    assert.equal(orderTypeLabel(undefined), "");
+    assert.equal(orderTypeLabel(""), "");
+  });
+
+  test("an unknown service type keeps its own words", () => {
+    assert.equal(orderTypeLabel("room service"), "Room Service");
+  });
+
+  test("the choices on a line read in order", () => {
+    assert.equal(itemChoices({ variantName: "Large", modifierNames: ["Extra plantain"] }), "Large · Extra plantain");
+    assert.equal(itemChoices({ modifierNames: ["Extra cheese"] }), "Extra cheese");
+  });
+
+  test("a line with no choices reads as nothing", () => {
+    assert.equal(itemChoices({}), "");
+    assert.equal(itemChoices({ modifierNames: [] }), "");
   });
 });

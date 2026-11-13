@@ -9,6 +9,12 @@ import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
 import { Input, TextArea } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { Segmented } from "@/components/ui/segmented";
+import {
+  isFoodVendor,
+  restaurantSetup,
+  restaurantSetupFor,
+} from "@/lib/restaurant";
 import { ReceiptPreview } from "@/components/receipt/receipt-preview";
 import { CURRENCY_SYMBOL } from "@/lib/money";
 import { useSettings, usePos } from "@/lib/store";
@@ -35,7 +41,7 @@ export default function ShopSettingsScreen() {
     setTypeOpen(false);
     if (next === settings.businessType) return;
     if (next === "retail") {
-      updateSettings({ businessType: next });
+      updateSettings({ businessType: next, restaurantConfig: undefined });
       toast(`Business type changed to ${businessTypeLabel(next)}`);
       return;
     }
@@ -44,7 +50,12 @@ export default function ShopSettingsScreen() {
 
   function confirmTypeChange() {
     if (!pendingType) return;
-    updateSettings({ businessType: pendingType });
+    updateSettings({
+      businessType: pendingType,
+      ...(pendingType === "restaurant"
+        ? { restaurantConfig: restaurantSetup() }
+        : { restaurantConfig: undefined }),
+    });
     toast(`Business type changed to ${businessTypeLabel(pendingType)}`);
     setPendingType(null);
   }
@@ -152,6 +163,33 @@ export default function ShopSettingsScreen() {
             <ChevronRight className="size-4 shrink-0 text-ink3" />
           </button>
         </Card>
+        {settings.businessType === "restaurant" && (
+          <Card className="mt-2.5 px-4 py-4">
+            <div className="flex flex-col gap-3">
+              <div>
+                <span className="block text-[17px] font-semibold text-ink">Service style</span>
+                <span className="block text-[14px] text-ink3">How customers order</span>
+              </div>
+              <Segmented
+                value={isFoodVendor(settings.restaurantConfig) ? "vendor" : "full"}
+                onChange={(v) => {
+                  const next = restaurantSetupFor(v === "vendor");
+                  updateSettings({ restaurantConfig: next });
+                  toast(v === "vendor" ? "Takeaway only — tables hidden" : "Dine-in & tables enabled");
+                }}
+                options={[
+                  { value: "full", label: "Dine-in & tables" },
+                  { value: "vendor", label: "Takeaway only" },
+                ]}
+              />
+              <p className="text-[14px] leading-5 text-ink3">
+                {isFoodVendor(settings.restaurantConfig)
+                  ? "Counter pickup only — no table map or open tickets."
+                  : "Tables and open tabs on the register and kitchen board."}
+              </p>
+            </div>
+          </Card>
+        )}
       </section>
 
       <Sheet open={typeOpen} onClose={() => setTypeOpen(false)} height="auto" title="Business type">
