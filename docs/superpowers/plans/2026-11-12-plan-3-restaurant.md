@@ -292,3 +292,24 @@ Verify: tsc + eslint both apps; mobile + desktop builds pass.
 - Sync: second device pull receives `recipes`/`restaurant_tables` rows
   (migration applied live via supabase MCP).
 - Grep ban: no new `useSyncExternalStore`/`useClientValue` fresh readers.
+
+---
+
+## Status: COMPLETE (2026-11-13)
+
+- T1–T6: done, merged into `wave1` (T6 = `4da67e9`). 58 unit tests pass.
+- T7 desktop parity: commit `a41460e` on `wave1` — types/mappers/endpoints,
+  product-form menu options + recipe editor, `/dashboard/kitchen` board,
+  orders Type column, receipt ticket/type/table, NAV_ITEMS Kitchen.
+  Desktop tsc + eslint + build clean.
+- `0015_restaurant.sql` applied to live DB (version `20261113142551`); advisors clean.
+- Chromium CDP smoke (static export + `CapacitorCustomPlatform` head-injection
+  via serve-export.cjs): **all 17 checks pass** — sell sheet variant/modifier/
+  order-type, kitchen board ticket/type/table/advance (queued→preparing),
+  reports menu mix rows, pay→Complete sale → order placed with
+  `recipeConsumption [{p-eggs,2}]`, eggs stock 200→198, sale move qty −2.
+  Note: CDP `addScriptToEvaluateOnNewDocument` does NOT fire in this
+  chromium build; injection had to happen server-side in the static server.
+- Known follow-up (out of scope): `lib/sync/settings.ts` does not sync
+  `restaurantConfig`; add when settings sync is next touched.
+- Deferred: PIN recovery flow needs a physical device.
