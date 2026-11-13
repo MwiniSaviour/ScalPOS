@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { ArrowLeft, Printer, AlertCircle, Banknote } from "lucide-react"
 import Link from "next/link"
-import { fetchSale, fetchSettings, recordOrderPayment } from "@/lib/api/data"
+import { fetchSale, fetchSettings, recordOrderPayment, fetchRestaurantTables } from "@/lib/api/data"
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils"
 import type { Sale, PaymentMethod, ShopSettings } from "@/lib/types"
 import { PAY_STATUS_BADGES, ORDER_STATUS_LABELS, paidOf, dueOf } from "@/lib/orders-ui"
@@ -22,6 +22,7 @@ export default function OrderDetailPage() {
   const { id } = useParams<{ id: string }>()
   const [sale, setSale] = useState<Sale | null>(null)
   const [settings, setSettings] = useState<ShopSettings | null>(null)
+  const [tables, setTables] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [payOpen, setPayOpen] = useState(false)
@@ -53,6 +54,9 @@ export default function OrderDetailPage() {
 
   useEffect(() => {
     fetchSettings().then(setSettings).catch(() => {})
+    fetchRestaurantTables()
+      .then((ts) => setTables(Object.fromEntries(ts.map((t) => [t.id, t.name]))))
+      .catch(() => {})
   }, [])
 
   if (loading) {
@@ -108,7 +112,7 @@ export default function OrderDetailPage() {
 
   return (
     <>
-      <OrderReceipt sale={sale} settings={settings} className="hidden print:block" />
+      <OrderReceipt sale={sale} settings={settings} tableName={sale.table_id ? tables[sale.table_id] ?? null : null} className="hidden print:block" />
       <div className="print:hidden">
       <Link
         href="/dashboard/orders"

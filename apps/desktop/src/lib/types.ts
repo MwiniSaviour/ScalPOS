@@ -41,6 +41,49 @@ export interface Pack {
   factor: number
 }
 
+/**
+ * A choice on a menu item: "no onions", "extra cheese" (restaurant).
+ * Matches the mobile app's jsonb payload exactly, including `priceDelta`.
+ */
+export interface Modifier {
+  id: string
+  name: string
+  priceDelta: number
+}
+
+/** A size option on a menu item: "Large +50" (restaurant). Same jsonb shape. */
+export interface Variant {
+  id: string
+  name: string
+  priceDelta: number
+}
+
+/** What stage a kitchen ticket is at (restaurant). */
+export type TicketStatus = "queued" | "preparing" | "ready" | "served"
+
+/** One ingredient line of a recipe: how much of a product one menu item uses. */
+export interface RecipeLine {
+  ingredientProductId: string
+  qty: number
+  wastePct?: number
+}
+
+/** The recipe of a menu item: the ingredients consumed when it is sold. */
+export interface Recipe {
+  id: string
+  product_id: string
+  lines: RecipeLine[]
+  created_at: string
+}
+
+/** A dining table (restaurant). */
+export interface RestaurantTable {
+  id: string
+  name: string
+  seats: number
+  created_at: string
+}
+
 export interface Product {
   id: string
   name: string
@@ -59,6 +102,10 @@ export interface Product {
   prescription_only: boolean
   controlled: boolean
   packs: Pack[] | null
+  modifiers: Modifier[] | null
+  variants: Variant[] | null
+  /** The item is off the menu until this date (inclusive), or null. */
+  unavailable_until: string | null
   created_at: string
   updated_at: string
 }
@@ -105,6 +152,10 @@ export interface SaleItem {
   quantity: number
   unit_price: number
   subtotal: number
+  variant_id?: string | null
+  variant_name?: string | null
+  modifier_ids?: string[] | null
+  modifier_names?: string[] | null
 }
 
 export interface Sale {
@@ -123,6 +174,10 @@ export interface Sale {
   status: OrderStatus
   pay_status: OrderPayStatus
   payments: { method: PaymentMethod; amount: number }[]
+  /** Dine-in / Takeaway / Delivery (restaurant); null for other shops. */
+  order_type: string | null
+  table_id: string | null
+  ticket_status: TicketStatus | null
   sale_date: string
   created_at: string
   items?: SaleItem[]

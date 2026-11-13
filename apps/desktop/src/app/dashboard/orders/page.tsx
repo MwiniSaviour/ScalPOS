@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { Search, ArrowRight, AlertTriangle } from "lucide-react"
 import Link from "next/link"
-import { fetchSales } from "@/lib/api/data"
+import { fetchSales, fetchRestaurantTables } from "@/lib/api/data"
 import { formatCurrency, formatDateTime, cn } from "@/lib/utils"
+import { orderTypeLabel } from "@/lib/restaurant"
 import type { Sale } from "@/lib/types"
 import { dueOf, OrderPayBadge, PERIODS, ordersWindow, type Bounds, type Period } from "@/lib/orders-ui"
 import { useRealtime } from "@/lib/api/realtime"
@@ -29,6 +30,7 @@ function statusMatches(s: { status: string; pay_status: string }, f: StatusFilte
 
 export default function OrdersPage() {
   const [sales, setSales] = useState<Sale[]>([])
+  const [tables, setTables] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
@@ -61,7 +63,9 @@ export default function OrdersPage() {
     try {
       setLoading(true)
       setError("")
-      setSales(await fetchSales())
+      const [rows, tableRows] = await Promise.all([fetchSales(), fetchRestaurantTables()])
+      setSales(rows)
+      setTables(Object.fromEntries(tableRows.map((t) => [t.id, t.name])))
     } catch {
       setError("Failed to load orders. Check your connection and refresh.")
     } finally {
@@ -189,6 +193,7 @@ export default function OrdersPage() {
             <tr className="border-b border-border text-left text-xs font-semibold uppercase tracking-wide text-muted">
               <th className="px-4 py-3">Invoice</th>
               <th className="px-4 py-3">Customer</th>
+              <th className="px-4 py-3">Type</th>
               <th className="px-4 py-3">Date</th>
               <th className="px-4 py-3 text-right">Items</th>
               <th className="px-4 py-3 text-right">Total</th>
@@ -199,7 +204,7 @@ export default function OrdersPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-muted">No orders found for this view.</td>
+                <td colSpan={8} className="px-4 py-10 text-center text-muted">No orders found for this view.</td>
               </tr>
             ) : (
               filtered.map((sale) => {
@@ -208,6 +213,14 @@ export default function OrdersPage() {
                   <tr key={sale.id} className="border-b border-border last:border-0 hover:bg-sidebar-hover/40">
                     <td className="px-4 py-3 font-semibold text-foreground">{sale.invoice_no}</td>
                     <td className="px-4 py-3 text-muted">{sale.customer?.name ?? "Walk-in"}</td>
+                    <td className="px-4 py-3 text-muted">
+                      {sale.order_type ? (
+                        orderTypeLabel(sale.order_type) +
+                        (sale.table_id && tables[sale.table_id] ? ` · ${tables[sale.table_id]}` : "")
+                      ) : (
+                        <span className="text-muted/50">—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-muted">{formatDateTime(sale.sale_date)}</td>
                     <td className="px-4 py-3 text-right text-muted">
                       {(sale.items ?? []).reduce((n, i) => n + i.quantity, 0)}

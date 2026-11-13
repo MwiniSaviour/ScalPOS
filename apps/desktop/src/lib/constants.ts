@@ -34,6 +34,7 @@ export const NAV_ITEMS: NavItem[] = [
   },
   { label: "Employees", href: "/dashboard/employees", icon: "UserCog", roles: ["admin"] },
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
+  { label: "Kitchen", href: "/dashboard/kitchen", icon: "ChefHat", feature: "kitchen" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },
   { label: "Orders", href: "/dashboard/orders", icon: "ShoppingCart" },
 ]

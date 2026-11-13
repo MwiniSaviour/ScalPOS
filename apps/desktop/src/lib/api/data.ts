@@ -1,6 +1,7 @@
 import type {
   Category,
   Customer,
+  Modifier,
   OrderPayStatus,
   OrderStatus,
   Pack,
@@ -9,12 +10,16 @@ import type {
   ProductBatch,
   PurchaseOrder,
   PurchaseOrderLine,
+  Recipe,
+  RecipeLine,
+  RestaurantTable,
   Sale,
   SaleItem,
   ShopSettings,
   Staff,
   StockMove,
   Supplier,
+  Variant,
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { getOrgId } from "@/lib/auth/org"
@@ -42,6 +47,9 @@ type ProductRow = {
   prescription_only: boolean | null
   controlled: boolean | null
   packs: unknown
+  modifiers: unknown
+  variants: unknown
+  unavailable_until: string | null
   created_at: string
   updated_at: string
 }
@@ -104,6 +112,10 @@ type SaleItemRow = {
   name: string | null
   qty: number | string
   price: number | string
+  variant_id: string | null
+  variant_name: string | null
+  modifier_ids: unknown
+  modifier_names: unknown
 }
 
 type PaymentRow = { method?: string; amount?: number | string }
@@ -119,6 +131,9 @@ type SaleRow = {
   payments: PaymentRow[] | null
   pay_status: string | null
   status: string | null
+  order_type: string | null
+  table_id: string | null
+  ticket_status: string | null
   completed_at: string | null
   created_at: string
   customer?: CustomerRow | CustomerRow[] | null
@@ -187,6 +202,9 @@ export interface ProductInput {
   prescription_only?: boolean
   controlled?: boolean
   packs?: Pack[] | null
+  modifiers?: Modifier[] | null
+  variants?: Variant[] | null
+  unavailable_until?: string | null
 }
 
 export interface ProductBatchInput {
@@ -249,6 +267,32 @@ function mapPacks(raw: unknown): Pack[] | null {
   return packs.length > 0 ? packs : null
 }
 
+/**
+ * Modifiers / variants are jsonb arrays of { id, name, priceDelta } written by
+ * the mobile app. Only well-formed entries are kept; an empty or malformed
+ * array reads back as null.
+ */
+function mapOptions(raw: unknown): { id: string; name: string; priceDelta: number }[] | null {
+  if (!Array.isArray(raw)) return null
+  const out: { id: string; name: string; priceDelta: number }[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const opt = entry as { id?: unknown; name?: unknown; priceDelta?: unknown }
+    const id = typeof opt.id === "string" ? opt.id.trim() : ""
+    const name = typeof opt.name === "string" ? opt.name.trim() : ""
+    if (!id || !name) continue
+    const delta = Number(opt.priceDelta ?? 0)
+    out.push({ id, name, priceDelta: Number.isFinite(delta) ? delta : 0 })
+  }
+  return out.length > 0 ? out : null
+}
+
+function mapStringList(raw: unknown): string[] | null {
+  if (!Array.isArray(raw)) return null
+  const out = raw.filter((v): v is string => typeof v === "string" && v !== "")
+  return out.length > 0 ? out : null
+}
+
 function mapBatch(row: ProductBatchRow): ProductBatch {
   return {
     id: row.id,
@@ -290,6 +334,9 @@ function mapRow(row: ProductRow): Product {
     prescription_only: row.prescription_only === true,
     controlled: row.controlled === true,
     packs: mapPacks(row.packs),
+    modifiers: mapOptions(row.modifiers) as Modifier[] | null,
+    variants: mapOptions(row.variants) as Variant[] | null,
+    unavailable_until: row.unavailable_until ?? null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -408,6 +455,10 @@ function mapSaleItem(row: SaleItemRow): SaleItem {
     quantity: qty,
     unit_price: price,
     subtotal: qty * price,
+    variant_id: row.variant_id ?? null,
+    variant_name: row.variant_name ?? null,
+    modifier_ids: mapStringList(row.modifier_ids),
+    modifier_names: mapStringList(row.modifier_names),
   }
 }
 
@@ -436,6 +487,11 @@ export function mapSale(row: SaleRow, items?: SaleItem[]): Sale {
     status: (row.status === "completed" || row.status === "refunded" ? row.status : "pending") as OrderStatus,
     pay_status: payStatus,
     payments,
+    order_type: row.order_type ?? null,
+    table_id: row.table_id ?? null,
+    ticket_status: (row.ticket_status === "queued" || row.ticket_status === "preparing"
+      || row.ticket_status === "ready" || row.ticket_status === "served"
+      ? row.ticket_status : null) as Sale["ticket_status"],
     sale_date: row.completed_at ?? row.created_at,
     created_at: row.created_at,
     items: items,
@@ -462,7 +518,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
   if (orderIds.length === 0) return map
   const { data, error } = await db()
     .from("order_items")
-    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at")
+    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names")
     .in("order_id", orderIds)
     .order("position", { ascending: true })
   if (error) throw new Error(error.message)
@@ -527,6 +583,9 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     prescription_only: input.prescription_only === true,
     controlled: input.controlled === true,
     packs: input.packs ?? null,
+    modifiers: input.modifiers ?? null,
+    variants: input.variants ?? null,
+    unavailable_until: input.unavailable_until ?? null,
   }
   const { data, error } = await db().from("products").insert(payload).select(PRODUCT_SELECT).single()
   const row = check<ProductRow>(data, error)
@@ -554,6 +613,9 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
   if (input.prescription_only !== undefined) patch.prescription_only = input.prescription_only
   if (input.controlled !== undefined) patch.controlled = input.controlled
   if (input.packs !== undefined) patch.packs = input.packs
+  if (input.modifiers !== undefined) patch.modifiers = input.modifiers
+  if (input.variants !== undefined) patch.variants = input.variants
+  if (input.unavailable_until !== undefined) patch.unavailable_until = input.unavailable_until
   const client = db()
   if (Object.keys(patch).length > 0) {
     const { data, error } = await client
@@ -735,6 +797,163 @@ export async function deleteCustomer(id: string): Promise<void> {
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("org_id", orgId())
     .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+// ---------- restaurant ----------
+
+type RestaurantTableRow = {
+  id: string
+  name: string | null
+  seats: number | string | null
+  created_at: string
+}
+
+function mapTable(row: RestaurantTableRow): RestaurantTable {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    seats: Number(row.seats ?? 4),
+    created_at: row.created_at,
+  }
+}
+
+export async function fetchRestaurantTables(): Promise<RestaurantTable[]> {
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .select("id,name,seats,created_at")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("name", { ascending: true })
+  const rows = check<RestaurantTableRow[]>(data, error)
+  return rows.map(mapTable)
+}
+
+export async function createRestaurantTable(input: { name: string; seats: number }): Promise<RestaurantTable> {
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .insert({ org_id: orgId(), local_id: makeLocalId(), name: input.name, seats: input.seats })
+    .select("id,name,seats,created_at")
+    .single()
+  const row = check<RestaurantTableRow>(data, error)
+  return mapTable(row)
+}
+
+export async function updateRestaurantTable(
+  id: string,
+  input: { name?: string; seats?: number },
+): Promise<RestaurantTable> {
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined) patch.name = input.name
+  if (input.seats !== undefined) patch.seats = input.seats
+  const { data, error } = await db()
+    .from("restaurant_tables")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("id,name,seats,created_at")
+    .single()
+  const row = check<RestaurantTableRow>(data, error)
+  return mapTable(row)
+}
+
+export async function deleteRestaurantTable(id: string): Promise<void> {
+  const { error } = await db()
+    .from("restaurant_tables")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+type RecipeRow = {
+  id: string
+  product_id: string
+  lines: unknown
+  created_at: string
+}
+
+function mapRecipe(row: RecipeRow): Recipe {
+  const raw = Array.isArray(row.lines) ? row.lines : []
+  const lines: RecipeLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const l = entry as { ingredientProductId?: unknown; qty?: unknown; wastePct?: unknown }
+    const ingredientProductId = typeof l.ingredientProductId === "string" ? l.ingredientProductId : ""
+    const qty = Number(l.qty)
+    if (!ingredientProductId || !Number.isFinite(qty) || qty <= 0) continue
+    const waste = Number(l.wastePct ?? 0)
+    lines.push({
+      ingredientProductId,
+      qty,
+      ...(Number.isFinite(waste) && waste > 0 ? { wastePct: waste } : {}),
+    })
+  }
+  return { id: row.id, product_id: row.product_id, lines, created_at: row.created_at }
+}
+
+export async function fetchRecipes(productIds?: string[]): Promise<Recipe[]> {
+  let query = db()
+    .from("recipes")
+    .select("id,product_id,lines,created_at")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+  if (productIds && productIds.length > 0) query = query.in("product_id", productIds)
+  const { data, error } = await query
+  const rows = check<RecipeRow[]>(data, error)
+  return rows.map(mapRecipe)
+}
+
+export async function upsertRecipe(productId: string, lines: RecipeLine[]): Promise<Recipe> {
+  const payload = lines
+    .filter((l) => l.ingredientProductId && l.qty > 0)
+    .map((l) => ({
+      ingredientProductId: l.ingredientProductId,
+      qty: l.qty,
+      ...(l.wastePct ? { wastePct: l.wastePct } : {}),
+    }))
+  const existing = await db()
+    .from("recipes")
+    .select("id")
+    .eq("org_id", orgId())
+    .eq("product_id", productId)
+    .is("deleted_at", null)
+    .maybeSingle()
+  if (existing.error) throw new Error(existing.error.message)
+  if (payload.length === 0) {
+    if (existing.data?.id) {
+      await db()
+        .from("recipes")
+        .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq("org_id", orgId())
+        .eq("id", existing.data.id)
+    }
+    return { id: existing.data?.id ?? "", product_id: productId, lines: [], created_at: "" }
+  }
+  const { data, error } = existing.data?.id
+    ? await db()
+        .from("recipes")
+        .update({ lines: payload, updated_at: new Date().toISOString() })
+        .eq("org_id", orgId())
+        .eq("id", existing.data.id)
+        .select("id,product_id,lines,created_at")
+        .single()
+    : await db()
+        .from("recipes")
+        .insert({ org_id: orgId(), product_id: productId, lines: payload })
+        .select("id,product_id,lines,created_at")
+        .single()
+  const row = check<RecipeRow>(data, error)
+  return mapRecipe(row)
+}
+
+/** Advance a kitchen ticket: queued → preparing → ready → served. */
+export async function setTicketStatus(orderId: string, status: Sale["ticket_status"]): Promise<void> {
+  const { error } = await db()
+    .from("orders")
+    .update({ ticket_status: status, updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", orderId)
   check(null, error as unknown as { message: string } | null)
 }
 
