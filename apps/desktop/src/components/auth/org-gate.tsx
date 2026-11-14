@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useClerk } from "@clerk/clerk-react"
 import { Pill, Scissors, ShieldAlert, Store, RefreshCw, Plus, UtensilsCrossed, type LucideIcon } from "lucide-react"
 import { useOrg } from "@/lib/auth/org"
 import type { BusinessType } from "@/lib/types"
@@ -27,6 +28,7 @@ function Shell({ children }: { children: React.ReactNode }) {
 
 export function OrgGate({ children }: { children: React.ReactNode }) {
   const { shop, loading, error, needsShop, createShop, retry } = useOrg()
+  const { signOut } = useClerk()
   const [businessType, setBusinessType] = useState<BusinessType>("retail")
 
   if (shop) return <>{children}</>
@@ -95,6 +97,9 @@ export function OrgGate({ children }: { children: React.ReactNode }) {
           <button onClick={retry} className="btn-primary mt-6 w-full">
             <RefreshCw size={16} />
             Try again
+          </button>
+          <button onClick={() => void signOut()} className="btn-ghost mt-2 w-full text-xs">
+            Sign out
           </button>
         </div>
       </Shell>
