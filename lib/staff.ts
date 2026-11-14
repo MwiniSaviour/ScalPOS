@@ -18,6 +18,9 @@ import { usePos } from "./store";
 export type StaffRole = "owner" | "supervisor" | "cashier";
 export type StaffAction = "refund" | "editData" | "reports";
 
+/** A working day: day of week (0 = Sunday), start and end as "HH:MM". */
+export type StaffSchedule = { day: number; start: string; end: string };
+
 export type Staff = {
   id: string;
   name: string;
@@ -27,6 +30,13 @@ export type Staff = {
   createdAt: number;
   active: boolean;
   updatedAt?: number;
+  /* salon */
+  /** the services this staff member is trained for — product ids */
+  skills?: string[];
+  /** when this staff member works */
+  schedule?: StaffSchedule[];
+  /** the share of a service price this staff member earns, in percent */
+  commissionPct?: number;
 };
 
 export function roleLabel(role: StaffRole): string {

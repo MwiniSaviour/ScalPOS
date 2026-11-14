@@ -76,6 +76,47 @@ export type RestaurantTable = {
 /** Where a ticket sits in the kitchen pipeline. */
 export type TicketStatus = "queued" | "preparing" | "ready" | "served";
 
+/** Where a booking sits in its life (salon). */
+export type AppointmentStatus =
+  | "booked"
+  | "arrived"
+  | "in-service"
+  | "done"
+  | "no-show"
+  | "cancelled";
+
+/** A booked visit (salon). */
+export type Appointment = {
+  id: string;
+  customerId: string | null;
+  staffId?: string;
+  /** the services booked — [{ productId, price }] */
+  serviceLines: { productId: string; price: number }[];
+  /** when the visit starts — ISO datetime */
+  start: string;
+  /** how long the visit runs, in minutes */
+  durationMin: number;
+  status: AppointmentStatus;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+/**
+ * A service package (salon) — bought once, spent over many visits.
+ *
+ * `credits` says what the package carries: a braid package might hold
+ * "2 × braids, 1 × treatment".
+ */
+export type Package = {
+  id: string;
+  name: string;
+  price: number;
+  credits: { productId: string; qty: number }[];
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -101,6 +142,11 @@ export type Product = {
   variants?: Variant[];
   /** the item is off the menu until this date (inclusive) */
   unavailableUntil?: string;
+  /* salon */
+  /** "service" items are sold by appointment — they never touch stock */
+  kind?: "product" | "service";
+  /** how long the service takes, in minutes */
+  durationMin?: number;
 };
 
 export type PaymentMethod = "cash" | "momo" | "card" | "credit";
@@ -134,6 +180,19 @@ export type OrderItem = {
   variantName?: string;
   /** ingredients this line consumed — so a refund can credit exactly what was taken */
   recipeConsumption?: { productId: string; qty: number }[];
+  /* salon */
+  /** the staff member who served this line — earns the commission */
+  serviceStaffId?: string;
+  /** the commission this line earned, stamped at sale time */
+  commissionAmt?: number;
+  /** the line was paid for with a package credit (priced to 0) */
+  useCredit?: boolean;
+  /** the package this line belongs to — set on a package purchase or a credit line */
+  packageId?: string;
+  /** how many units of this line a package credit paid for */
+  creditedQty?: number;
+  /** "service" lines are sold by appointment — they never touch stock */
+  kind?: "product" | "service";
 };
 
 export type OrderStatus = "pending" | "completed" | "refunded";
@@ -157,6 +216,11 @@ export type Order = {
   orderType?: string; // "dine-in" | "takeaway" | "delivery"
   tableId?: string;
   ticketStatus?: TicketStatus;
+  /* salon */
+  /** the staff member who served the visit — the one who earned the commission */
+  staffId?: string;
+  /** the appointment this visit came from */
+  appointmentId?: string;
 };
 
 export type Customer = {
@@ -168,6 +232,11 @@ export type Customer = {
   createdAt: number;
   /* pharmacy */
   allergies?: string;
+  /* salon */
+  /** notes the stylist left on a visit — newest first */
+  visitNotes?: { t: number; text: string }[];
+  /** package credits this client still owns — [{ packageId, remaining }] */
+  packageCredits?: { packageId: string; remaining: number }[];
 };
 
 export type StockMove = {
@@ -215,6 +284,13 @@ export type Settings = {
     /** the order types this shop takes */
     orderTypes: string[];
   };
+  /** salon setup — absent for every other business type */
+  salonConfig?: {
+    /** the days the salon opens — 0 is Sunday, 6 is Saturday */
+    openDays: number[];
+    /** the opening hours — "HH:MM" */
+    openHours: { start: string; end: string };
+  };
 };
 
 /**
@@ -233,4 +309,11 @@ export type CartLine = {
   variantName?: string;
   modifierIds?: string[];
   modifierNames?: string[];
+  /* salon */
+  /** the staff member serving this line — earns the commission */
+  staffId?: string;
+  /** the line is paid for with a package credit (prices to 0) */
+  useCredit?: boolean;
+  /** the package this line belongs to — set on a package purchase */
+  packageId?: string;
 };

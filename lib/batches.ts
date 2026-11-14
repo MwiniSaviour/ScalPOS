@@ -12,18 +12,24 @@ import type { Batch, BatchAllocation, CartLine, OrderItem, Product } from "./typ
  *
  * A base-unit line is keyed by product id; a pack line by product id + pack
  * index; a restaurant line by product id + variant + the chosen modifiers. Two
- * lines of the same dish with different options are different lines.
+ * lines of the same dish with different options are different lines. A salon
+ * service booked with a different stylist is a different line too, and a
+ * package purchase is always its own line.
  */
 export function cartLineKey(l: {
   productId: string;
   packIdx?: number;
   variantId?: string;
   modifierIds?: string[];
+  staffId?: string;
+  packageId?: string;
 }): string {
   const parts = [l.productId];
   if (l.packIdx !== undefined) parts.push(String(l.packIdx));
   if (l.variantId) parts.push(l.variantId);
   if (l.modifierIds && l.modifierIds.length) parts.push([...l.modifierIds].sort().join("+"));
+  if (l.staffId) parts.push(l.staffId);
+  if (l.packageId) parts.push(`pkg:${l.packageId}`);
   return parts.join("#");
 }
 
@@ -183,7 +189,9 @@ export function planSale(
     if (!p) continue;
     const factor = packFactor(p, l.packIdx);
     const baseQty = l.qty * factor;
-    const isBatched = batches.some((b) => b.productId === p.id);
+    // a service is sold by appointment — it never comes off a shelf
+    const isService = p.kind === "service";
+    const isBatched = !isService && batches.some((b) => b.productId === p.id);
     let allocations: BatchAllocation[] = [];
     if (isBatched) {
       const r = feofAllocate(batches, p.id, baseQty, now);
@@ -195,7 +203,7 @@ export function planSale(
       for (const a of allocations) {
         batchDraw.set(a.batchId, (batchDraw.get(a.batchId) ?? 0) + a.qty);
       }
-    } else if (!recipeProducts.has(p.id)) {
+    } else if (!isService && !recipeProducts.has(p.id)) {
       // a plated dish does not come off its own shelf — its recipe takes the
       // ingredients instead
       productSold.set(p.id, (productSold.get(p.id) ?? 0) + baseQty);
@@ -229,6 +237,8 @@ export function planRestock(items: OrderItem[]): RestockPlan {
   const batchBack = new Map<string, number>();
   const productBack = new Map<string, number>();
   for (const i of items) {
+    // a service never came off a shelf — there is nothing to put back
+    if (i.kind === "service") continue;
     const allocations = i.batchAllocations ?? [];
     if (allocations.length > 0) {
       for (const a of allocations) {
