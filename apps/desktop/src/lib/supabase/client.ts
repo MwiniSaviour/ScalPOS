@@ -34,7 +34,11 @@ export function getSupabase(): SupabaseClient {
   return client
 }
 
-export async function bootstrapOrg(create = false, providedToken?: string): Promise<
+export async function bootstrapOrg(
+  create = false,
+  providedToken?: string,
+  businessType?: string,
+): Promise<
   | { status: "ok"; orgId: string }
   | { status: "no_shop" }
 > {
@@ -47,7 +51,15 @@ export async function bootstrapOrg(create = false, providedToken?: string): Prom
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(create ? { action: "create" } : {}),
+    body: JSON.stringify(
+      create
+        ? {
+            action: "create",
+            trial_started_at: new Date().toISOString(),
+            ...(businessType ? { business_type: businessType } : {}),
+          }
+        : {},
+    ),
   })
 
   const json = (await res.json().catch(() => ({}))) as {

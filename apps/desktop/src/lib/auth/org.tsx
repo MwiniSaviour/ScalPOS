@@ -24,7 +24,7 @@ type OrgContextValue = {
   loading: boolean
   error: string | null
   needsShop: boolean
-  createShop: () => Promise<void>
+  createShop: (businessType?: string) => Promise<void>
   retry: () => void
 }
 
@@ -127,13 +127,13 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   const busy = useRef(false)
 
   const connect = useCallback(
-    async (create: boolean) => {
+    async (create: boolean, businessType?: string) => {
       if (!userId || busy.current) return
       busy.current = true
       try {
         const token = await getToken({ template: "supabase" })
         if (!token) throw new Error("Your session expired. Sign in again.")
-        const res = await bootstrapOrg(create, token)
+        const res = await bootstrapOrg(create, token, businessType)
         if (res.status === "no_shop") {
           const demo = readDemoOrg(userId)
           if (demo) {
@@ -202,11 +202,14 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t)
   }, [connect, isLoaded, isSignedIn, userId, nonce])
 
-  const createShop = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    await connect(true)
-  }, [connect])
+  const createShop = useCallback(
+    async (businessType?: string) => {
+      setLoading(true)
+      setError(null)
+      await connect(true, businessType)
+    },
+    [connect],
+  )
 
   const retry = useCallback(() => {
     setLoading(true)

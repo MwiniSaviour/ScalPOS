@@ -5,6 +5,8 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { BadgeCheck, Clock, Loader2, RefreshCw, ShieldAlert, XCircle } from "lucide-react"
 import { BillingAuthError, getSubscription } from "@/lib/api/billing"
+import { useOrg } from "@/lib/auth/org"
+import { primeEntitlement } from "@/lib/entitlement"
 
 type Phase = "checking" | "confirmed" | "failed" | "unconfirmed" | "expired" | "error"
 
@@ -15,6 +17,7 @@ function sleep(ms: number): Promise<void> {
 export default function CallbackScreen() {
   const params = useSearchParams()
   const payStatus = params.get("status") ?? ""
+  const { shop } = useOrg()
   const [phase, setPhase] = useState<Phase>("checking")
   const [message, setMessage] = useState("")
   const [runId, setRunId] = useState(0)
@@ -31,7 +34,10 @@ export default function CallbackScreen() {
       try {
         for (let attempt = 0; attempt < 3; attempt++) {
           if (!alive) return
-          const s = await getSubscription()
+          const s = await getSubscription(shop?.id ?? undefined)
+          // Push the fresh answer into the gate store so the dashboard
+          // unlocks the moment this screen confirms — no reload needed.
+          primeEntitlement(s, shop?.id ?? null)
           if (s.status === "active") {
             if (!alive) return
             setPhase("confirmed")
@@ -54,7 +60,7 @@ export default function CallbackScreen() {
     return () => {
       alive = false
     }
-  }, [payStatus, runId])
+  }, [payStatus, runId, shop?.id])
 
   function retry() {
     setMessage("")

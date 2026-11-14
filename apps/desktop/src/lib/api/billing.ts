@@ -48,8 +48,8 @@ async function edgePost(fn: string, body: Record<string, unknown> = {}): Promise
   return json
 }
 
-export async function getSubscription(): Promise<SubscriptionState> {
-  const json = await edgePost("check-subscription")
+export async function getSubscription(orgId?: string): Promise<SubscriptionState> {
+  const json = await edgePost("check-subscription", orgId ? { org_id: orgId } : {})
   const plan = json.plan === "standard" || json.plan === "enterprise" ? json.plan : null
   const status =
     json.status === "none" || json.status === "pending" || json.status === "active" ||
@@ -76,11 +76,12 @@ export type CheckoutPayload = {
 }
 
 export async function startCheckout(
+  orgId: string,
   plan: SubPlan,
   renewal: Renewal = "manual",
   affiliateCode?: string | null,
 ): Promise<CheckoutPayload> {
-  const body: Record<string, unknown> = { plan, renewal }
+  const body: Record<string, unknown> = { plan, renewal, org_id: orgId }
   if (affiliateCode) body.affiliate_code = affiliateCode
   const json = await edgePost("subscribe-init", body)
   const public_key = typeof json.public_key === "string" ? json.public_key : ""

@@ -126,7 +126,7 @@ export async function refreshEntitlement(orgId: string, force = false): Promise<
     error: null,
   })
   try {
-    const sub = await getSubscription()
+    const sub = await getSubscription(orgId)
     writeCache(orgId, sub.plan, sub.status)
     setSnapshot({ orgId, ...sub, fetchedAt: Date.now(), loading: false, error: null })
   } catch (e) {
@@ -167,5 +167,31 @@ export function useEntitlement(orgId: string | null): EntitlementSnapshot {
   useEffect(() => {
     if (orgId) void refreshEntitlement(orgId)
   }, [orgId])
+  useEffect(() => {
+    if (!orgId) return
+    // A plan bought elsewhere (or moments ago) must light up without a
+    // reload: re-check whenever the user comes back to the tab — forced
+    // while the shop is not entitled yet, TTL-gated once it is.
+    const recheck = () => {
+      if (document.visibilityState !== "visible") return
+      const kind = entitlementKind(snapshot)
+      const force = kind !== "enterprise" && kind !== "trial"
+      void refreshEntitlement(orgId, force)
+    }
+    document.addEventListener("visibilitychange", recheck)
+    window.addEventListener("focus", recheck)
+    window.addEventListener("pageshow", recheck)
+    return () => {
+      document.removeEventListener("visibilitychange", recheck)
+      window.removeEventListener("focus", recheck)
+      window.removeEventListener("pageshow", recheck)
+    }
+  }, [orgId])
   return useSyncExternalStore(subscribe, getSnap, () => SERVER_SNAPSHOT)
+}
+
+/** Feed a freshly fetched answer straight into the store and cache. */
+export function primeEntitlement(sub: SubscriptionState, orgId: string | null): void {
+  if (orgId) writeCache(orgId, sub.plan, sub.status)
+  setSnapshot({ orgId, ...sub, fetchedAt: Date.now(), loading: false, error: null })
 }

@@ -19,6 +19,8 @@ import {
   saveAffiliateRef,
 } from "@/lib/affiliate"
 import { cn, formatDate } from "@/lib/utils"
+import { useOrg } from "@/lib/auth/org"
+import { primeEntitlement } from "@/lib/entitlement"
 
 const CHECKOUT_KEY = "desk-pos-checkout-v1"
 
@@ -35,6 +37,8 @@ function planLabel(plan: SubPlan | null): string {
 export default function BillingPage() {
   const router = useRouter()
   const clerk = useClerk()
+  const { shop } = useOrg()
+  const shopId = shop?.id
   const [state, setState] = useState<SubscriptionState | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<SubPlan | "refresh" | null>(null)
@@ -48,21 +52,27 @@ export default function BillingPage() {
     setError(null)
     setSessionExpired(false)
     try {
-      const next = await getSubscription()
+      const next = await getSubscription(shopId ?? undefined)
       setState(next)
+      // Keep the dashboard gate in step: as soon as the plan is active
+      // here, the rest of the app unlocks without a reload.
+      primeEntitlement(next, shopId ?? null)
     } catch (e) {
       if (e instanceof BillingAuthError) setSessionExpired(true)
       else setError(errorText(e))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [shopId])
 
   useEffect(() => {
     let alive = true
-    getSubscription()
+    getSubscription(shopId ?? undefined)
       .then((s) => {
-        if (alive) setState(s)
+        if (alive) {
+          setState(s)
+          primeEntitlement(s, shopId ?? null)
+        }
       })
       .catch((e: unknown) => {
         if (!alive) return
@@ -75,7 +85,7 @@ export default function BillingPage() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [shopId])
 
   useEffect(() => {
     const stored = readAffiliateRef()
@@ -107,7 +117,7 @@ export default function BillingPage() {
     setBusy(plan)
     setError(null)
     try {
-      const payload = await startCheckout(plan, renewal, code)
+      const payload = await startCheckout(shopId ?? "", plan, renewal, code)
       sessionStorage.setItem(CHECKOUT_KEY, JSON.stringify(payload))
       router.push("/dashboard/billing/pay")
     } catch (e) {
