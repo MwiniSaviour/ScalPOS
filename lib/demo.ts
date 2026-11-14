@@ -1,4 +1,5 @@
 import { demoData } from "./seed";
+import type { BusinessType } from "./types";
 
 export const DEMO_FLAG_KEY = "nova-pos-demo-v1";
 const DEMO_BACKUP_KEY = "nova-pos-demo-backup-v1";
@@ -13,13 +14,17 @@ export function isDemoMode(): boolean {
   }
 }
 
-export function enableDemo(): void {
+/**
+ * Load the demo shop of one business type — a pharmacy gets batches and
+ * expiry dates, a restaurant gets a menu, tables and a kitchen queue.
+ */
+export function enableDemo(businessType: BusinessType = "retail"): void {
   if (typeof window === "undefined" || isDemoMode()) return;
   try {
     const raw = window.localStorage.getItem(PERSIST_KEY);
     window.localStorage.setItem(DEMO_BACKUP_KEY, JSON.stringify({ had: raw !== null, data: raw }));
     window.localStorage.setItem(DEMO_FLAG_KEY, "1");
-    window.localStorage.setItem(PERSIST_KEY, JSON.stringify({ state: demoData(), version: 0 }));
+    window.localStorage.setItem(PERSIST_KEY, JSON.stringify({ state: demoData(businessType), version: 0 }));
   } catch {
     try {
       window.localStorage.removeItem(DEMO_FLAG_KEY);
