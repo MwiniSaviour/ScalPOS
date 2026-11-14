@@ -134,7 +134,14 @@ Deno.serve(async (req: Request) => {
   // Send a Clerk-native invitation when configured. The redirect carries the
   // signed org/role token so the invitee joins the correct shop after sign-up.
   let emailed = false;
-  const clerkKey = Deno.env.get("CLERK_SECRET_KEY");
+  // The project-level CLERK_SECRET_KEY secret is stale (Clerk answers
+  // clerk_key_invalid), so prefer the current key from app_config.
+  const { data: clerkKeyRow } = await admin
+    .from("app_config")
+    .select("value")
+    .eq("key", "clerk_secret_key")
+    .limit(1);
+  const clerkKey = clerkKeyRow?.[0]?.value ?? Deno.env.get("CLERK_SECRET_KEY");
   if (clerkKey) {
     try {
       const res = await fetch("https://api.clerk.com/v1/invitations", {

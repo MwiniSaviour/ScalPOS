@@ -12,7 +12,7 @@ const CLERK_API = "https://api.clerk.com/v1";
 const MIN_PASSWORD = 15;
 const MAX_PASSWORD = 72;
 const WINDOW_MS = 10 * 60 * 1000;
-const MAX_ATTEMPTS_PER_WINDOW = 5;
+const MAX_ATTEMPTS_PER_WINDOW = 10;
 const RETENTION_MS = 2 * 24 * 60 * 60 * 1000;
 
 function clientIp(req: Request): string {
