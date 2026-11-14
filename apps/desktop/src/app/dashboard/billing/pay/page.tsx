@@ -9,20 +9,23 @@ const CHECKOUT_KEY = "desk-pos-checkout-v1"
 
 type PaystackEvent = { message?: string }
 
-type PaystackResumeOptions = {
-  accessCode?: string
-  onSuccess: () => void
+type PaystackTransaction = { reference?: string }
+
+type PaystackCallbacks = {
+  onSuccess: (transaction?: PaystackTransaction) => void
   onCancel: () => void
   onError?: (event: PaystackEvent) => void
+  onLoad?: () => void
 }
 
 type PaystackInstance = {
-  resumeTransaction: (options: PaystackResumeOptions) => void
+  resumeTransaction: (accessCode: string, callbacks: PaystackCallbacks) => void
 }
 
-// Paystack inline.js exposes PaystackPop as a plain object (not a class):
-// call PaystackPop.resumeTransaction({...}) directly.
-type PaystackConstructor = PaystackInstance
+// Paystack inline.js v2 exposes PaystackPop as a class:
+// `const popup = new PaystackPop()` then `popup.resumeTransaction(accessCode, callbacks)`.
+// v1 has no resumeTransaction at all — it only had PaystackPop.setup().
+type PaystackConstructor = new () => PaystackInstance
 
 type Payload = { public_key: string; access_code: string; reference: string }
 
@@ -48,23 +51,32 @@ function parsePayload(raw: string | null): Payload | null {
 
 let paystackLoad: Promise<PaystackConstructor> | null = null
 
+function removeStaleScripts() {
+  for (const tag of Array.from(document.querySelectorAll("script[data-paystack-inline]"))) {
+    tag.remove()
+  }
+}
+
 function ensurePaystack(): Promise<PaystackConstructor> {
   const existing = (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop
-  if (existing) return Promise.resolve(existing)
+  // v2 exposes PaystackPop as a class; v1 exposed a plain object with no
+  // resumeTransaction, so only a function is safe to reuse.
+  if (typeof existing === "function") return Promise.resolve(existing)
   if (paystackLoad) return paystackLoad
+  removeStaleScripts()
   paystackLoad = new Promise((resolve, reject) => {
     const fail = () => {
       paystackLoad = null
-      for (const tag of document.querySelectorAll("script[data-paystack-inline]")) tag.remove()
+      removeStaleScripts()
       reject(new Error("Couldn't load Paystack. Check your connection and try again."))
     }
     const script = document.createElement("script")
-    script.src = "https://js.paystack.co/v1/inline.js"
+    script.src = "https://js.paystack.co/v2/inline.js"
     script.async = true
     script.setAttribute("data-paystack-inline", "true")
     script.onload = () => {
       const value = (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop
-      if (value) resolve(value)
+      if (typeof value === "function") resolve(value)
       else fail()
     }
     script.onerror = fail
@@ -90,15 +102,22 @@ export default function PayPage() {
         const PaystackPop = await ensurePaystack()
         if (!alive) return
         setPhase("open")
-        PaystackPop.resumeTransaction({
-          accessCode: payload.access_code,
-          onSuccess: () => {
-            router.replace(`/dashboard/billing/callback?reference=${encodeURIComponent(payload.reference)}`)
+        const popup = new PaystackPop()
+        if (typeof popup.resumeTransaction !== "function") {
+          throw new Error("Paystack loaded an incompatible version. Reload the page and try again.")
+        }
+        popup.resumeTransaction(payload.access_code, {
+          onSuccess: (transaction) => {
+            sessionStorage.removeItem(CHECKOUT_KEY)
+            const reference = transaction?.reference ?? payload.reference
+            router.replace(`/dashboard/billing/callback?reference=${encodeURIComponent(reference)}`)
           },
           onCancel: () => {
+            sessionStorage.removeItem(CHECKOUT_KEY)
             router.replace("/dashboard/billing")
           },
           onError: (event) => {
+            if (!alive) return
             setMessage(event?.message ?? "Payment failed. No charge was made.")
             setPhase("error")
           },

@@ -12,27 +12,33 @@ const CHECKOUT_KEY = "nova-pos-checkout-v1";
 
 type PaystackEvent = { message?: string };
 
-type PaystackResumeOptions = {
-  accessCode?: string;
-  onSuccess: () => void;
+type PaystackTransaction = { reference?: string };
+
+// Paystack inline.js v2: new PaystackPop() then
+// popup.resumeTransaction(accessCode, callbacks) — the access code is a plain
+// string and the handlers are passed as one callbacks object.
+type PaystackCallbacks = {
+  onSuccess: (transaction?: PaystackTransaction) => void;
   onCancel: () => void;
   onError?: (event: PaystackEvent) => void;
+  onLoad?: () => void;
 };
 
 type PaystackInstance = {
-  resumeTransaction: (options: PaystackResumeOptions) => void;
+  resumeTransaction: (accessCode: string, callbacks: PaystackCallbacks) => void;
 };
 
-// Paystack inline.js exposes PaystackPop as a plain object (not a class):
-// call PaystackPop.resumeTransaction({...}) directly.
-type PaystackConstructor = PaystackInstance;
+type PaystackConstructor = new () => PaystackInstance;
 
 function isCapacitorNative(): boolean {
   return Boolean((window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
 }
 
 function paystackFromWindow(): PaystackConstructor | null {
-  return (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop ?? null;
+  const value = (window as unknown as { PaystackPop?: PaystackConstructor }).PaystackPop;
+  // v2 exposes PaystackPop as a class; v1 exposed a plain object with no
+  // resumeTransaction, so only a function is safe to reuse.
+  return typeof value === "function" ? value : null;
 }
 
 let paystackLoad: Promise<PaystackConstructor> | null = null;
@@ -54,7 +60,7 @@ export function ensurePaystack(): Promise<PaystackConstructor> {
       reject(new Error("Couldn't load Paystack. Check your connection and try again."));
     };
     const script = document.createElement("script");
-    script.src = "https://js.paystack.co/v1/inline.js";
+    script.src = "https://js.paystack.co/v2/inline.js";
     script.async = true;
     script.setAttribute("data-paystack-inline", "true");
     script.onload = () => {
@@ -192,11 +198,15 @@ export default function PaystackPayScreen() {
         const PaystackPop = await ensurePaystack();
         if (!alive) return;
         setPhase("open");
-        PaystackPop.resumeTransaction({
-          accessCode: payload.access_code,
-          onSuccess: () => {
+        const popup = new PaystackPop();
+        if (typeof popup.resumeTransaction !== "function") {
+          throw new Error("Paystack loaded an incompatible version. Reload the app and try again.");
+        }
+        popup.resumeTransaction(payload.access_code, {
+          onSuccess: (transaction) => {
             sessionStorage.removeItem(CHECKOUT_KEY);
-            router.push(`/paystack/callback?reference=${encodeURIComponent(payload.reference)}`);
+            const reference = transaction?.reference ?? payload.reference;
+            router.push(`/paystack/callback?reference=${encodeURIComponent(reference)}`);
           },
           onCancel: () => {
             sessionStorage.removeItem(CHECKOUT_KEY);
