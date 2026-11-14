@@ -16,6 +16,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pos.scalmint.com"),
   title: "ScalPOS",
   description: "Point of sale for Ghanaian shops",
   icons: {
@@ -28,6 +29,33 @@ export const metadata: Metadata = {
   },
   other: {
     "mobile-web-app-capable": "yes",
+  },
+  openGraph: {
+    type: "website",
+    siteName: "ScalPOS",
+    title: "ScalPOS — Point of sale for Ghanaian shops",
+    description:
+      "Offline-first point of sale for Ghanaian shops: register, inventory, customer credit, staff roles and reports, on any phone or counter device.",
+    url: "/",
+    images: [
+      {
+        url: "/icon-512.png",
+        width: 512,
+        height: 512,
+        alt: "ScalPOS",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ScalPOS — Point of sale for Ghanaian shops",
+    description:
+      "Offline-first point of sale for Ghanaian shops: register, inventory, customer credit, staff roles and reports.",
+    images: ["/icon-512.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 

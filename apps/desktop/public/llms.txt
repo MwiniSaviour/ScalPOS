@@ -1,0 +1,48 @@
+# ScalPOS
+
+> ScalPOS is an offline-first point of sale for Ghanaian shops, built for phones,
+> tablets and counter desktops. It runs the register, inventory, customer credit
+> ledger, staff roles and reports on the device — syncing to the cloud only when
+> signal returns. Payments are recorded against a built-in ledger (Cash, MTN
+> MoMo, Telecel Cash, Card, split tenders, customer credit), and yearly cloud
+> plans are billed through Paystack.
+
+## Product
+
+- **Offline-first register** — barcode scanning, cart discounts, split tenders
+  and Bluetooth ESC/POS thermal receipts, all working without a connection.
+- **Inventory** — per-SKU stock with a movement log (Purchase, Sale, Damage,
+  Return, Count, Opening) and low-stock alerts.
+- **Customer credit** — attach part-paid sales to a customer, track the running
+  balance owed, and record repayments.
+- **Staff roles** — Owner, Supervisor and Cashier permissions on the same shop.
+- **Reports** — sales, payment mix, staff activity and stock on the same day the
+  counter closes.
+- **Cloud plans** — yearly Paystack billing with a 7-day free trial, no card
+  needed to start.
+
+## Pricing
+
+- **Standard — GHS 120/year (GHS 10/month).** Single-owner shop: full offline
+  register and cart discounts, cloud backup and restore, Paystack checkout
+  (MoMo or Card), manual yearly renewal.
+- **Enterprise — GHS 360/year (GHS 30/month).** Everything in Standard, plus
+  Owner/Supervisor/Cashier roles, real-time multi-device sync, conflict
+  resolution, remote owner sale and low-stock alerts, desktop and multi-counter
+  access.
+
+## Key pages
+
+- [Landing page](/): Product tour, feature list, pricing, FAQ and trial signup.
+- [Plans & billing](/dashboard/billing): Subscription plans, payment history and
+  Paystack checkout (requires sign-in).
+- [Register](/dashboard/pos): The live till — products, cart, tenders and receipt.
+- [Sign in](/auth/login): Existing customer sign-in.
+- [Create an account](/auth/register): New shop registration.
+- [Legal & privacy](/legal): Terms of service, privacy notice and refund policy.
+- [Data deletion](/data-deletion): How to request deletion of your account data.
+
+## Company
+
+ScalPOS is operated by ScalMint (www.scalmint.com), Accra, Ghana. Support:
+support@scalmint.com

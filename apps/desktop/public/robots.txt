@@ -1,0 +1,11 @@
+# ScalPOS — https://pos.scalmint.com
+# Offline-first point of sale for Ghanaian shops.
+
+User-agent: *
+Allow: /
+
+# One-shot auth handshakes and payment callbacks carry no indexable content.
+Disallow: /auth/sso-callback
+Disallow: /dashboard/billing/callback
+
+Sitemap: https://pos.scalmint.com/sitemap.xml

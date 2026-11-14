@@ -15,6 +15,15 @@ const nextConfig: NextConfig = {
       },
     ]
   },
+  async redirects() {
+    return [
+      // The Capacitor POS build ships a `/billing` screen, so this URL is
+      // already known to customers and crawlers. The web app keeps the same
+      // page under /dashboard/billing — send it there instead of 404ing.
+      // 307 (not 308) so the browser does not cache it permanently.
+      { source: "/billing", destination: "/dashboard/billing", permanent: false },
+    ]
+  },
 }
 
 export default nextConfig
