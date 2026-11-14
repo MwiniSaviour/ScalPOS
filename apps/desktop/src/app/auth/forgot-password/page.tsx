@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation"
 import { useSignIn } from "@clerk/clerk-react"
 import { AuthError, AuthShell } from "@/components/auth/auth-shell"
 import { friendlyClerkError } from "@/lib/clerk-errors"
+import { useSignUpPolicy } from "@/lib/clerk-env"
 
 export default function ForgotPasswordPage() {
   const router = useRouter()
   const { isLoaded, signIn, setActive } = useSignIn()
+  const { minPassword } = useSignUpPolicy()
   const [step, setStep] = useState<"email" | "reset">("email")
   const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
@@ -41,8 +43,8 @@ export default function ForgotPasswordPage() {
       setError("Passwords do not match")
       return
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters")
+    if (password.length < minPassword) {
+      setError(`Password must be at least ${minPassword} characters`)
       return
     }
     setBusy(true)
@@ -99,7 +101,7 @@ export default function ForgotPasswordPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="input-field"
-              placeholder="At least 8 characters"
+              placeholder={`At least ${minPassword} characters`}
               autoComplete="new-password"
               required
             />

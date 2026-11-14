@@ -6,10 +6,12 @@ import { useRouter } from "next/navigation"
 import { useSignUp } from "@clerk/clerk-react"
 import { AuthError, AuthShell, GoogleMark } from "@/components/auth/auth-shell"
 import { clerkCode, friendlyClerkError } from "@/lib/clerk-errors"
+import { useSignUpPolicy } from "@/lib/clerk-env"
 
 export default function RegisterPage() {
   const router = useRouter()
   const { isLoaded, signUp, setActive } = useSignUp()
+  const { minPassword, collectsNames } = useSignUpPolicy()
   const [step, setStep] = useState<"form" | "verify">("form")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -38,8 +40,8 @@ export default function RegisterPage() {
       setError("Passwords do not match")
       return
     }
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters")
+    if (password.length < minPassword) {
+      setError(`Password must be at least ${minPassword} characters`)
       return
     }
     if (!consent) {
@@ -52,11 +54,16 @@ export default function RegisterPage() {
       const parts = name.trim().split(/\s+/)
       const firstName = parts.shift() ?? ""
       const lastName = parts.join(" ")
+      // This Clerk instance has the name attributes disabled. Sending
+      // firstName/lastName anyway makes signUp.create reject the whole request
+      // with "form_param_unknown" ("is unknown") — the signup bug. Keep the
+      // name in unsafeMetadata so it is still captured for future use.
       const result = await signUp.create({
         emailAddress: email.trim(),
         password,
-        firstName: firstName || undefined,
-        lastName: lastName || undefined,
+        ...(collectsNames
+          ? { firstName: firstName || undefined, lastName: lastName || undefined }
+          : { unsafeMetadata: { full_name: name.trim() } }),
       })
       if (result.status === "complete") {
         await finish(result.createdSessionId)
@@ -257,7 +264,7 @@ export default function RegisterPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="input-field"
-            placeholder="At least 8 characters"
+            placeholder={`At least ${minPassword} characters`}
             autoComplete="new-password"
             required
           />

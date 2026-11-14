@@ -28,7 +28,9 @@ const FRIENDLY: Record<string, string> = {
   form_identifier_not_found: "No account found for that email. Create one instead.",
   form_identifier_exists: "That email already has an account. Sign in instead.",
   form_password_incorrect: "Incorrect password. Try again or reset it.",
-  form_password_length_too_short: "Password must be at least 8 characters.",
+  // No password-length override: Clerk's own message reflects the live
+  // instance policy, which our static text got wrong.
+  form_param_unknown: "We couldn't complete that. Please check the form and try again.",
   form_password_pwned: "That password has appeared in a breach. Choose a different one.",
   form_code_incorrect: "That code is incorrect. Check the email and try again.",
   verification_expired: "That code expired. Send a new one.",
