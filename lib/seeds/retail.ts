@@ -94,5 +94,8 @@ export function retailSeed(now: number): SeedBundle {
     batches: [],
     recipes: [],
     tables: [],
+    staff: [],
+    appointments: [],
+    packages: [],
   };
 }

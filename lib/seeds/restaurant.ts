@@ -172,5 +172,8 @@ export function restaurantSeed(now: number): SeedBundle {
     batches: [],
     recipes,
     tables,
+    staff: [],
+    appointments: [],
+    packages: [],
   };
 }

@@ -100,5 +100,8 @@ export function pharmacySeed(now: number): SeedBundle {
     batches,
     recipes: [],
     tables: [],
+    staff: [],
+    appointments: [],
+    packages: [],
   };
 }

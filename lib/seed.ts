@@ -1,15 +1,19 @@
 import type {
+  Appointment,
   Batch,
   BusinessType,
   Category,
   Customer,
   Order,
+  Package,
   Product,
   Recipe,
   RestaurantTable,
   Settings,
   StockMove,
 } from "./types";
+import type { Staff } from "./staff";
+import { salonSeed } from "./seeds/salon";
 import { pharmacySeed } from "./seeds/pharmacy";
 import { restaurantSeed } from "./seeds/restaurant";
 import { retailSeed } from "./seeds/retail";
@@ -44,6 +48,9 @@ export type DemoState = {
   batches: Batch[];
   recipes: Recipe[];
   tables: RestaurantTable[];
+  staff: Staff[];
+  appointments: Appointment[];
+  packages: Package[];
   cart: [];
   cartCustomerId: null;
   cartDiscount: number;
@@ -53,12 +60,14 @@ export type DemoState = {
 /**
  * The demo shops, one per business type. A shop that sells medicine needs
  * batches and expiry dates; a shop that serves food needs a kitchen, tables
- * and recipes — so each business type gets the shop it actually runs.
+ * and recipes; a salon needs stylists, the book and packages — so each
+ * business type gets the shop it actually runs.
  */
 const SEEDS: Partial<Record<BusinessType, (now: number) => SeedBundle>> = {
   retail: retailSeed,
   pharmacy: pharmacySeed,
   restaurant: restaurantSeed,
+  salon: salonSeed,
 };
 
 /** The business types that have a demo shop of their own. */

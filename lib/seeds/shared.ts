@@ -1,15 +1,18 @@
 import type {
+  Appointment,
   Batch,
   Category,
   Customer,
   Order,
   OrderItem,
+  Package,
   Product,
   Recipe,
   RestaurantTable,
   Settings,
   StockMove,
 } from "../types";
+import type { Staff } from "../staff";
 
 export const DAY = 86400000;
 export const H = 3600000;
@@ -28,6 +31,9 @@ export type SeedBundle = {
   batches: Batch[];
   recipes: Recipe[];
   tables: RestaurantTable[];
+  staff: Staff[];
+  appointments: Appointment[];
+  packages: Package[];
 };
 
 /** The date part of a timestamp — "2026-11-13". A batch expiry is a plain date. */
