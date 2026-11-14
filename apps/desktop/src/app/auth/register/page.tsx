@@ -3,15 +3,19 @@
 import { useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useSignUp } from "@clerk/clerk-react"
+import { useSignIn, useSignUp } from "@clerk/clerk-react"
 import { AuthError, AuthShell, GoogleMark } from "@/components/auth/auth-shell"
 import { clerkCode, friendlyClerkError } from "@/lib/clerk-errors"
 import { useSignUpPolicy } from "@/lib/clerk-env"
+import { provisionAccount, provisionMessage } from "@/lib/supabase/provision"
+
+type EmailCodeFactor = { strategy: "email_code"; emailAddressId: string }
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { isLoaded, signUp, setActive } = useSignUp()
-  const { minPassword, collectsNames } = useSignUpPolicy()
+  const { isLoaded, signIn, setActive } = useSignIn()
+  const { signUp } = useSignUp()
+  const { minPassword } = useSignUpPolicy()
   const [step, setStep] = useState<"form" | "verify">("form")
   const [name, setName] = useState("")
   const [email, setEmail] = useState("")
@@ -19,6 +23,7 @@ export default function RegisterPage() {
   const [confirm, setConfirm] = useState("")
   const [consent, setConsent] = useState(false)
   const [code, setCode] = useState("")
+  const [emailAddressId, setEmailAddressId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -34,7 +39,7 @@ export default function RegisterPage() {
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    if (!isLoaded || !signUp || busy) return
+    if (!isLoaded || !signIn || busy) return
     setError(null)
     if (password !== confirm) {
       setError("Passwords do not match")
@@ -51,33 +56,36 @@ export default function RegisterPage() {
 
     setBusy(true)
     try {
-      const parts = name.trim().split(/\s+/)
-      const firstName = parts.shift() ?? ""
-      const lastName = parts.join(" ")
-      // This Clerk instance has the name attributes disabled. Sending
-      // firstName/lastName anyway makes signUp.create reject the whole request
-      // with "form_param_unknown" ("is unknown") — the signup bug. Keep the
-      // name in unsafeMetadata so it is still captured for future use.
-      const result = await signUp.create({
-        emailAddress: email.trim(),
-        password,
-        ...(collectsNames
-          ? { firstName: firstName || undefined, lastName: lastName || undefined }
-          : { unsafeMetadata: { full_name: name.trim() } }),
-      })
-      if (result.status === "complete") {
-        await finish(result.createdSessionId)
+      const address = email.trim()
+      const provisioned = await provisionAccount({ email: address, password, fullName: name.trim() })
+      if (!provisioned.ok) {
+        setError(provisionMessage(provisioned.error))
         return
       }
-      await signUp.update({ legalAccepted: true })
-      await signUp.prepareVerification({ strategy: "email_code" })
+      const attempt = await signIn.create({ identifier: address })
+      if (attempt.status === "complete") {
+        await finish(attempt.createdSessionId)
+        return
+      }
+      const factor = (attempt.supportedFirstFactors as EmailCodeFactor[] | null | undefined)?.find(
+        (candidate) => candidate.strategy === "email_code",
+      )
+      if (!factor) {
+        setError("We couldn't send a verification code. Try again in a moment.")
+        return
+      }
+      await signIn.prepareFirstFactor({
+        strategy: "email_code",
+        emailAddressId: factor.emailAddressId,
+      })
+      setEmailAddressId(factor.emailAddressId)
       setStep("verify")
     } catch (e) {
-      if (clerkCode(e) === "form_identifier_exists") {
-        setError("That email already has an account. Sign in instead.")
-      } else {
-        setError(friendlyClerkError(e))
+      if (clerkCode(e) === "session_exists") {
+        router.replace("/dashboard")
+        return
       }
+      setError(friendlyClerkError(e))
     } finally {
       setBusy(false)
     }
@@ -85,21 +93,19 @@ export default function RegisterPage() {
 
   async function handleVerify(event: React.FormEvent) {
     event.preventDefault()
-    if (!signUp || busy) return
+    if (!signIn || busy) return
     setError(null)
     setBusy(true)
     try {
-      const result = await signUp.attemptEmailAddressVerification({ code: code.trim() })
+      const result = await signIn.attemptFirstFactor({
+        strategy: "email_code",
+        code: code.trim(),
+      })
       if (result.status === "complete") {
         await finish(result.createdSessionId)
         return
       }
-      const missing = result.missingFields.filter((field) => field !== "email_address")
-      setError(
-        missing.length
-          ? `More details are needed: ${missing.join(", ")}`
-          : "That code didn't complete sign-up. Check it and try again.",
-      )
+      setError("That code didn't complete sign-up. Check it and try again.")
     } catch (e) {
       setError(friendlyClerkError(e))
     } finally {
@@ -108,12 +114,12 @@ export default function RegisterPage() {
   }
 
   async function resend() {
-    if (!signUp || busy) return
+    if (!signIn || !emailAddressId || busy) return
     setBusy(true)
     setError(null)
     setNotice(null)
     try {
-      await signUp.prepareVerification({ strategy: "email_code" })
+      await signIn.prepareFirstFactor({ strategy: "email_code", emailAddressId })
       setNotice("A new code is on its way to your email.")
     } catch (e) {
       setError(friendlyClerkError(e))
@@ -123,7 +129,7 @@ export default function RegisterPage() {
   }
 
   async function handleGoogle() {
-    if (!isLoaded || !signUp || busy) return
+    if (!signUp || busy) return
     setBusy(true)
     setError(null)
     try {
@@ -168,7 +174,7 @@ export default function RegisterPage() {
             />
           </div>
           <button type="submit" disabled={busy || code.length < 6} className="btn-primary w-full py-3">
-            {busy ? "Verifying…" : "Verify & create account"}
+            {busy ? "Verifying…" : "Verify & continue"}
           </button>
           <div className="flex items-center justify-between text-sm">
             <button

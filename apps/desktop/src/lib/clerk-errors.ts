@@ -36,6 +36,8 @@ const FRIENDLY: Record<string, string> = {
   form_password_pwned: "That password has appeared in a breach. Choose a different one.",
   form_code_incorrect: "That code is incorrect. Check the email and try again.",
   verification_expired: "That code expired. Send a new one.",
+  verification_already_verified: "That code was already used. Send a new one.",
+  session_exists: "You're already signed in.",
   form_param_format_invalid: "Check the email address and try again.",
   form_email_address_invalid: "Check the email address and try again.",
   network_failure: "Network problem. Check your connection and try again.",
