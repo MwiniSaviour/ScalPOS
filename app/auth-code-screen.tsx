@@ -5,11 +5,12 @@ import { BrandMark } from "@/components/brandmark";
 import { markOnboarded } from "@/lib/first-run";
 import { bootstrapConnection, writeConnection } from "@/lib/api/bootstrap";
 import { clerkCode, friendlyNetworkError } from "@/lib/clerk-errors";
+import { provisionAccount, provisionErrorMessage } from "@/lib/api/provision";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useSignIn, useSignUp, useClerk } from "@clerk/clerk-react";
+import { useAuth, useSignIn, useClerk } from "@clerk/clerk-react";
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
 
@@ -26,7 +27,6 @@ export default function AuthCodeScreen() {
   const fromParam = sp.get("from") === "connect" ? "connect" : "auth";
   const { online } = useNet();
   const { getToken, userId } = useAuth();
-  const { signUp } = useSignUp();
   const { signIn } = useSignIn();
   const clerk = useClerk();
   const [digits, setDigits] = useState<string[]>(EMPTY_DIGITS);
@@ -43,32 +43,28 @@ export default function AuthCodeScreen() {
   }, [email, router]);
 
   useEffect(() => {
-    if (!isNew || !signUp || !email || emailSentRef.current) return;
+    // New accounts are created server-side: Clerk's client-side sign-up never
+    // completes on this instance. The account is provisioned, then the code
+    // goes out as an email-code sign-in. Consent comes first, so the code is
+    // only sent once the box is ticked.
+    if (!isNew || !signIn || !email || !consent || emailSentRef.current) return;
     emailSentRef.current = true;
     void (async () => {
       try {
-        // This page may be remounted while a sign-up is already waiting for
-        // its code. Recreating it would invalidate the code the user got.
-        const pending =
-          signUp.status === "missing_requirements" &&
-          signUp.unverifiedFields.includes("email_address") &&
-          (signUp.emailAddress ?? "").toLowerCase() === email.toLowerCase();
-        if (pending) {
-          setCool(30);
+        const provisioned = await provisionAccount({ email, password: DRAWER_PASSWORD });
+        if (!provisioned.ok) {
+          emailSentRef.current = false;
+          setError(provisionErrorMessage(provisioned.error));
           return;
         }
-        await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
-        await signUp.prepareVerification({ strategy: "email_code" });
+        await signIn.create({ identifier: email, strategy: "email_code" });
         setCool(30);
       } catch (e) {
-        if (clerkCode(e) === "form_identifier_exists") {
-          router.replace(`/auth/code?email=${encodeURIComponent(email)}&from=${fromParam}`);
-          return;
-        }
+        emailSentRef.current = false;
         setError(friendlyNetworkError(e));
       }
     })();
-  }, [isNew, signUp, email, router, fromParam]);
+  }, [isNew, signIn, email, consent]);
 
   const signInStartedRef = useRef(false);
 
@@ -126,26 +122,15 @@ export default function AuthCodeScreen() {
     setBusy(true);
     setError(null);
     try {
+      if (!signIn) throw new Error("Sign-in is still loading. Try again.");
       if (isNew) {
-        if (!signUp) throw new Error("Sign-up is still loading. Try again.");
-        const pending =
-          signUp.status === "missing_requirements" &&
-          (signUp.emailAddress ?? "").toLowerCase() === email.toLowerCase();
-        if (pending) {
-          try {
-            await signUp.prepareVerification({ strategy: "email_code" });
-          } catch {
-            await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
-            await signUp.prepareVerification({ strategy: "email_code" });
-          }
-        } else {
-          await signUp.create({ emailAddress: email, password: DRAWER_PASSWORD });
-          await signUp.prepareVerification({ strategy: "email_code" });
+        const provisioned = await provisionAccount({ email, password: DRAWER_PASSWORD });
+        if (!provisioned.ok) {
+          setError(provisionErrorMessage(provisioned.error));
+          return;
         }
-      } else {
-        if (!signIn) throw new Error("Sign-in is still loading. Try again.");
-        await signIn.create({ identifier: email, strategy: "email_code" });
       }
+      await signIn.create({ identifier: email, strategy: "email_code" });
       setCool(30);
     } catch (e) {
       setError(friendlyNetworkError(e));
@@ -157,48 +142,27 @@ export default function AuthCodeScreen() {
   async function verify() {
     const code = digits.join("");
     if (!email || code.length < 6) return;
+    if (isNew && !consent) {
+      setError("Please agree to the Terms and Privacy Policy to create your account.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      if (isNew) {
-        if (!signUp) {
-          setError("Sign-up is still loading. Try again.");
-          return;
-        }
-        if (!consent) {
-          setError("Please agree to the Terms and Privacy Policy to create your account.");
-          return;
-        }
-        await signUp.update({ legalAccepted: true });
-        const result = await signUp.attemptEmailAddressVerification({ code });
-        if (result.status !== "complete") {
-          const missing = result.missingFields.filter((f) => f !== "email_address");
-          setError(
-            missing.length > 0
-              ? `Sign-up isn't finished yet — missing: ${missing.join(", ")}.`
-              : "Couldn't confirm the code — try again.",
-          );
-          return;
-        }
-        if (result.createdSessionId) {
-          await clerk.setActive({ session: result.createdSessionId });
-        }
-      } else {
-        if (!signIn) {
-          setError("Sign-in state unavailable.");
-          return;
-        }
-        const result = await signIn.attemptFirstFactor({
-          strategy: "email_code",
-          code,
-        });
-        if (result.status !== "complete") {
-          setError("Couldn't confirm the code — try again.");
-          return;
-        }
-        if (result.createdSessionId) {
-          await clerk.setActive({ session: result.createdSessionId });
-        }
+      if (!signIn) {
+        setError("Sign-in state unavailable.");
+        return;
+      }
+      const result = await signIn.attemptFirstFactor({
+        strategy: "email_code",
+        code,
+      });
+      if (result.status !== "complete") {
+        setError("Couldn't confirm the code — try again.");
+        return;
+      }
+      if (result.createdSessionId) {
+        await clerk.setActive({ session: result.createdSessionId });
       }
       markOnboarded();
       usePos.getState().toast(
@@ -240,7 +204,11 @@ export default function AuthCodeScreen() {
       <BrandMark />
       <h1 className="mt-5 text-[26px]/7 font-bold text-ink">Enter your code</h1>
       <p className="mt-1 text-[15px] text-ink3">
-        {isNew ? "Check your email — enter the 6-digit code to create your account." : `Sent to ${email}. Enter the 6-digit code to sign in.`}
+        {isNew
+          ? consent
+            ? `Sent to ${email}. Enter the 6-digit code to create your account.`
+            : "Agree to the Terms below and we'll send your code by email."
+          : `Sent to ${email}. Enter the 6-digit code to sign in.`}
       </p>
 
       <div className="mt-6 rounded-2xl border border-line bg-surface p-4">
