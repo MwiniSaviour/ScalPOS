@@ -68,7 +68,10 @@ export async function enterDemoMode(userId: string): Promise<void> {
     setDemoOrg(userId, existing)
     return
   }
-  const orgId = await createDemoOrg(userId)
+  // No token argument: createDemoOrg's parameter is the Supabase JWT, not the
+  // Clerk user id — passing userId sent "Bearer user_…" and bootstrap-org
+  // answered 401 "invalid session".
+  const orgId = await createDemoOrg()
   setDemoOrg(userId, orgId)
   if (await hasDemoData()) return
   await seedDemoData()
