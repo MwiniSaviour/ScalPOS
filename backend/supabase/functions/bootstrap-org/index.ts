@@ -93,7 +93,15 @@ Deno.serve(async (req: Request) => {
       }
     }
   }
-
+  // Owner's shop type chosen at signup (0012) tailors the app: receipts,
+  // terms, and the defaults each screen starts from. Lives on the settings
+  // row, not the org row.
+  const businessType = body?.business_type;
+  const chosenType =
+    typeof businessType === "string" &&
+    ["retail", "pharmacy", "restaurant", "salon"].includes(businessType)
+      ? businessType
+      : "retail";
   const { data: org, error: orgErr } = await admin
     .from("orgs")
     .insert(insertRow)
@@ -117,6 +125,7 @@ Deno.serve(async (req: Request) => {
   await admin.from("settings").insert({
     org_id: org.id,
     shop_name: isDemo ? `Demo · ${localPart}'s shop` : shopName,
+    business_type: chosenType,
   });
 
   return json({ org_id: org.id, created: true });

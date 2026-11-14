@@ -52,7 +52,9 @@ async function edgePost(conn: SyncConnection, fn: string, body: Record<string, u
 }
 
 export async function getSubscription(conn: SyncConnection): Promise<SubscriptionState> {
-  const json = await edgePost(conn, "check-subscription");
+  // Ask about the shop this device is connected to so upgrades bought on
+  // any device land on — and read from — the same subscription row.
+  const json = await edgePost(conn, "check-subscription", { org_id: conn.org_id });
   const plan = json.plan === "standard" || json.plan === "enterprise" ? json.plan : null;
   const status =
     json.status === "none" || json.status === "pending" || json.status === "active" ||
@@ -84,7 +86,7 @@ export async function startCheckout(
   renewal: Renewal = "manual",
   affiliateCode?: string | null,
 ): Promise<CheckoutPayload> {
-  const body: Record<string, unknown> = { plan, renewal };
+  const body: Record<string, unknown> = { plan, renewal, org_id: conn.org_id };
   if (affiliateCode) body.affiliate_code = affiliateCode;
   const json = await edgePost(conn, "subscribe-init", body);
   const public_key = typeof json.public_key === "string" ? json.public_key : "";

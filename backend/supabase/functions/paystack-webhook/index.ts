@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
 
   const { data: sub } = await admin
     .from("subscriptions")
-    .select("id, amount")
+    .select("id, amount, org_id")
     .eq("id", subId)
     .maybeSingle();
   if (!sub) {
@@ -165,6 +165,14 @@ Deno.serve(async (req: Request) => {
   if (updateErr) {
     return json({ error: updateErr.message }, 500);
   }
+
+  // The paid plan supersedes any older live plan for the same shop.
+  await admin
+    .from("subscriptions")
+    .update({ status: "expired" })
+    .eq("org_id", sub.org_id)
+    .eq("status", "active")
+    .ne("id", subId);
 
   return json({ received: true });
 });

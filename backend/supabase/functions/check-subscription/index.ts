@@ -3,7 +3,8 @@ import { verifyClerkToken } from "./clerk.ts";
 import { preflight, json } from "./cors.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
-const TRIAL_MS = 7 * 24 * HOUR_MS;
+const DAY_MS = 24 * HOUR_MS;
+const TRIAL_MS = 7 * DAY_MS;
 
 
 
@@ -43,7 +44,7 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return json({ error: "method not allowed" }, 405);
   }
-  await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({}));
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -58,18 +59,28 @@ Deno.serve(async (req: Request) => {
   }
 
   const admin = createClient(supabaseUrl, serviceKey);
+
+  // The app tells us which shop it is looking at so billing follows the org
+  // on screen, not whichever membership happens to sort first.
+  const requestedOrg = typeof body?.org_id === "string" ? body.org_id : "";
   const { data: memberships, error: memErr } = await admin
     .from("memberships")
     .select("org_id,email")
     .eq("user_id", user.id)
     .is("deleted_at", null)
-    .limit(1);
+    .order("created_at", { ascending: true })
+    .limit(20);
   if (memErr) {
     return json({ error: memErr.message }, 500);
   }
-
-  const orgId = memberships?.[0]?.org_id as string | undefined;
-  const email = (user.email ?? memberships?.[0]?.email ?? "").toLowerCase();
+  const memberRow = requestedOrg
+    ? (memberships ?? []).find((m) => m.org_id === requestedOrg)
+    : (memberships ?? [])[0];
+  if (requestedOrg && !memberRow) {
+    return json({ error: "not a member of that shop" }, 403);
+  }
+  const orgId = memberRow?.org_id as string | undefined;
+  const email = (user.email ?? memberRow?.email ?? "").toLowerCase();
 
   // Test-phase licences: comped by email so a tester keeps access even if
   // they recreate their shop. Managed by the service role only.
@@ -176,6 +187,14 @@ Deno.serve(async (req: Request) => {
           if (updErr) {
             return json({ error: updErr.message }, 500);
           }
+          // A new purchase supersedes any older live plan for this shop,
+          // so the upgraded plan is the only one the org reads as active.
+          await admin
+            .from("subscriptions")
+            .update({ status: "expired" })
+            .eq("org_id", orgId)
+            .eq("status", "active")
+            .ne("id", pending.id);
           return json({
             org_id: orgId,
             plan: pending.plan,
@@ -195,6 +214,58 @@ Deno.serve(async (req: Request) => {
         }
         pendingOpen = false;
       }
+    }
+  }
+
+  // A pending checkout that lapsed before its payment landed (webhook
+  // missed, popup closed, user paid late) must still be honoured: verify
+  // the reference of the most recent never-activated expired row and
+  // revive it if Paystack says it was paid.
+  const stalePaid = secretKey
+    ? rows.find(
+        (row) =>
+          row.status === "expired" &&
+          !row.started_at &&
+          row.paystack_ref &&
+          now - new Date(row.created_at).getTime() < 7 * DAY_MS,
+      )
+    : undefined;
+  if (stalePaid) {
+    const verified = await verifyWithPaystack(secretKey, stalePaid.paystack_ref);
+    if (
+      verified.state === "paid" &&
+      (typeof verified.data.amount !== "number" || verified.data.amount === stalePaid.amount)
+    ) {
+      const startedRaw = verified.data.paid_at ? new Date(verified.data.paid_at).getTime() : now;
+      const started = Number.isFinite(startedRaw) ? startedRaw : now;
+      const expires = new Date(started + 365 * DAY_MS);
+      const { error: updErr } = await admin
+        .from("subscriptions")
+        .update({
+          status: "active",
+          channel: verified.data.channel ?? null,
+          started_at: new Date(started).toISOString(),
+          expires_at: expires.toISOString(),
+          paystack_ref: verified.data.reference ?? stalePaid.paystack_ref,
+        })
+        .eq("id", stalePaid.id)
+        .eq("status", "expired");
+      if (updErr) {
+        return json({ error: updErr.message }, 500);
+      }
+      await admin
+        .from("subscriptions")
+        .update({ status: "expired" })
+        .eq("org_id", orgId)
+        .eq("status", "active")
+        .ne("id", stalePaid.id);
+      return json({
+        org_id: orgId,
+        plan: stalePaid.plan,
+        status: "active",
+        renewal: stalePaid.renewal,
+        expires_at: expires.toISOString(),
+      });
     }
   }
 

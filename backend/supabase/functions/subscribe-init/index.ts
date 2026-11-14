@@ -59,18 +59,24 @@ Deno.serve(async (req: Request) => {
   }
   const admin = createClient(supabaseUrl, serviceKey);
 
+  // Bill the shop the user is actually looking at, not whichever
+  // membership sorts first.
+  const requestedOrg = typeof body?.org_id === "string" ? body.org_id : "";
   const { data: memberships, error: memErr } = await admin
     .from("memberships")
     .select("org_id, role")
     .eq("user_id", user.id)
     .is("deleted_at", null)
-    .limit(1);
+    .order("created_at", { ascending: true })
+    .limit(20);
   if (memErr) {
     return json({ error: memErr.message }, 500);
   }
-  const membership = memberships?.[0];
+  const membership = requestedOrg
+    ? (memberships ?? []).find((m) => m.org_id === requestedOrg)
+    : (memberships ?? [])[0];
   if (!membership) {
-    return json({ error: "no org membership found" }, 403);
+    return json({ error: requestedOrg ? "not a member of that shop" : "no org membership found" }, 403);
   }
   if (membership.role !== "owner") {
     return json({ error: "only the shop owner can manage billing" }, 403);
