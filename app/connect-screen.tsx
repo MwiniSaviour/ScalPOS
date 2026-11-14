@@ -26,6 +26,7 @@ import {
   type TeamRole,
 } from "@/lib/api/team";
 import { cn } from "@/lib/ui";
+import { clerkCode, friendlyNetworkError } from "@/lib/clerk-errors";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { hasOnboarded, markOnboarded } from "@/lib/first-run";
@@ -38,22 +39,6 @@ const ROLE_OPTIONS = ["owner", "supervisor", "cashier"] as const;
 
 function roleLabel(r: TeamRole): string {
   return r[0].toUpperCase() + r.slice(1);
-}
-
-function errMessage(e: unknown): string {
-  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-    const first = (e as { errors: { message?: unknown }[] }).errors[0];
-    if (first && typeof first.message === "string") return first.message;
-  }
-  return e instanceof Error ? e.message : String(e);
-}
-
-function errorCode(e: unknown): string | null {
-  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-    const first = (e as { errors: { code?: unknown }[] }).errors[0];
-    if (first && typeof first.code === "string") return first.code;
-  }
-  return null;
 }
 
 function PeopleSection({ conn }: { conn: SyncConnection }) {
@@ -120,7 +105,7 @@ function PeopleSection({ conn }: { conn: SyncConnection }) {
       setSelected(null);
       await reload();
     } catch (e) {
-      toast(errMessage(e), "error");
+      toast(friendlyNetworkError(e), "error");
       await reload();
     } finally {
       setActing(false);
@@ -139,7 +124,7 @@ function PeopleSection({ conn }: { conn: SyncConnection }) {
       await layoffMember(conn, m.id);
       toast("Access removed", "ok");
     } catch (e) {
-      toast(errMessage(e), "error");
+      toast(friendlyNetworkError(e), "error");
     } finally {
       setSelected(null);
       setConfirmRemove(false);
@@ -156,7 +141,7 @@ function PeopleSection({ conn }: { conn: SyncConnection }) {
       toast("Access reinstated", "ok");
       await reload();
     } catch (e) {
-      toast(errMessage(e), "error");
+      toast(friendlyNetworkError(e), "error");
       await reload();
     } finally {
       setActing(false);
@@ -413,11 +398,11 @@ export default function ConnectScreen() {
       }
       router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&from=connect`);
     } catch (e) {
-      if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
+      if (clerkCode(e) === "form_identifier_not_found" || clerkCode(e) === "identifier_not_found") {
         router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1&from=connect`);
         return;
       }
-      setError(errMessage(e) || "Sign-in failed.");
+      setError(friendlyNetworkError(e) || "Sign-in failed.");
     } finally {
       setBusy(false);
     }

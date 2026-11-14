@@ -7,6 +7,7 @@ import { useAuth, useSignIn, useUser } from "@clerk/clerk-react";
 import { Input } from "@/components/ui/input";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
+import { friendlyNetworkError } from "@/lib/clerk-errors";
 import {
   readRecovery,
   setSessionUnlocked,
@@ -27,14 +28,6 @@ const TITLE: Record<Stage, string> = {
 };
 
 const EMPTY_DIGITS: string[] = ["", "", "", "", "", ""];
-
-function errMessage(e: unknown): string {
-  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-    const first = (e as { errors: { message?: unknown }[] }).errors[0];
-    if (first && typeof first.message === "string") return first.message;
-  }
-  return e instanceof Error ? e.message : String(e);
-}
 
 /**
  * Forgotten PIN recovery. The primary path is offline: answer the security
@@ -79,7 +72,7 @@ export default function PinForgotScreen() {
         await signIn.create({ identifier: email, strategy: "email_code" });
         setCool(30);
       } catch (e) {
-        setError(errMessage(e));
+        setError(friendlyNetworkError(e));
       }
     })();
   }, [stage, isSignedIn, signIn, email]);
@@ -92,7 +85,7 @@ export default function PinForgotScreen() {
       await signIn.create({ identifier: email, strategy: "email_code" });
       setCool(30);
     } catch (e) {
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     } finally {
       setBusy(false);
     }
@@ -118,7 +111,7 @@ export default function PinForgotScreen() {
         setError("That answer doesn't match — try again.");
       }
     } catch (e) {
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     } finally {
       setBusy(false);
     }
@@ -158,7 +151,7 @@ export default function PinForgotScreen() {
       }
       setError("Couldn't confirm the code — try again.");
     } catch (e) {
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     } finally {
       setBusy(false);
     }
@@ -190,7 +183,7 @@ export default function PinForgotScreen() {
       }
       finishReset();
     } catch (e) {
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     }
   }
 

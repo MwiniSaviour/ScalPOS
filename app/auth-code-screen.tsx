@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { BrandMark } from "@/components/brandmark";
 import { markOnboarded } from "@/lib/first-run";
 import { bootstrapConnection, writeConnection } from "@/lib/api/bootstrap";
+import { clerkCode, friendlyNetworkError } from "@/lib/clerk-errors";
 import { useNet } from "@/lib/net";
 import { usePos } from "@/lib/store";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -37,22 +38,6 @@ export default function AuthCodeScreen() {
   const cooling = cool > 0;
   const emailSentRef = useRef(false);
 
-  function errMessage(e: unknown): string {
-    if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-      const first = (e as { errors: { message?: unknown }[] }).errors[0];
-      if (first && typeof first.message === "string") return first.message;
-    }
-    return e instanceof Error ? e.message : String(e);
-  }
-
-  function errorCode(e: unknown): string | null {
-    if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-      const first = (e as { errors: { code?: unknown }[] }).errors[0];
-      if (first && typeof first.code === "string") return first.code;
-    }
-    return null;
-  }
-
   useEffect(() => {
     if (!email) router.replace("/auth");
   }, [email, router]);
@@ -76,11 +61,11 @@ export default function AuthCodeScreen() {
         await signUp.prepareVerification({ strategy: "email_code" });
         setCool(30);
       } catch (e) {
-        if (errorCode(e) === "form_identifier_exists") {
+        if (clerkCode(e) === "form_identifier_exists") {
           router.replace(`/auth/code?email=${encodeURIComponent(email)}&from=${fromParam}`);
           return;
         }
-        setError(errMessage(e));
+        setError(friendlyNetworkError(e));
       }
     })();
   }, [isNew, signUp, email, router, fromParam]);
@@ -97,13 +82,13 @@ export default function AuthCodeScreen() {
           await signIn.create({ identifier: email, strategy: "email_code" });
           setCool(30);
         } catch (e) {
-          const code = errorCode(e);
+          const code = clerkCode(e);
           if (code === "form_identifier_not_found" || code === "identifier_not_found") {
             router.replace(`/auth/code?email=${encodeURIComponent(email)}&new=1&from=${fromParam}`);
             return;
           }
           signInStartedRef.current = false;
-          setError(errMessage(e));
+          setError(friendlyNetworkError(e));
         }
       })();
     }, 400);
@@ -163,7 +148,7 @@ export default function AuthCodeScreen() {
       }
       setCool(30);
     } catch (e) {
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     } finally {
       setBusy(false);
     }
@@ -240,11 +225,11 @@ export default function AuthCodeScreen() {
       }
       router.replace("/connect");
     } catch (e) {
-      if (errorCode(e) === "form_code_incorrect") {
+      if (clerkCode(e) === "form_code_incorrect") {
         setError("That code isn't correct — double-check the latest email, or tap Resend code.");
         return;
       }
-      setError(errMessage(e));
+      setError(friendlyNetworkError(e));
     } finally {
       setBusy(false);
     }

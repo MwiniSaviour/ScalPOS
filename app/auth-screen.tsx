@@ -5,27 +5,12 @@ import { BrandMark } from "@/components/brandmark";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { useNet } from "@/lib/net";
+import { friendlyNetworkError, clerkCode } from "@/lib/clerk-errors";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useSignIn, useAuth, useUser } from "@clerk/clerk-react";
 
 type Mode = "signin" | "shop";
-
-function errorCode(e: unknown): string | null {
-  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-    const first = (e as { errors: { code?: unknown }[] }).errors[0];
-    if (first && typeof first.code === "string") return first.code;
-  }
-  return null;
-}
-
-function errMessage(e: unknown): string {
-  if (e && typeof e === "object" && "errors" in e && Array.isArray((e as { errors: unknown[] }).errors)) {
-    const first = (e as { errors: { message?: unknown }[] }).errors[0];
-    if (first && typeof first.message === "string") return first.message;
-  }
-  return e instanceof Error ? e.message : String(e);
-}
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -64,11 +49,11 @@ export default function AuthScreen() {
       }
       router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&from=auth`);
     } catch (e) {
-      if (errorCode(e) === "form_identifier_not_found" || errorCode(e) === "identifier_not_found") {
+      if (clerkCode(e) === "form_identifier_not_found" || clerkCode(e) === "identifier_not_found") {
         router.push(`/auth/code?email=${encodeURIComponent(trimmed)}&new=1&from=auth`);
         return;
       }
-      setError(errMessage(e) || "Sign-in failed.");
+      setError(friendlyNetworkError(e) || "Sign-in failed.");
     } finally {
       setBusy(false);
     }
