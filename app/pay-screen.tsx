@@ -162,6 +162,9 @@ export default function PayScreen() {
   const visitLines = totals.lines.filter(
     (l) => l.product.kind === "service" || l.useCredit,
   );
+  // a package's credits land on a client — without one the sale cannot go on
+  const packageSaleNeedsCustomer =
+    totals.lines.some((l) => l.packageId && !l.useCredit) && !activeCustomer;
 
   const pick = (cid: string | null) => {
     setCartCustomer(cid);
@@ -308,6 +311,20 @@ export default function PayScreen() {
           </button>
         </Card>
       </section>
+
+      {packageSaleNeedsCustomer && (
+        <section className="px-5 pt-4">
+          <div className="rounded-2xl border border-warn/30 bg-warn/10 px-4 py-3.5">
+            <p className="text-[15px] font-semibold text-warn">
+              A package needs a customer
+            </p>
+            <p className="mt-0.5 text-[13px] leading-5 text-ink2">
+              The credits from this package belong to a client — attach one above
+              before you charge.
+            </p>
+          </div>
+        </section>
+      )}
 
       {visitLines.length > 0 && (
         <section className="px-5 pt-4">
@@ -510,7 +527,7 @@ export default function PayScreen() {
           <Button
             block
             size="lg"
-            disabled={needsRx && rxRef.trim() === ""}
+            disabled={(needsRx && rxRef.trim() === "") || packageSaleNeedsCustomer}
             onClick={complete}
           >
             {ctaLabel}

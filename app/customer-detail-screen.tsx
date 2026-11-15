@@ -17,7 +17,7 @@ import { fmtMoney, CURRENCY_SYMBOL } from "@/lib/money";
 import { dueOf, payStatusOf, usePos, useSettings } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import { Pencil, Receipt, Trash2, TriangleAlert, Users } from "lucide-react";
+import { Pencil, Receipt, Ticket, Trash2, TriangleAlert, Users } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -32,24 +32,40 @@ export default function CustomerDetailScreen() {
 
   const customer = usePos((s) => s.customers.find((c) => c.id === cid));
   const orders = usePos((s) => s.orders);
+  const packages = usePos((s) => s.packages);
   const addPaymentsToOrder = usePos((s) => s.addPaymentsToOrder);
+  const upsertCustomer = usePos((s) => s.upsertCustomer);
   const deleteCustomer = usePos((s) => s.deleteCustomer);
   const toast = usePos((s) => s.toast);
   const settings = useSettings();
   const now = useNow(60_000);
 
   const isRx = hasFeature(settings.businessType, "rx");
+  const packagesOn = hasFeature(settings.businessType, "packages");
 
   const [editOpen, setEditOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [payTarget, setPayTarget] = useState<PayTarget | null>(null);
   const [payMethod, setPayMethod] = useState<PaymentMethod>("cash");
   const [payAmt, setPayAmt] = useState("0");
+  const [noteDraft, setNoteDraft] = useState("");
 
   const custOrders = useMemo(
     () => orders.filter((o) => o.customerId === cid && o.status !== "refunded").reverse(),
     [orders, cid],
   );
+
+  /** the packages this client still owns credits of */
+  const credits = (customer?.packageCredits ?? [])
+    .map((c) => ({
+      packageId: c.packageId,
+      name: packages.find((p) => p.id === c.packageId)?.name ?? "Package",
+      remaining: Math.max(0, c.remaining),
+    }))
+    .filter((c) => c.remaining > 0);
+
+  /** newest first — the visit notes are a working log, not a history */
+  const notes = [...(customer?.visitNotes ?? [])].sort((a, b) => b.t - a.t);
 
   const stats = useMemo(() => {
     const spent = custOrders.reduce((s, o) => s + o.total, 0);
@@ -71,6 +87,22 @@ export default function CustomerDetailScreen() {
         </section>
       </div>
     );
+  }
+
+  const owner = customer;
+  const writeNotes = (next: { t: number; text: string }[]) => {
+    upsertCustomer({ id: owner.id, name: owner.name, visitNotes: next });
+  };
+
+  function addNote() {
+    const text = noteDraft.trim();
+    if (text === "") return;
+    writeNotes([{ t: Date.now(), text }, ...(owner.visitNotes ?? [])]);
+    setNoteDraft("");
+  }
+
+  function removeNote(i: number) {
+    writeNotes(notes.filter((_, j) => j !== i));
   }
 
   const allergies = customer.allergies?.trim() ?? "";
@@ -187,6 +219,75 @@ export default function CustomerDetailScreen() {
           <StatCell label="Orders" value={String(stats.count)} className="border-r border-line" />
           <StatCell label="Spent" value={fmtMoney(stats.spent)} className="border-r border-line" />
           <StatCell label="Owed" value={fmtMoney(stats.due)} alert={stats.due > 0} />
+        </div>
+      </section>
+
+      {/* package credits — what this client still owns */}
+      {packagesOn && credits.length > 0 && (
+        <section className="mt-5 px-5">
+          <h2 className="text-[15px] font-medium text-ink2">Package credits</h2>
+          <Card inset className="mt-2.5">
+            {credits.map((c) => (
+              <div key={c.packageId} className="flex items-center gap-3 px-4 py-3.5">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accentsoft text-accent">
+                  <Ticket className="size-[17px]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[15px] font-semibold text-ink">
+                    {c.name}
+                  </span>
+                  <span className="block text-[13px] text-ink3">
+                    {c.remaining} credit{c.remaining === 1 ? "" : "s"} left
+                  </span>
+                </span>
+                <span className="tabnum shrink-0 text-[15px] font-bold text-ink">
+                  {c.remaining}
+                </span>
+              </div>
+            ))}
+          </Card>
+        </section>
+      )}
+
+      {/* visit notes — what happened at each visit */}
+      <section className="mt-6 px-5">
+        <h2 className="text-[15px] font-medium text-ink2">Visit notes</h2>
+        <Card inset className="mt-2.5">
+          {notes.length === 0 ? (
+            <p className="px-4 py-4 text-[14px] text-ink3">
+              No notes yet — record what was done or what to watch next time.
+            </p>
+          ) : (
+            notes.map((n, i) => (
+              <div key={`${n.t}-${i}`} className="flex items-start gap-3 px-4 py-3.5">
+                <span className="min-w-0 flex-1">
+                  <span className="block break-words text-[15px] leading-5 text-ink">
+                    {n.text}
+                  </span>
+                  <span className="mt-0.5 block text-[13px] text-ink3">{timeAgo(n.t, now)}</span>
+                </span>
+                <IconButton label="Delete note" onClick={() => removeNote(i)}>
+                  <Trash2 className="size-4" />
+                </IconButton>
+              </div>
+            ))
+          )}
+        </Card>
+        <div className="mt-2.5 flex items-end gap-2">
+          <Input
+            value={noteDraft}
+            onChange={(e) => setNoteDraft(e.target.value)}
+            placeholder="e.g. Prefers the wide-tooth comb, no heat near the scalp"
+            className="flex-1"
+          />
+          <Button
+            size="sm"
+            className="mb-0.5"
+            disabled={noteDraft.trim() === ""}
+            onClick={addNote}
+          >
+            Add
+          </Button>
         </div>
       </section>
 

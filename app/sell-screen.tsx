@@ -40,7 +40,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { CartLine, Order, Product, RestaurantTable } from "@/lib/types";
+import type { CartLine, Order, Package, Product, RestaurantTable } from "@/lib/types";
 
 export default function SellScreen() {
   const router = useRouter();
@@ -60,6 +60,7 @@ export default function SellScreen() {
   const staffList = useStaffList();
   const packages = usePos((s) => s.packages);
   const setCartLine = usePos((s) => s.setCartLine);
+  const addPackageToCart = usePos((s) => s.addPackageToCart);
   const cartOrderType = usePos((s) => s.cartOrderType);
   const cartTableId = usePos((s) => s.cartTableId);
   const cartTabOrderId = usePos((s) => s.cartTabOrderId);
@@ -175,6 +176,12 @@ export default function SellScreen() {
       (c) => q === "" || c.name.toLowerCase().includes(q) || c.phone.includes(q),
     );
   }, [customers, custQuery]);
+
+  /** how many of a package are already in the cart */
+  const packageQtyInCart = (packageId: string) =>
+    cart
+      .filter((l) => l.packageId === packageId && !l.useCredit)
+      .reduce((s, l) => s + l.qty, 0);
 
   // A batched product can only sell what has not expired — the shelf number
   // includes expired stock, which must never be offered for sale.
@@ -559,6 +566,37 @@ export default function SellScreen() {
             </div>
           )}
         </div>
+
+        {/* packages are bought once and spent over many visits */}
+        {packagesOn && packages.length > 0 && (
+          <div className="mt-6">
+            <div className="flex items-baseline justify-between gap-2 px-0.5">
+              <h2 className="text-[15px] font-medium text-ink2">Packages</h2>
+              <button
+                onClick={() => router.push("/packages")}
+                className="press text-[14px] font-medium text-accent"
+              >
+                Manage
+              </button>
+            </div>
+            <div className="mt-2.5 grid grid-cols-2 gap-2.5">
+              {packages.map((pkg) => (
+                <PackageTile
+                  key={pkg.id}
+                  name={pkg.name}
+                  price={pkg.price}
+                  summary={packageSummary(pkg, products)}
+                  qty={packageQtyInCart(pkg.id)}
+                  onTap={() => {
+                    addPackageToCart(pkg.id);
+                    setFlash(pkg.id);
+                    window.setTimeout(() => setFlash((f) => (f === pkg.id ? null : f)), 400);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {totals.count > 0 && (
@@ -614,7 +652,7 @@ export default function SellScreen() {
             const key = cartLineKey(l);
             const packName = linePackName(l.product, l.packIdx);
             const max =
-              l.product.kind === "service"
+              l.product.kind === "service" || (l.packageId && !l.useCredit)
                 ? Number.POSITIVE_INFINITY
                 : Math.floor(
                     (availableById.get(l.product.id) ?? l.product.stock) /
@@ -1259,8 +1297,67 @@ function ProductTile({
   );
 }
 
-function StepBtn({
-  label,
+/** A package in the sell grid — bought once, spent over many visits. */
+function PackageTile({
+  name,
+  price,
+  summary,
+  qty,
+  onTap,
+}: {
+  name: string;
+  price: number;
+  summary: string;
+  qty: number;
+  onTap: () => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={qty > 0 ? `${name}, package, ${qty} in cart` : `${name}, package`}
+      onClick={onTap}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onTap();
+        }
+      }}
+      className={cn(
+        "press relative flex flex-col overflow-hidden rounded-2xl border bg-surface text-left cursor-pointer",
+        qty > 0 ? "border-accent bg-accent/10" : "border-line hover:bg-surface2/50",
+      )}
+    >
+      <div className="flex aspect-square w-full items-center justify-center bg-accentsoft">
+        <Ticket className="size-9 text-accent" />
+      </div>
+      {qty > 0 && (
+        <span className="absolute right-1.5 top-1.5 flex h-6 items-center gap-1 rounded-full bg-accent pl-2 pr-2 text-accentink shadow-sm">
+          <span className="tabnum text-[11px] font-bold">×{qty}</span>
+        </span>
+      )}
+      <span className="flex min-w-0 flex-1 flex-col px-2.5 pb-2.5 pt-2">
+        <span className="line-clamp-2 min-h-[36px] text-[15px] font-semibold leading-tight text-ink">
+          {name}
+        </span>
+        <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(price)}</span>
+        <span className="mt-0.5 block truncate text-[12px] text-ink3">{summary}</span>
+      </span>
+    </div>
+  );
+}
+
+/** What a package carries — "4 × Gel Manicure" */
+function packageSummary(pkg: Package, products: Product[]): string {
+  return pkg.credits
+    .map((c) => {
+      const name = products.find((p) => p.id === c.productId)?.name ?? "Service";
+      return `${c.qty} × ${name}`;
+    })
+    .join(", ");
+}
+
+function StepBtn({  label,
   onClick,
   disabled,
   children,

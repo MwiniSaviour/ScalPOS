@@ -22,6 +22,19 @@ export function statusTone(status: string): { label: string; tone: Tone } {
       return { label: "Low stock", tone: "warn" };
     case "out":
       return { label: "Out", tone: "neutral" };
+    /* salon — the life of a booked visit */
+    case "booked":
+      return { label: "Booked", tone: "neutral" };
+    case "arrived":
+      return { label: "Arrived", tone: "warn" };
+    case "in-service":
+      return { label: "In service", tone: "ok" };
+    case "done":
+      return { label: "Done", tone: "quiet" };
+    case "no-show":
+      return { label: "No-show", tone: "danger" };
+    case "cancelled":
+      return { label: "Cancelled", tone: "neutral" };
     default:
       return { label: status, tone: "neutral" };
   }

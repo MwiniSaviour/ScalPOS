@@ -10,6 +10,7 @@ import {
   restoreCredits,
   spendCredits,
   voidCredits,
+  voidCreditsFrom,
 } from "../../lib/salon.ts";
 import type { Customer, OrderItem } from "../../lib/types.ts";
 import type { Staff } from "../../lib/staff.ts";
@@ -95,6 +96,48 @@ describe("voidCredits", () => {
       "pka",
     );
     assert.deepEqual(out, [{ packageId: "pka", remaining: 0 }, { packageId: "pkb", remaining: 4 }]);
+  });
+});
+
+describe("voidCreditsFrom", () => {
+  const entries = [
+    { packageId: "pka", remaining: 3, sourceOrderId: "o1" },
+    { packageId: "pka", remaining: 4, sourceOrderId: "o2" },
+    { packageId: "pkb", remaining: 1, sourceOrderId: "o2" },
+  ];
+
+  test("refunding one purchase keeps the other's credits", () => {
+    assert.deepEqual(voidCreditsFrom(entries, "pka", "o2"), [
+      { packageId: "pka", remaining: 3, sourceOrderId: "o1" },
+      { packageId: "pka", remaining: 0, sourceOrderId: "o2" },
+      { packageId: "pkb", remaining: 1, sourceOrderId: "o2" },
+    ]);
+  });
+
+  test("other packages are untouched", () => {
+    assert.deepEqual(voidCreditsFrom(entries, "pkb", "o2"), [
+      { packageId: "pka", remaining: 3, sourceOrderId: "o1" },
+      { packageId: "pka", remaining: 4, sourceOrderId: "o2" },
+      { packageId: "pkb", remaining: 0, sourceOrderId: "o2" },
+    ]);
+  });
+
+  test("an order older than the bookkeeping voids the whole package", () => {
+    assert.deepEqual(voidCreditsFrom(entries, "pka", "o9"), [
+      { packageId: "pka", remaining: 0, sourceOrderId: "o1" },
+      { packageId: "pka", remaining: 0, sourceOrderId: "o2" },
+      { packageId: "pkb", remaining: 1, sourceOrderId: "o2" },
+    ]);
+    assert.deepEqual(voidCreditsFrom(entries, "pka", undefined), [
+      { packageId: "pka", remaining: 0, sourceOrderId: "o1" },
+      { packageId: "pka", remaining: 0, sourceOrderId: "o2" },
+      { packageId: "pkb", remaining: 1, sourceOrderId: "o2" },
+    ]);
+  });
+
+  test("spent credits stay spent — only the balance is zeroed", () => {
+    const spent = [{ packageId: "pka", remaining: 0, sourceOrderId: "o2" }];
+    assert.deepEqual(voidCreditsFrom(spent, "pka", "o2"), spent);
   });
 });
 

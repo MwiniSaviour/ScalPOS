@@ -78,6 +78,32 @@ export function voidCredits(
 }
 
 /**
+ * Void the credits granted by one purchase.
+ *
+ * Credits live on the client as entries, one per purchase. Refunding a
+ * package purchase must only throw away what that purchase granted — an
+ * earlier purchase of the same package keeps its credits. Entries carry the
+ * order that granted them; when the order is older than that bookkeeping
+ * (or the entry was edited), every remaining credit of the package goes.
+ */
+export function voidCreditsFrom(
+  entries: { packageId: string; remaining: number; sourceOrderId?: string }[],
+  packageId: string,
+  sourceOrderId?: string,
+): { packageId: string; remaining: number; sourceOrderId?: string }[] {
+  if (!sourceOrderId) return voidCredits(entries, packageId);
+  const granted = entries.some(
+    (e) => e.packageId === packageId && e.sourceOrderId === sourceOrderId,
+  );
+  if (!granted) return voidCredits(entries, packageId);
+  return entries.map((e) =>
+    e.packageId === packageId && e.sourceOrderId === sourceOrderId
+      ? { ...e, remaining: 0 }
+      : e,
+  );
+}
+
+/**
  * The staff member who served most of the lines — the visit's owner.
  *
  * Ties go to the first one seen, so the stamp is stable for a given order.

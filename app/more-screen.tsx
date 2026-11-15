@@ -36,6 +36,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
+  CalendarDays,
   ChefHat,
   ChevronRight,
   CircleUserRound,
@@ -48,6 +49,7 @@ import {
   ScrollText,
   Settings,
   Store,
+  Ticket,
   Users,
   UsersRound,
   Warehouse,
@@ -192,6 +194,22 @@ export default function MoreScreen() {
               icon={<ChefHat className="size-[18px]" />}
               label="Kitchen"
               sub="Tickets through the kitchen"
+            />
+          )}
+          {hasFeature(settings.businessType, "appointments") && (
+            <RowLink
+              href="/appointments"
+              icon={<CalendarDays className="size-[18px]" />}
+              label="Appointments"
+              sub="The book of visits"
+            />
+          )}
+          {hasFeature(settings.businessType, "packages") && (
+            <RowLink
+              href="/packages"
+              icon={<Ticket className="size-[18px]" />}
+              label="Packages"
+              sub="Service packages and credits"
             />
           )}
           <RowLink

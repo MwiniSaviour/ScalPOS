@@ -32,7 +32,7 @@ import {
   primaryStaffOf,
   restoreCredits,
   spendCredits,
-  voidCredits,
+  voidCreditsFrom,
 } from "./salon";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
@@ -265,6 +265,8 @@ type PosState = {
     key: string,
     patch: { staffId?: string | null; useCredit?: boolean; packageId?: string | null },
   ) => void;
+  /** a package purchase — the package itself is the line, not a product */
+  addPackageToCart: (packageId: string, qty?: number) => void;
   clearCart: () => void;
   setCartCustomer: (cid: string | null) => void;
   setCartDiscount: (n: number) => void;
@@ -513,6 +515,19 @@ export const usePos = create<PosState>()(
           cartAppointmentId: null,
         }),
 
+      addPackageToCart: (packageId, qty = 1) => {
+        const s = get();
+        const pkg = s.packages.find((p) => p.id === packageId);
+        if (!pkg) return;
+        const cart = [...s.cart];
+        // a package line is its own thing — the package id is the line id
+        const key = cartLineKey({ productId: pkg.id, packageId: pkg.id });
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
+        if (i >= 0) cart[i] = { ...cart[i], qty: cart[i].qty + qty };
+        else cart.push({ productId: pkg.id, qty, packageId: pkg.id });
+        set({ cart, cartUpdatedAt: Date.now() });
+      },
+
       setCartAppointment: (id) => set({ cartAppointmentId: id, cartUpdatedAt: Date.now() }),
 
       setCartContext: (patch) => {
@@ -581,7 +596,6 @@ export const usePos = create<PosState>()(
           get().toast(`Not enough stock for ${plan.shortageProduct ?? "an item"}`, "error");
           return null;
         }
-
         // A client pays visits with the credits of a package they bought. The
         // balance is read once and spent line by line, so two credit lines can
         // never claim the same credit.
@@ -592,6 +606,13 @@ export const usePos = create<PosState>()(
         const creditSpend = new Map<string, number>();
         for (const c of creditCustomer?.packageCredits ?? []) {
           creditBalances.set(c.packageId, (creditBalances.get(c.packageId) ?? 0) + Math.max(0, c.remaining));
+        }
+
+        // A package carries its credits to a client — without one attached the
+        // credits would land nowhere, so the sale cannot go through.
+        if (packageItems.length > 0 && !creditCustomer) {
+          get().toast("Attach a customer to sell a package", "error");
+          return null;
         }
 
         const cartItems: OrderItem[] = plan.lines.map((pl) => {
@@ -774,7 +795,11 @@ export const usePos = create<PosState>()(
           const granted = packageItems
             .map((item) => s.packages.find((p) => p.id === item.packageId))
             .filter((p): p is Package => !!p)
-            .map((p) => ({ packageId: p.id, remaining: p.credits.reduce((sum, l) => sum + l.qty, 0) }));
+            .map((p) => ({
+              packageId: p.id,
+              remaining: p.credits.reduce((sum, l) => sum + l.qty, 0),
+              sourceOrderId: order.id,
+            }));
           if (granted.length > 0) {
             customers = customers.map((c) =>
               c.id === creditCustomer.id
@@ -924,7 +949,7 @@ export const usePos = create<PosState>()(
 
         // Package credits move with the refund: a refunded credit line gives
         // the credit back, a refunded package purchase throws away whatever
-        // the client has not spent of it.
+        // that purchase left the client with.
         let customers = s.customers;
         if (order.customerId) {
           const restore = new Map<string, number>();
@@ -940,7 +965,9 @@ export const usePos = create<PosState>()(
             customers = customers.map((c) => {
               if (c.id !== order.customerId) return c;
               let credits = c.packageCredits ?? [];
-              for (const packageId of voided) credits = voidCredits(credits, packageId);
+              for (const packageId of voided) {
+                credits = voidCreditsFrom(credits, packageId, order.id);
+              }
               if (restore.size > 0) credits = restoreCredits(credits, restore);
               return { ...c, packageCredits: credits };
             });
@@ -1459,12 +1486,18 @@ export function useSettings() {
 export function useCartTotals() {
   const cart = usePos((s) => s.cart);
   const products = usePos((s) => s.products);
+  const packages = usePos((s) => s.packages);
   const discount = usePos((s) => s.cartDiscount);
   const settings = usePos((s) => s.settings);
   const customerId = usePos((s) => s.cartCustomerId);
   const customer = usePos((s) => s.customers.find((c) => c.id === customerId) ?? null);
   const lines = cart
     .map((l) => {
+      // a package purchase is not a product — it is priced from the package
+      if (l.packageId && !l.useCredit) {
+        const pkg = packages.find((p) => p.id === l.packageId);
+        return pkg ? { ...l, product: packageAsProduct(pkg) } : null;
+      }
       const p = products.find((x) => x.id === l.productId);
       return p ? { ...l, product: p } : null;
     })
@@ -1494,4 +1527,31 @@ export function useCartTotals() {
 export function todayRange(now = Date.now()) {
   const start = startOfDay(now);
   return { start, end: now };
+}
+
+/**
+ * A package seen as a product row.
+ *
+ * A package has no catalogue entry and no stock — it is a bundle of services
+ * bought once. The cart still draws it like a product, so it gets a product
+ * shaped stand-in carrying the package's name and price.
+ */
+function packageAsProduct(pkg: Package): Product {
+  return {
+    id: pkg.id,
+    name: pkg.name,
+    categoryId: null,
+    cost: 0,
+    price: pkg.price,
+    stock: 0,
+    lowStockAt: 0,
+    unit: "pcs",
+    sku: "",
+    barcode: "",
+    imageUrl: "",
+    description: "",
+    active: true,
+    createdAt: pkg.createdAt,
+    updatedAt: pkg.updatedAt,
+  };
 }

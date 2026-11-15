@@ -67,6 +67,15 @@ export default function OrderDetailScreen() {
     (order.items.some((i) => (i.recipeConsumption?.length ?? 0) > 0) ||
       recipes.some((r) => order.items.some((i) => i.productId === r.productId)));
 
+  /* salon — what a refund does to package credits */
+  const creditLines = order?.items.filter((i) => i.useCredit && i.packageId) ?? [];
+  const packageSaleLines = order?.items.filter((i) => i.packageId && !i.useCredit) ?? [];
+  const refundHint = creditLines.length
+    ? "The package credits used on this sale go back to the client."
+    : packageSaleLines.length
+      ? "The package purchase is undone and any credits still unspent are voided."
+      : null;
+
   const openRefund = () => {
     if (hasRecipeItems) {
       setSkipRestock(false);
@@ -344,7 +353,11 @@ export default function OrderDetailScreen() {
         onClose={() => setRefundOpen(false)}
         onConfirm={() => refundOrder(order.id)}
         title="Refund order"
-        body={`Refund order ${order.id}? All items return to stock and the sale is marked refunded. Payments already collected stay in the ledger.`}
+        body={
+          refundHint
+            ? `Refund order ${order.id}? ${refundHint} Payments already collected stay in the ledger.`
+            : `Refund order ${order.id}? All items return to stock and the sale is marked refunded. Payments already collected stay in the ledger.`
+        }
         confirmLabel="Refund"
         tone="danger"
       />

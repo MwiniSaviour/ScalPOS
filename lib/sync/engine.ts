@@ -379,6 +379,7 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       service_lines: x.serviceLines.map((l) => ({
         productId: l.productId,
         price: l.price,
+        qty: l.qty ?? 1,
       })),
       start: x.start,
       duration_min: x.durationMin,
@@ -680,11 +681,19 @@ function visitNotesLocal(raw: unknown): { t: number; text: string }[] | undefine
 }
 
 /** package credits: [{ "packageId": "<uuid>", "remaining": 2 }] */
-function creditsLocal(raw: unknown): { packageId: string; remaining: number }[] | undefined {
+function creditsLocal(
+  raw: unknown,
+): { packageId: string; remaining: number; sourceOrderId?: string }[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const out = raw
     .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
-    .map((v) => ({ packageId: String(v.packageId ?? ""), remaining: Math.max(0, n(v.remaining)) }))
+    .map((v) => ({
+      packageId: String(v.packageId ?? ""),
+      remaining: Math.max(0, n(v.remaining)),
+      ...(typeof v.sourceOrderId === "string" && v.sourceOrderId
+        ? { sourceOrderId: v.sourceOrderId }
+        : {}),
+    }))
     .filter((v) => v.packageId !== "");
   return out.length > 0 ? out : undefined;
 }
@@ -808,7 +817,11 @@ function apptLocal(r: RemoteRow, rev: Record<string, string>): Appointment {
   const raw = Array.isArray(r.service_lines) ? (r.service_lines as unknown[]) : [];
   const serviceLines = raw
     .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
-    .map((l) => ({ productId: String(l.productId ?? ""), price: n(l.price) }))
+    .map((l) => ({
+      productId: String(l.productId ?? ""),
+      price: n(l.price),
+      qty: typeof l.qty === "number" && l.qty > 0 ? l.qty : 1,
+    }))
     .filter((l) => l.productId !== "");
   return {
     id: String(r.local_id ?? ""),

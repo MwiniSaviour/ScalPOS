@@ -90,8 +90,8 @@ export type Appointment = {
   id: string;
   customerId: string | null;
   staffId?: string;
-  /** the services booked — [{ productId, price }] */
-  serviceLines: { productId: string; price: number }[];
+  /** the services booked — [{ productId, price, qty? }] */
+  serviceLines: { productId: string; price: number; qty?: number }[];
   /** when the visit starts — ISO datetime */
   start: string;
   /** how long the visit runs, in minutes */
@@ -235,8 +235,13 @@ export type Customer = {
   /* salon */
   /** notes the stylist left on a visit — newest first */
   visitNotes?: { t: number; text: string }[];
-  /** package credits this client still owns — [{ packageId, remaining }] */
-  packageCredits?: { packageId: string; remaining: number }[];
+  /** package credits this client still owns — [{ packageId, remaining, sourceOrderId? }] */
+  packageCredits?: {
+    packageId: string;
+    remaining: number;
+    /** the purchase that granted this entry — a refund voids only its own */
+    sourceOrderId?: string;
+  }[];
 };
 
 export type StockMove = {
