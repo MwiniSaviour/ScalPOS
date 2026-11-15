@@ -15,7 +15,7 @@ import { deleteImageBlob, IMAGE_PREFIX, processImageFile, saveImageBlob } from "
 import { usePos, useSettings } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { cn, hueColor, hueSoft } from "@/lib/ui";
-import { Barcode, Camera, Check, ImagePlus, Link2, Package, Pill, Plus, ScanLine, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Barcode, Camera, Check, ImagePlus, Link2, Package, Pill, Plus, ScanLine, Scissors, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -50,9 +50,17 @@ export default function ProductEditScreen() {
 
   const isPharmacy = hasFeature(settings.businessType, "batches");
   const modifiersOn = hasFeature(settings.businessType, "modifiers");
+  const servicesOn = hasFeature(settings.businessType, "services");
   // a product that owns batches takes its stock from them — the raw number
   // must not be editable here or it would land on the earliest batch
   const ownsBatches = batches.some((b) => b.productId === editId);
+
+  const [kind, setKind] = useState<"product" | "service">(
+    editing?.kind === "service" ? "service" : "product",
+  );
+  const [duration, setDuration] = useState(
+    editing?.durationMin ? String(editing.durationMin) : "",
+  );
 
   const [imageUrl, setImageUrl] = useState(editing?.imageUrl ?? "");
   const [linkValue, setLinkValue] = useState(
@@ -200,8 +208,9 @@ export default function ProductEditScreen() {
       categoryId: catId || null,
       cost: costN,
       price: priceN,
-      // a batched product keeps the stock its batches already give it
-      ...(ownsBatches ? {} : { stock: stockN }),
+      // a batched product keeps the stock its batches already give it, and a
+      // service is not stock at all
+      ...(ownsBatches || kind === "service" ? {} : { stock: stockN }),
       lowStockAt: Math.max(0, Math.round(parsePrice(lowAt))),
       unit,
       sku: sku.trim(),
@@ -216,6 +225,14 @@ export default function ProductEditScreen() {
       // current options, so an emptied list means the cashier cleared them —
       // write it, or the old arrays would survive the merge forever.
       ...(modifiersOn ? { variants: variantList, modifiers: modifierList } : {}),
+      // the salon kind is written explicitly so a service switched back to a
+      // product drops its duration and stock behaviour with it
+      ...(servicesOn
+        ? {
+            kind,
+            durationMin: kind === "service" ? Math.max(0, Math.round(parsePrice(duration))) : 0,
+          }
+        : {}),
     });
     // the previous photo is no longer referenced by this product
     const previous = editing?.imageUrl ?? "";
@@ -394,9 +411,58 @@ export default function ProductEditScreen() {
           </p>
         </Card>
 
+        {servicesOn && (
+          <Card className="mt-2.5 p-4">
+            <p className="flex items-center gap-1.5 text-[15px] font-medium text-ink2">
+              <Scissors className="size-4" /> Service
+            </p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[15px] font-semibold text-ink">Sold as a service</p>
+                <p className="text-[13px] text-ink3">
+                  No stock — booked by appointment and sold as a visit
+                </p>
+              </div>
+              <button
+                role="switch"
+                aria-checked={kind === "service"}
+                onClick={() => setKind((k) => (k === "service" ? "product" : "service"))}
+                className={cn(
+                  "press relative h-7 w-12 shrink-0 rounded-full transition-colors",
+                  kind === "service" ? "bg-accent" : "bg-ink4/40",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-1 size-5 rounded-full bg-surface transition-all",
+                    kind === "service" ? "left-6" : "left-1",
+                  )}
+                />
+              </button>
+            </div>
+            {kind === "service" && (
+              <div className="mt-3 border-t border-line/60 pt-3">
+                <Input
+                  label="Duration (minutes)"
+                  inputMode="numeric"
+                  className="tabnum"
+                  placeholder="45"
+                  value={duration}
+                  onChange={(e) => setDuration(e.target.value)}
+                  hint="How long one visit takes — used when booking."
+                />
+              </div>
+            )}
+          </Card>
+        )}
+
         <Card className="mt-2.5 p-4">
           <p className="text-[15px] font-medium text-ink2">Stock</p>
-          {ownsBatches ? (
+          {kind === "service" ? (
+            <p className="mt-2.5 rounded-xl border border-line2 bg-surface2 px-3.5 py-3 text-[14px] leading-5 text-ink2">
+              Services hold no stock — they are sold by appointment.
+            </p>
+          ) : ownsBatches ? (
             <div className="mt-2.5 flex flex-col gap-2.5">
               <p className="rounded-xl border border-line2 bg-surface2 px-3.5 py-3 text-[14px] leading-5 text-ink2">
                 Stock comes from the batches.
@@ -437,8 +503,12 @@ export default function ProductEditScreen() {
               Pharmacy stock is tracked in batches — add a batch to record its expiry.
             </p>
           )}
-          <p className="mt-2.5 mb-1.5 text-[13px] font-medium text-ink2">Unit</p>
-          <Segmented value={unit} onChange={setUnit} options={UNITS} />
+          {kind !== "service" && (
+            <>
+              <p className="mt-2.5 mb-1.5 text-[13px] font-medium text-ink2">Unit</p>
+              <Segmented value={unit} onChange={setUnit} options={UNITS} />
+            </>
+          )}
         </Card>
 
         {isPharmacy && (

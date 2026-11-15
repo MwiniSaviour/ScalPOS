@@ -16,6 +16,8 @@ import { scanBarcode } from "@/lib/barcode";
 import { sellableStock } from "@/lib/batches";
 import { useNow } from "@/lib/now";
 import { isUnavailableToday, orderTypeLabel } from "@/lib/restaurant";
+import { creditsOf } from "@/lib/salon";
+import { staffForService, useStaffList } from "@/lib/staff";
 import { useCartTotals, usePos, useSettings } from "@/lib/store";
 import { cn, hueColor } from "@/lib/ui";
 import {
@@ -24,12 +26,15 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleCheck,
+  Clock,
   Minus,
   PackageOpen,
   Plus,
   SearchX,
   SlidersHorizontal,
+  Ticket,
   User,
+  UserCheck,
   Users,
   X,
 } from "lucide-react";
@@ -52,6 +57,9 @@ export default function SellScreen() {
   const settings = useSettings();
   const tables = usePos((s) => s.tables);
   const orders = usePos((s) => s.orders);
+  const staffList = useStaffList();
+  const packages = usePos((s) => s.packages);
+  const setCartLine = usePos((s) => s.setCartLine);
   const cartOrderType = usePos((s) => s.cartOrderType);
   const cartTableId = usePos((s) => s.cartTableId);
   const cartTabOrderId = usePos((s) => s.cartTabOrderId);
@@ -75,6 +83,14 @@ export default function SellScreen() {
   const [optionVariantId, setOptionVariantId] = useState<string | null>(null);
   const [optionModIds, setOptionModIds] = useState<string[]>([]);
   const [tabPrompt, setTabPrompt] = useState<{ table: RestaurantTable; order: Order } | null>(
+    null,
+  );
+  /* ------------------------------ salon ------------------------------ */
+
+  const commissionsOn = hasFeature(settings.businessType, "commissions");
+  const packagesOn = hasFeature(settings.businessType, "packages");
+  /** the cart line whose staff member is being picked */
+  const [staffFor, setStaffFor] = useState<{ key: string; productId: string; staffId?: string } | null>(
     null,
   );
 
@@ -195,6 +211,29 @@ export default function SellScreen() {
   if (!hydrated) return null;
 
   const activeCustomer = customers.find((c) => c.id === cartCustomerId) ?? null;
+
+  /** packages the client still holds credits for that cover this product */
+  const creditPackagesFor = (productId: string) => {
+    if (!packagesOn || !activeCustomer) return [];
+    return packages.filter(
+      (pkg) =>
+        creditsOf(activeCustomer, pkg.id) > 0 &&
+        pkg.credits.some((c) => c.productId === productId),
+    );
+  };
+
+  const toggleCredit = (key: string, productId: string, on: boolean) => {
+    if (!on) {
+      setCartLine(key, { useCredit: false, packageId: null });
+      return;
+    }
+    const pkg = creditPackagesFor(productId)[0];
+    if (!pkg) {
+      usePos.getState().toast("No package credits left for this", "warn");
+      return;
+    }
+    setCartLine(key, { useCredit: true, packageId: pkg.id });
+  };
 
   const flashTile = (pid: string) => {
     setFlash(pid);
@@ -379,7 +418,7 @@ export default function SellScreen() {
       .getState()
       .products.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
     if (hit) {
-      if ((availableById.get(hit.id) ?? hit.stock) <= 0) {
+      if (hit.kind !== "service" && (availableById.get(hit.id) ?? hit.stock) <= 0) {
         usePos.getState().toast("Out of stock", "error");
         return;
       }
@@ -574,10 +613,21 @@ export default function SellScreen() {
           {totals.lines.map((l) => {
             const key = cartLineKey(l);
             const packName = linePackName(l.product, l.packIdx);
-            const max = Math.floor(
-              (availableById.get(l.product.id) ?? l.product.stock) /
-                packFactor(l.product, l.packIdx),
-            );
+            const max =
+              l.product.kind === "service"
+                ? Number.POSITIVE_INFINITY
+                : Math.floor(
+                    (availableById.get(l.product.id) ?? l.product.stock) /
+                      packFactor(l.product, l.packIdx),
+                  );
+            const staffMember = l.staffId
+              ? (staffList.find((s) => s.id === l.staffId) ?? null)
+              : null;
+            const creditPkg = l.useCredit
+              ? (packages.find((p) => p.id === l.packageId) ?? null)
+              : null;
+            const creditable =
+              packagesOn && (l.useCredit || creditPackagesFor(l.productId).length > 0);
             return (
               <div key={key} className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50">
                 <ProductArt
@@ -590,11 +640,58 @@ export default function SellScreen() {
                     {lineTitle(l, packName)}
                   </span>
                   <span className="tabnum mt-1 block text-[14px] font-medium text-ink3">
-                    {fmtMoney(l.price ?? l.product.price)} each
+                    {l.useCredit && l.unitPrice === 0
+                      ? "Covered by package credit"
+                      : `${fmtMoney(l.unitPrice)} each`}
                   </span>
                   {l.modifierNames && l.modifierNames.length > 0 && (
                     <span className="mt-0.5 block truncate text-[12px] text-ink3">
                       {l.modifierNames.join(", ")}
+                    </span>
+                  )}
+                  {(commissionsOn || creditable) && (
+                    <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {commissionsOn && l.product.kind === "service" && (
+                        <button
+                          onClick={() =>
+                            setStaffFor({
+                              key,
+                              productId: l.productId,
+                              ...(l.staffId ? { staffId: l.staffId } : {}),
+                            })
+                          }
+                          className="press inline-flex max-w-full items-center gap-1.5 rounded-full border border-line2 bg-surface px-2 py-1 text-[12px] font-semibold text-ink2"
+                        >
+                          {staffMember ? (
+                            <>
+                              <Avatar name={staffMember.name} size={16} />
+                              <span className="truncate">{staffMember.name}</span>
+                            </>
+                          ) : (
+                            <>
+                              <UserCheck className="size-3.5 shrink-0" />
+                              Assign staff
+                            </>
+                          )}
+                        </button>
+                      )}
+                      {creditable && (
+                        <button
+                          onClick={() => toggleCredit(key, l.productId, !l.useCredit)}
+                          aria-pressed={l.useCredit}
+                          className={cn(
+                            "press inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[12px] font-semibold",
+                            l.useCredit
+                              ? "border-accent bg-accent/10 text-accent"
+                              : "border-line2 bg-surface text-ink2",
+                          )}
+                        >
+                          <Ticket className="size-3.5 shrink-0" />
+                          {l.useCredit
+                            ? (creditPkg?.name ?? "Credit used")
+                            : "Use credit"}
+                        </button>
+                      )}
                     </span>
                   )}
                 </span>
@@ -623,6 +720,8 @@ export default function SellScreen() {
                         ...(l.modifierNames && l.modifierNames.length
                           ? { modifierNames: l.modifierNames }
                           : {}),
+                        ...(l.staffId ? { staffId: l.staffId } : {}),
+                        ...(l.packageId ? { packageId: l.packageId } : {}),
                       })
                     }
                   >
@@ -829,7 +928,9 @@ export default function SellScreen() {
             </div>
             <Button
               disabled={
-                (optionFor ? (availableById.get(optionFor.id) ?? optionFor.stock) : 0) <= 0
+                optionFor !== null &&
+                optionFor.kind !== "service" &&
+                (availableById.get(optionFor.id) ?? optionFor.stock) <= 0
               }
               onClick={addConfigured}
             >
@@ -957,6 +1058,63 @@ export default function SellScreen() {
       </Sheet>
 
       <Sheet
+        open={staffFor !== null}
+        onClose={() => setStaffFor(null)}
+        title="Who serves this?"
+        height="auto"
+      >
+        {staffFor && (
+          <>
+            <Card inset>
+              <button
+                onClick={() => {
+                  setCartLine(staffFor.key, { staffId: null });
+                  setStaffFor(null);
+                }}
+                className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+                  <User className="size-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1 text-left text-[17px] font-semibold text-ink">
+                  No staff
+                </span>
+                {!staffFor.staffId && <CircleCheck className="size-5 shrink-0 text-accent" />}
+              </button>
+              {staffForService(staffList, staffFor.productId).map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => {
+                    setCartLine(staffFor.key, { staffId: s.id });
+                    setStaffFor(null);
+                  }}
+                  className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                >
+                  <Avatar name={s.name} size={36} />
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block truncate text-[17px] font-semibold text-ink">
+                      {s.name}
+                    </span>
+                    <span className="block truncate text-[14px] text-ink3">
+                      {s.commissionPct ? `${s.commissionPct}% commission` : "No commission set"}
+                    </span>
+                  </span>
+                  {staffFor.staffId === s.id && (
+                    <CircleCheck className="size-5 shrink-0 text-accent" />
+                  )}
+                </button>
+              ))}
+            </Card>
+            {staffForService(staffList, staffFor.productId).length === 0 && (
+              <p className="px-4 pb-4 text-center text-[14px] text-ink3">
+                No active staff for this service.
+              </p>
+            )}
+          </>
+        )}
+      </Sheet>
+
+      <Sheet
         open={tabPrompt !== null}
         onClose={() => setTabPrompt(null)}
         title={tabPrompt ? `${tabPrompt.table.name} is open` : ""}
@@ -1016,8 +1174,10 @@ function ProductTile({
   onTap: () => void;
   onRemove: () => void;
 }) {
-  const out = available <= 0;
-  const low = !out && available <= p.lowStockAt;
+  // a service is not stock — it is always on the menu, only its duration shows
+  const service = p.kind === "service";
+  const out = !service && available <= 0;
+  const low = !out && !service && available <= p.lowStockAt;
   const selected = qty > 0;
   const hasOptions =
     !p.packs?.length &&
@@ -1074,7 +1234,12 @@ function ProductTile({
         </span>
         <span className="tabnum mt-1 text-[17px] font-bold text-ink">{fmtMoney(p.price)}</span>
         <span className="mt-0.5 flex h-[16px] items-center gap-1">
-          {unavailable ? (
+          {service && p.durationMin ? (
+            <span className="flex items-center gap-1 text-[12px] font-medium text-ink3">
+              <Clock className="size-3 shrink-0" />
+              {p.durationMin} min
+            </span>
+          ) : unavailable ? (
             <span className="text-[12px] font-medium text-warn">Not available today</span>
           ) : out ? (
             <span className="text-[12px] font-medium text-ink3">Out of stock</span>

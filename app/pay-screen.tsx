@@ -11,10 +11,11 @@ import { Segmented } from "@/components/ui/segmented";
 import { Sheet } from "@/components/ui/sheet";
 import { ReceiptSheet, orderTax } from "@/components/receipt/receipt";
 import { hasFeature } from "@/lib/features";
-import { id } from "@/lib/format";
+import { id, dateShort, timeOf } from "@/lib/format";
 import { orderTypeLabel } from "@/lib/restaurant";
 import { cashierDenominations, fmtMoney, fmtMoneyCompact, parsePrice } from "@/lib/money";
 import { useCartTotals, usePos } from "@/lib/store";
+import { useStaffList } from "@/lib/staff";
 import { cn } from "@/lib/ui";
 import { useNow } from "@/lib/now";
 import {
@@ -76,6 +77,9 @@ export default function PayScreen() {
   const cartOrderType = usePos((s) => s.cartOrderType);
   const cartTableId = usePos((s) => s.cartTableId);
   const cartTabOrderId = usePos((s) => s.cartTabOrderId);
+  const staffList = useStaffList();
+  const cartAppointmentId = usePos((s) => s.cartAppointmentId);
+  const appointments = usePos((s) => s.appointments);
 
   const [method, setMethod] = useState<PayMethod>("cash");
   const [tendered, setTendered] = useState("");
@@ -148,6 +152,16 @@ export default function PayScreen() {
   ]
     .filter(Boolean)
     .join(" · ");
+
+  /* ----------------------------- salon visit ----------------------------- */
+
+  const linkedAppointment = cartAppointmentId
+    ? (appointments.find((a) => a.id === cartAppointmentId) ?? null)
+    : null;
+  // the visit side of the sale — services with their staff and package credits
+  const visitLines = totals.lines.filter(
+    (l) => l.product.kind === "service" || l.useCredit,
+  );
 
   const pick = (cid: string | null) => {
     setCartCustomer(cid);
@@ -253,6 +267,12 @@ export default function PayScreen() {
         {contextLine && (
           <p className="mt-1 text-[14px] font-semibold text-ink2">{contextLine}</p>
         )}
+        {linkedAppointment && (
+          <p className="mt-1 text-[14px] font-semibold text-ink2">
+            Appointment · {dateShort(Date.parse(linkedAppointment.start))} ·{" "}
+            {timeOf(Date.parse(linkedAppointment.start))}
+          </p>
+        )}
       </section>
 
       <section className="px-5 pt-5">
@@ -288,6 +308,40 @@ export default function PayScreen() {
           </button>
         </Card>
       </section>
+
+      {visitLines.length > 0 && (
+        <section className="px-5 pt-4">
+          <Card inset>
+            {visitLines.map((l, idx) => {
+              const member = l.staffId
+                ? (staffList.find((s) => s.id === l.staffId) ?? null)
+                : null;
+              return (
+                <div
+                  key={`${l.productId}-${idx}`}
+                  className="flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[17px] font-semibold text-ink">
+                      {l.product.name} <span className="text-ink3">× {l.qty}</span>
+                    </span>
+                    <span className="mt-0.5 block truncate text-[13px] text-ink3">
+                      {l.useCredit
+                        ? "Package credit"
+                        : member
+                          ? member.name
+                          : "No staff assigned"}
+                    </span>
+                  </span>
+                  <span className="tabnum shrink-0 text-[15px] font-bold text-ink">
+                    {fmtMoney(l.unitPrice * l.qty)}
+                  </span>
+                </div>
+              );
+            })}
+          </Card>
+        </section>
+      )}
 
       {needsRx && (
         <section className="px-5 pt-4">

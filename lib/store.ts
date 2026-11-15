@@ -25,6 +25,7 @@ import {
 import { id, orderId, startOfDay } from "./format";
 import {
   commissionOf,
+  creditAwareUnitPrices,
   creditPrice,
   creditsOf,
   isServiceLine,
@@ -259,6 +260,11 @@ type PosState = {
     tabOrderId?: string | null;
   }) => void;
   setCartQty: (key: string, qty: number) => void;
+  /** staff / package-credit options on one cart line */
+  setCartLine: (
+    key: string,
+    patch: { staffId?: string | null; useCredit?: boolean; packageId?: string | null },
+  ) => void;
   clearCart: () => void;
   setCartCustomer: (cid: string | null) => void;
   setCartDiscount: (n: number) => void;
@@ -458,6 +464,39 @@ export const usePos = create<PosState>()(
           p?.kind === "service" ? Math.max(0, qty) : Math.max(0, Math.min(qty, available));
         if (capped === 0) cart = cart.filter((l) => cartLineKey(l) !== key);
         else cart[i] = { ...line, qty: capped };
+        set({ cart, cartUpdatedAt: Date.now() });
+      },
+
+      setCartLine: (key, patch) => {
+        const s = get();
+        let cart = [...s.cart];
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
+        if (i < 0) return;
+        const line: CartLine = { ...cart[i] };
+        if (patch.staffId !== undefined) {
+          if (patch.staffId) line.staffId = patch.staffId;
+          else delete line.staffId;
+        }
+        if (patch.packageId !== undefined) {
+          if (patch.packageId) line.packageId = patch.packageId;
+          else delete line.packageId;
+        }
+        if (patch.useCredit !== undefined) {
+          if (patch.useCredit) line.useCredit = true;
+          else delete line.useCredit;
+        }
+        // a credit line without a package cannot be priced — drop the flag
+        if (line.useCredit && !line.packageId) delete line.useCredit;
+        const nextKey = cartLineKey(line);
+        // the staff/package are part of a line's identity: folding a line into
+        // an existing twin keeps one row and one quantity
+        const j = cart.findIndex((l, idx) => idx !== i && cartLineKey(l) === nextKey);
+        if (j >= 0) {
+          cart[j] = { ...cart[j], qty: cart[j].qty + line.qty };
+          cart = cart.filter((_, idx) => idx !== i);
+        } else {
+          cart[i] = line;
+        }
         set({ cart, cartUpdatedAt: Date.now() });
       },
 
@@ -1422,19 +1461,34 @@ export function useCartTotals() {
   const products = usePos((s) => s.products);
   const discount = usePos((s) => s.cartDiscount);
   const settings = usePos((s) => s.settings);
+  const customerId = usePos((s) => s.cartCustomerId);
+  const customer = usePos((s) => s.customers.find((c) => c.id === customerId) ?? null);
   const lines = cart
     .map((l) => {
       const p = products.find((x) => x.id === l.productId);
       return p ? { ...l, product: p } : null;
     })
     .filter(Boolean) as (CartLine & { product: Product })[];
-  const count = lines.reduce((s, l) => s + l.qty, 0);
-  const subtotal = lines.reduce((s, l) => s + (l.price ?? l.product.price) * l.qty, 0);
+  // a credit line is priced by the client's remaining package credits — the
+  // same math placeOrder applies, so the register and the order agree
+  const unitPrices = creditAwareUnitPrices(
+    lines.map((l) => ({
+      qty: l.qty,
+      ...(l.price === undefined ? {} : { price: l.price }),
+      ...(l.useCredit ? { useCredit: true } : {}),
+      ...(l.packageId ? { packageId: l.packageId } : {}),
+      normalPrice: l.product.price,
+    })),
+    customer,
+  );
+  const priced = lines.map((l, i) => ({ ...l, unitPrice: unitPrices[i] }));
+  const count = priced.reduce((s, l) => s + l.qty, 0);
+  const subtotal = priced.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const net = Math.max(0, subtotal - discount);
   const tax = taxAmount(net, settings.taxRate);
   // taxRate 0 → tax 0 → total is exactly the old subtotal - discount
   const total = tax > 0 && !settings.taxInclusive ? round2(net + tax) : net;
-  return { lines, count, subtotal, discount, tax, total };
+  return { lines: priced, count, subtotal, discount, tax, total };
 }
 
 export function todayRange(now = Date.now()) {

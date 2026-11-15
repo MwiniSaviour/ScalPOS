@@ -136,3 +136,42 @@ export function creditPrice(
   if (covered >= qty) return 0;
   return Math.round((normalPrice * (qty - covered)) / qty * 100) / 100;
 }
+
+/** The bits of a cart line that decide what one unit of it costs. */
+export type CreditPricedLine = {
+  qty: number;
+  /** the line's own unit price (pack or variant override), if any */
+  price?: number;
+  useCredit?: boolean;
+  packageId?: string;
+  /** the product's shelf price — what the uncovered part costs */
+  normalPrice: number;
+};
+
+/**
+ * The unit price of every cart line once package credits are applied.
+ *
+ * Mirrors `placeOrder`: a line marked `useCredit` spends the client's oldest
+ * credits of that package first, qty by qty, so two credit lines can never
+ * claim the same credit. Whatever the credits do not cover is priced
+ * normally. Without a client, or without a package on the line, the line is
+ * priced as usual.
+ */
+export function creditAwareUnitPrices(
+  lines: CreditPricedLine[],
+  customer: Customer | null | undefined,
+): number[] {
+  const balances = new Map<string, number>();
+  for (const c of customer?.packageCredits ?? []) {
+    balances.set(c.packageId, (balances.get(c.packageId) ?? 0) + Math.max(0, c.remaining));
+  }
+  return lines.map((l) => {
+    const normal = l.price ?? l.normalPrice;
+    if (!l.useCredit || !l.packageId) return normal;
+    const balance = balances.get(l.packageId) ?? 0;
+    const covered = Math.min(balance, l.qty);
+    if (covered <= 0) return normal;
+    balances.set(l.packageId, balance - covered);
+    return creditPrice(l.normalPrice, l.qty, covered);
+  });
+}

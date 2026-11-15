@@ -2,6 +2,7 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   commissionOf,
+  creditAwareUnitPrices,
   creditPrice,
   creditsOf,
   isServiceLine,
@@ -153,5 +154,67 @@ describe("isServiceLine", () => {
     assert.equal(isServiceLine(line({ kind: "service" })), true);
     assert.equal(isServiceLine(line()), false);
     assert.equal(isServiceLine(line({ serviceStaffId: "s1" })), false);
+  });
+});
+
+describe("creditAwareUnitPrices", () => {
+  test("a plain line keeps its price", () => {
+    const out = creditAwareUnitPrices([{ qty: 2, normalPrice: 100 }], cust());
+    assert.deepEqual(out, [100]);
+  });
+
+  test("a covered credit line prices at zero", () => {
+    const out = creditAwareUnitPrices(
+      [{ qty: 1, useCredit: true, packageId: "pka", normalPrice: 100 }],
+      cust([{ packageId: "pka", remaining: 3 }]),
+    );
+    assert.deepEqual(out, [0]);
+  });
+
+  test("credits beyond the line are not wasted on it", () => {
+    const out = creditAwareUnitPrices(
+      [{ qty: 1, useCredit: true, packageId: "pka", normalPrice: 100 }],
+      cust([{ packageId: "pka", remaining: 3 }]),
+    );
+    assert.deepEqual(out, [0]);
+  });
+
+  test("the uncovered part of a line is priced normally", () => {
+    const out = creditAwareUnitPrices(
+      [{ qty: 4, useCredit: true, packageId: "pka", normalPrice: 100 }],
+      cust([{ packageId: "pka", remaining: 1 }]),
+    );
+    assert.deepEqual(out, [75]);
+  });
+
+  test("two credit lines never claim the same credit", () => {
+    const out = creditAwareUnitPrices(
+      [
+        { qty: 2, useCredit: true, packageId: "pka", normalPrice: 100 },
+        { qty: 1, useCredit: true, packageId: "pka", normalPrice: 100 },
+      ],
+      cust([{ packageId: "pka", remaining: 2 }]),
+    );
+    assert.deepEqual(out, [0, 100]);
+  });
+
+  test("without a client or a package the line is priced normally", () => {
+    const out = creditAwareUnitPrices(
+      [
+        { qty: 1, useCredit: true, packageId: "pka", normalPrice: 100 },
+        { qty: 1, useCredit: true, normalPrice: 80 },
+      ],
+      cust([{ packageId: "pka", remaining: 3 }]),
+    );
+    assert.deepEqual(out, [0, 80]);
+    assert.deepEqual(
+      creditAwareUnitPrices([{ qty: 1, useCredit: true, packageId: "pka", normalPrice: 100 }], null),
+      [100],
+    );
+  });
+
+  test("a line price override wins over the shelf price", () => {
+    const out = creditAwareUnitPrices([{ qty: 1, price: 60, normalPrice: 100 }], cust());
+    assert.deepEqual(out, [60]);
   });
 });
