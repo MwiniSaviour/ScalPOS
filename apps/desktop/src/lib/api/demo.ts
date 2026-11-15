@@ -1,5 +1,5 @@
 import { createDemoOrg, getSupabase } from "@/lib/supabase/client"
-import { clearDemoOrg, getOrgId, readDemoOrg, setDemoOrg } from "@/lib/auth/org"
+import { clearDemoOrg, readDemoOrg, setDemoOrg } from "@/lib/auth/org"
 
 const PREFIX = "DEMO-"
 
@@ -66,6 +66,8 @@ export async function enterDemoMode(userId: string): Promise<void> {
   const existing = readDemoOrg(userId)
   if (existing) {
     setDemoOrg(userId, existing)
+    if (await hasDemoData(existing)) return
+    await seedDemoData(existing)
     return
   }
   // No token argument: createDemoOrg's parameter is the Supabase JWT, not the
@@ -73,38 +75,39 @@ export async function enterDemoMode(userId: string): Promise<void> {
   // answered 401 "invalid session".
   const orgId = await createDemoOrg()
   setDemoOrg(userId, orgId)
-  if (await hasDemoData()) return
-  await seedDemoData()
+  if (await hasDemoData(orgId)) return
+  await seedDemoData(orgId)
 }
 
 export function exitDemoMode(userId: string): void {
   clearDemoOrg(userId)
 }
 
-async function hasDemoData(): Promise<boolean> {
+async function hasDemoData(orgId: string): Promise<boolean> {
   const { count, error } = await db()
     .from("products")
     .select("id", { count: "exact", head: true })
-    .eq("org_id", getOrgId())
+    .eq("org_id", orgId)
     .like("local_id", `${PREFIX}%`)
     .is("deleted_at", null)
   if (error) throw new Error(error.message)
   return (count ?? 0) > 0
 }
 
-async function seedDemoData(): Promise<void> {
+async function seedDemoData(orgId: string): Promise<void> {
   const client = db()
-  const org = getOrgId()
+  const org = orgId
 
   const { data: catRows, error: catError } = await client
     .from("categories")
-    .insert(
+    .upsert(
       CATEGORIES.map((c) => ({
         org_id: org,
         local_id: `${PREFIX}CAT-${c.key}`,
         name: c.name,
         color: c.color,
       })),
+      { onConflict: "org_id,local_id" },
     )
     .select("id, local_id")
   const cats = check<Row[]>(catRows, catError)
@@ -112,23 +115,24 @@ async function seedDemoData(): Promise<void> {
 
   const { data: prodRows, error: prodError } = await client
     .from("products")
-    .insert(
+    .upsert(
       PRODUCTS.map((p, i) => ({
         org_id: org,
         local_id: `${PREFIX}PROD-${p.key}`,
         name: p.name,
         sku: `${PREFIX}SKU-${String(i + 1).padStart(3, "0")}`,
-        barcode: null,
+        barcode: "",
         price: p.price,
         cost: p.cost,
         stock: p.stock,
         category_id: catId.get(p.category) ?? null,
-        image_path: null,
+        image_path: "",
         description: "Sample product created by the demo data loader. Remove it from Demo data when you're done.",
         unit: "pcs",
         low_stock_at: 5,
         active: true,
       })),
+      { onConflict: "org_id,local_id" },
     )
     .select("id, local_id")
   const prods = check<Row[]>(prodRows, prodError)
@@ -141,7 +145,7 @@ async function seedDemoData(): Promise<void> {
 
   const { data: custRows, error: custError } = await client
     .from("customers")
-    .insert(
+    .upsert(
       CUSTOMERS.map((c) => ({
         org_id: org,
         local_id: `${PREFIX}CUST-${c.key}`,
@@ -150,6 +154,7 @@ async function seedDemoData(): Promise<void> {
         address: "",
         note: "Sample customer created by the demo data loader.",
       })),
+      { onConflict: "org_id,local_id" },
     )
     .select("id, local_id")
   const custs = check<Row[]>(custRows, custError)
@@ -176,7 +181,7 @@ async function seedDemoData(): Promise<void> {
     const payments = spec.credit ? [] : [{ method: spec.method, amount: total }]
     const { data: orderRows, error: orderError } = await client
       .from("orders")
-      .insert({
+      .upsert({
         org_id: org,
         customer_id: spec.customer ? custId.get(spec.customer) ?? null : null,
         subtotal: total,
@@ -191,11 +196,11 @@ async function seedDemoData(): Promise<void> {
         created_at: created.toISOString(),
         updated_at: created.toISOString(),
         local_id: `${PREFIX}SALE-${String(seq).padStart(3, "0")}`,
-      })
+      }, { onConflict: "org_id,local_id" })
       .select("id")
       .single()
     const order = check<Row>(orderRows, orderError)
-    const { error: itemError } = await client.from("order_items").insert(
+    const { error: itemError } = await client.from("order_items").upsert(
       lines.map((l, position) => ({
         org_id: org,
         order_id: order.id,
@@ -210,6 +215,7 @@ async function seedDemoData(): Promise<void> {
         updated_at: created.toISOString(),
         local_id: `${PREFIX}ITEM-${String(seq).padStart(3, "0")}-${position + 1}`,
       })),
+      { onConflict: "org_id,local_id" },
     )
     if (itemError) throw new Error(itemError.message)
   }

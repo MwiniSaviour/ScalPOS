@@ -102,11 +102,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn, userId, getToken } = useAuth()
   const [shop, setShop] = useState<Shop | null>(() => {
     if (typeof window === "undefined") return null
-    const cached = readCache(userId)
-    if (cached) {
-      activeShop = cached
-      return cached
-    }
+    // Demo mode deliberately shadows the real shop until the user exits it.
     const demo = readDemoOrg(userId)
     if (demo) {
       demoOrgId = demo
@@ -114,10 +110,16 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
       activeShop = pseudo
       return pseudo
     }
+    const cached = readCache(userId)
+    if (cached) {
+      activeShop = cached
+      return cached
+    }
     return null
   })
   const [loading, setLoading] = useState(() => {
     if (typeof window === "undefined") return true
+    if (readDemoOrg(userId)) return false
     return !readCache(userId)
   })
   const [error, setError] = useState<string | null>(null)
@@ -197,6 +199,9 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !userId) return
+    // While demo mode is on, the demo shop is the active workspace — don't
+    // reconnect to the real org and overwrite it.
+    if (readDemoOrg(userId)) return
     const t = setTimeout(() => void connect(false), 0)
     return () => clearTimeout(t)
   }, [connect, isLoaded, isSignedIn, userId, nonce])
