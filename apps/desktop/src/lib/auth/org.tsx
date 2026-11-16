@@ -75,6 +75,18 @@ export function getOrgId(): string {
   return activeShop.id
 }
 
+/**
+ * Broadcast whenever the active shop changes (shop switch, demo mode).
+ * Realtime subscribers listen for it so they re-subscribe to the new org
+ * instead of keeping the filter of the shop they mounted with.
+ */
+export const ORG_CHANGED_EVENT = "nova:org-changed"
+
+export function notifyOrgChanged(): void {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(ORG_CHANGED_EVENT))
+}
+
 export function getOrgRole(): Shop["role"] {
   return activeShop?.role ?? "cashier"
 }
@@ -142,6 +154,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
             const pseudo: Shop = { id: demo, name: "Demo shop", role: "owner" }
             activeShop = pseudo
             setShop(pseudo)
+            notifyOrgChanged()
             setNeedsShop(false)
             setError(null)
             return
@@ -175,6 +188,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
 
         activeShop = next
         setShop(next)
+        notifyOrgChanged()
         setNeedsShop(false)
         setError(null)
         writeCache(userId, next)

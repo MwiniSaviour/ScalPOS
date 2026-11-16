@@ -570,13 +570,15 @@ export async function createProduct(input: ProductInput): Promise<Product> {
     local_id: makeLocalId(),
     name: input.name,
     sku: input.sku || makeLocalId().slice(0, 8).toUpperCase(),
-    barcode: input.barcode ?? null,
+    // These columns are NOT NULL with an empty-string default: sending an
+    // explicit null made every product insert fail with a constraint error.
+    barcode: input.barcode?.trim() ? input.barcode.trim() : "",
     price: input.price,
     cost: input.cost_price ?? 0,
     stock: 0,
     category_id: input.category_id ?? null,
-    image_path: input.image ?? null,
-    description: input.description ?? null,
+    image_path: input.image?.trim() ? input.image.trim() : "",
+    description: input.description?.trim() ? input.description.trim() : "",
     unit: input.unit ?? "pcs",
     low_stock_at: input.low_stock_at ?? 5,
     active: input.active !== false,
@@ -601,12 +603,12 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
   if (input.sku !== undefined) patch.sku = input.sku
-  if (input.barcode !== undefined) patch.barcode = input.barcode
+  if (input.barcode !== undefined) patch.barcode = input.barcode?.trim() ? input.barcode.trim() : ""
   if (input.price !== undefined) patch.price = input.price
   if (input.cost_price !== undefined) patch.cost = input.cost_price
   if (input.category_id !== undefined) patch.category_id = input.category_id
-  if (input.image !== undefined) patch.image_path = input.image
-  if (input.description !== undefined) patch.description = input.description
+  if (input.image !== undefined) patch.image_path = input.image?.trim() ? input.image.trim() : ""
+  if (input.description !== undefined) patch.description = input.description?.trim() ? input.description.trim() : ""
   if (input.unit !== undefined) patch.unit = input.unit
   if (input.low_stock_at !== undefined) patch.low_stock_at = input.low_stock_at
   if (input.active !== undefined) patch.active = input.active
@@ -675,9 +677,13 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
+  const payload: Row = { org_id: orgId(), local_id: makeLocalId(), name: input.name }
+  // `color` is NOT NULL with a palette default — omit it so the default applies
+  // instead of writing an explicit null.
+  if (input.color?.trim()) payload.color = input.color.trim()
   const { data, error } = await db()
     .from("categories")
-    .insert({ org_id: orgId(), local_id: makeLocalId(), name: input.name, color: input.color ?? null })
+    .insert(payload)
     .select("*")
     .single()
   const row = check<CategoryRow>(data, error)
@@ -687,7 +693,7 @@ export async function createCategory(input: CategoryInput): Promise<Category> {
 export async function updateCategory(id: string, input: Partial<CategoryInput>): Promise<Category> {
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
-  if (input.color !== undefined) patch.color = input.color
+  if (input.color !== undefined) patch.color = input.color?.trim() ? input.color.trim() : "#059669"
   const { data, error } = await db()
     .from("categories")
     .update(patch)
@@ -766,7 +772,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
       name: input.name,
       phone: input.phone ?? "",
       address: input.address ?? "",
-      note: input.note ?? null,
+      note: input.note ?? "",
     })
     .select("*")
     .single()
@@ -779,7 +785,7 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>):
   if (input.name !== undefined) patch.name = input.name
   if (input.phone !== undefined) patch.phone = input.phone
   if (input.address !== undefined) patch.address = input.address
-  if (input.note !== undefined) patch.note = input.note
+  if (input.note !== undefined) patch.note = input.note ?? ""
   const { data, error } = await db()
     .from("customers")
     .update(patch)
@@ -1198,12 +1204,14 @@ export async function fetchSuppliers(): Promise<Supplier[]> {
 }
 
 export async function upsertSupplier(id: string | null, input: SupplierInput): Promise<Supplier> {
+  // These columns are NOT NULL with empty-string defaults — an explicit null
+  // made every supplier save fail.
   const payload: Row = {
     name: input.name,
-    contact_person: input.contact_person ?? null,
-    email: input.email ?? null,
-    phone: input.phone ?? null,
-    address: input.address ?? null,
+    contact_person: input.contact_person ?? "",
+    email: input.email ?? "",
+    phone: input.phone ?? "",
+    address: input.address ?? "",
   }
   if (id) {
     const { data, error } = await db()

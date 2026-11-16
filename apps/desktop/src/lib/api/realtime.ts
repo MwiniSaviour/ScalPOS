@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { getSupabase } from "@/lib/supabase/client"
-import { getOrgId } from "@/lib/auth/org"
+import { getOrgId, ORG_CHANGED_EVENT } from "@/lib/auth/org"
 
 const TABLES = [
   "products",
@@ -14,6 +14,10 @@ const TABLES = [
   "settings",
   "product_batches",
   "purchase_orders",
+  "staff",
+  "suppliers",
+  "recipes",
+  "restaurant_tables",
 ] as const
 
 /**
@@ -29,30 +33,53 @@ export function useRealtime(onChange: () => void, enabled = true) {
 
   useEffect(() => {
     if (!enabled) return
-    const org = getOrgId()
-    if (!org) return
     let client
     try {
       client = getSupabase()
     } catch {
       return
     }
-    const channel = client.channel(`scalpos-desktop-${Math.random().toString(36).slice(2, 9)}`)
+    let channel: ReturnType<typeof client.channel> | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
-    for (const table of TABLES) {
-      channel.on(
-        "postgres_changes",
-        { event: "*", schema: "public", table, filter: `org_id=eq.${org}` },
-        () => {
-          if (timer) clearTimeout(timer)
-          timer = setTimeout(() => cb.current(), 300)
-        },
-      )
+    let org = ""
+
+    const subscribe = () => {
+      let next: string
+      try {
+        next = getOrgId()
+      } catch {
+        return
+      }
+      if (next === org && channel) return
+      if (channel) {
+        void client.removeChannel(channel)
+        channel = null
+      }
+      org = next
+      const ch = client.channel(`scalpos-desktop-${Math.random().toString(36).slice(2, 9)}`)
+      for (const table of TABLES) {
+        ch.on(
+          "postgres_changes",
+          { event: "*", schema: "public", table, filter: `org_id=eq.${org}` },
+          () => {
+            if (timer) clearTimeout(timer)
+            timer = setTimeout(() => cb.current(), 300)
+          },
+        )
+      }
+      ch.subscribe()
+      channel = ch
     }
-    channel.subscribe()
+
+    subscribe()
+    // Switching shops (or entering demo mode) changes the org filter — the
+    // old channel would keep listening to the previous shop.
+    const onOrgChanged = () => subscribe()
+    window.addEventListener(ORG_CHANGED_EVENT, onOrgChanged)
     return () => {
+      window.removeEventListener(ORG_CHANGED_EVENT, onOrgChanged)
       if (timer) clearTimeout(timer)
-      void client.removeChannel(channel)
+      if (channel) void client.removeChannel(channel)
     }
   }, [enabled])
 }

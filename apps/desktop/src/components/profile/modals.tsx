@@ -122,13 +122,13 @@ export function ShopSettingsModal({ onClose }: { onClose: () => void }) {
     try {
       await updateSettings({
         shop_name: form.shop_name,
-        address: form.address || null,
-        phone: form.phone || null,
+        address: form.address || "",
+        phone: form.phone || "",
         tax_rate: Number(form.tax_rate) || 0,
         tax_inclusive: form.tax_inclusive,
-        receipt_footer: form.receipt_footer || null,
-        momo_number: form.momo_number || null,
-        momo_network: form.momo_network || null,
+        receipt_footer: form.receipt_footer || "",
+        momo_number: form.momo_number || "",
+        momo_network: form.momo_network || "",
       })
       void retry()
       setSaved(true)
