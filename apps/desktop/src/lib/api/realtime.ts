@@ -43,7 +43,7 @@ export function useRealtime(onChange: () => void, enabled = true) {
     let timer: ReturnType<typeof setTimeout> | null = null
     let org = ""
 
-    const subscribe = () => {
+    const subscribe = async () => {
       let next: string
       try {
         next = getOrgId()
@@ -56,6 +56,13 @@ export function useRealtime(onChange: () => void, enabled = true) {
         channel = null
       }
       org = next
+      // The Supabase client sets the realtime token once at construction, which
+      // marks it as a manual token that is never refreshed. Clerk's token only
+      // lives a minute, so the channel died a minute later. Asking for the
+      // callback-based token keeps it fresh across reconnects.
+      try {
+        await client.realtime.setAuth()
+      } catch {}
       const ch = client.channel(`scalpos-desktop-${Math.random().toString(36).slice(2, 9)}`)
       for (const table of TABLES) {
         ch.on(
@@ -71,7 +78,7 @@ export function useRealtime(onChange: () => void, enabled = true) {
       channel = ch
     }
 
-    subscribe()
+    void subscribe()
     // Switching shops (or entering demo mode) changes the org filter — the
     // old channel would keep listening to the previous shop.
     const onOrgChanged = () => subscribe()

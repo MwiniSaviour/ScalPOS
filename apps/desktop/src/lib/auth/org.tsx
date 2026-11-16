@@ -209,6 +209,9 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
     } else {
       demoOrgId = null
     }
+    // The active org can change once Clerk reports the session (demo mode
+    // shadows the real shop). Realtime subscribers re-subscribe on this.
+    notifyOrgChanged()
   }, [isSignedIn, userId])
 
   useEffect(() => {
