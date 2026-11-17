@@ -33,6 +33,8 @@ export const NAV_ITEMS: NavItem[] = [
     feature: "suppliers-po",
   },
   { label: "Employees", href: "/dashboard/employees", icon: "UserCog", roles: ["admin"] },
+  { label: "Appointments", href: "/dashboard/appointments", icon: "CalendarDays", feature: "appointments" },
+  { label: "Packages", href: "/dashboard/packages", icon: "Gift", feature: "packages" },
   { label: "POS", href: "/dashboard/pos", icon: "ShoppingCart" },
   { label: "Kitchen", href: "/dashboard/kitchen", icon: "ChefHat", feature: "kitchen" },
   { label: "Analytics & Reporting", href: "/dashboard/analytics", icon: "BarChart3" },

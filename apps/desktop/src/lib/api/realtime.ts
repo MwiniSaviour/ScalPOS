@@ -18,6 +18,8 @@ const TABLES = [
   "suppliers",
   "recipes",
   "restaurant_tables",
+  "appointments",
+  "packages",
 ] as const
 
 // Realtime rejects a channel with too many postgres_changes subscriptions

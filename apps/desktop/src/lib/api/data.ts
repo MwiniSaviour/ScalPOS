@@ -1,10 +1,15 @@
 import type {
+  Appointment,
+  AppointmentServiceLine,
+  AppointmentStatus,
   Category,
   Customer,
   Modifier,
   OrderPayStatus,
   OrderStatus,
   Pack,
+  PackageCredit,
+  PackageCreditLine,
   PaymentMethod,
   Product,
   ProductBatch,
@@ -15,11 +20,14 @@ import type {
   RestaurantTable,
   Sale,
   SaleItem,
+  ServicePackage,
   ShopSettings,
   Staff,
+  StaffSchedule,
   StockMove,
   Supplier,
   Variant,
+  VisitNote,
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { getOrgId } from "@/lib/auth/org"
@@ -50,6 +58,8 @@ type ProductRow = {
   modifiers: unknown
   variants: unknown
   unavailable_until: string | null
+  kind: string | null
+  duration_min: number | string | null
   created_at: string
   updated_at: string
 }
@@ -72,6 +82,8 @@ type CustomerRow = {
   address: string | null
   note: string | null
   created_at: string
+  visit_notes: unknown
+  package_credits: unknown
 }
 
 type SupplierRow = {
@@ -103,6 +115,9 @@ type StaffRow = {
   photo_path: string | null
   active: boolean | null
   created_at: string
+  skills: unknown
+  schedule: unknown
+  commission_pct: number | string | null
 }
 
 type SaleItemRow = {
@@ -116,6 +131,12 @@ type SaleItemRow = {
   variant_name: string | null
   modifier_ids: unknown
   modifier_names: unknown
+  service_staff_id: string | null
+  commission_amt: number | string | null
+  use_credit: boolean | null
+  package_id: string | null
+  credited_qty: number | string | null
+  kind: string | null
 }
 
 type PaymentRow = { method?: string; amount?: number | string }
@@ -134,9 +155,33 @@ type SaleRow = {
   order_type: string | null
   table_id: string | null
   ticket_status: string | null
+  staff_id: string | null
+  appointment_id: string | null
   completed_at: string | null
   created_at: string
   customer?: CustomerRow | CustomerRow[] | null
+}
+
+type AppointmentRow = {
+  id: string
+  customer_id: string | null
+  staff_id: string | null
+  service_lines: unknown
+  start: string
+  duration_min: number | string | null
+  status: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+type PackageRow = {
+  id: string
+  name: string | null
+  price: number | string | null
+  credits: unknown
+  created_at: string
+  updated_at: string
 }
 
 type SettingsRow = {
@@ -242,6 +287,25 @@ export interface StaffInput {
   phone?: string | null
   photo_path?: string | null
   active?: boolean
+  skills?: string[] | null
+  schedule?: StaffSchedule[] | null
+  commission_pct?: number | null
+}
+
+export interface AppointmentInput {
+  customer_id?: string | null
+  staff_id?: string | null
+  service_lines: AppointmentServiceLine[]
+  start: string
+  duration_min?: number
+  status?: AppointmentStatus
+  notes?: string
+}
+
+export interface PackageInput {
+  name: string
+  price: number
+  credits: PackageCreditLine[]
 }
 
 export const PRODUCT_SELECT = "*, category:categories(id,name,color)"
@@ -293,6 +357,80 @@ function mapStringList(raw: unknown): string[] | null {
   return out.length > 0 ? out : null
 }
 
+/* jsonb helpers for the salon columns — anything malformed is dropped */
+
+function mapVisitNotes(raw: unknown): VisitNote[] | null {
+  if (!Array.isArray(raw)) return null
+  const notes = raw
+    .filter((n): n is Record<string, unknown> => !!n && typeof n === "object")
+    .map((n) => ({ t: Number(n.t) || 0, text: String(n.text ?? "") }))
+    .filter((n) => n.text !== "")
+  return notes.length > 0 ? notes : null
+}
+
+function mapPackageCredits(raw: unknown): PackageCredit[] | null {
+  if (!Array.isArray(raw)) return null
+  const credits = raw
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+    .map((c) => {
+      const packageId = String(c.packageId ?? "")
+      const remaining = Number(c.remaining ?? 0)
+      if (!packageId || !Number.isFinite(remaining)) return null
+      return {
+        packageId,
+        remaining,
+        ...(typeof c.sourceOrderId === "string" ? { sourceOrderId: c.sourceOrderId } : {}),
+      } as PackageCredit
+    })
+    .filter((c): c is PackageCredit => c !== null)
+  return credits.length > 0 ? credits : null
+}
+
+function mapServiceLines(raw: unknown): AppointmentServiceLine[] {
+  if (!Array.isArray(raw)) return []
+  const lines: AppointmentServiceLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const line = entry as { productId?: unknown; price?: unknown; qty?: unknown }
+    const productId = typeof line.productId === "string" ? line.productId : ""
+    if (!productId) continue
+    const price = Number(line.price ?? 0)
+    const qty = Number(line.qty ?? 1)
+    lines.push({
+      productId,
+      price: Number.isFinite(price) ? price : 0,
+      ...(Number.isFinite(qty) && qty > 0 ? { qty } : {}),
+    })
+  }
+  return lines
+}
+
+function mapPackageCreditLines(raw: unknown): PackageCreditLine[] {
+  if (!Array.isArray(raw)) return []
+  const lines: PackageCreditLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const line = entry as { productId?: unknown; qty?: unknown }
+    const productId = typeof line.productId === "string" ? line.productId : ""
+    const qty = Number(line.qty ?? 0)
+    if (!productId || !Number.isFinite(qty) || qty <= 0) continue
+    lines.push({ productId, qty })
+  }
+  return lines
+}
+
+function mapStaffSchedule(raw: unknown): StaffSchedule[] | null {
+  if (!Array.isArray(raw)) return null
+  const rows = raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => ({
+      day: Number(r.day) || 0,
+      start: String(r.start ?? "09:00"),
+      end: String(r.end ?? "17:00"),
+    }))
+  return rows.length > 0 ? rows : null
+}
+
 function mapBatch(row: ProductBatchRow): ProductBatch {
   return {
     id: row.id,
@@ -337,6 +475,8 @@ function mapRow(row: ProductRow): Product {
     modifiers: mapOptions(row.modifiers) as Modifier[] | null,
     variants: mapOptions(row.variants) as Variant[] | null,
     unavailable_until: row.unavailable_until ?? null,
+    kind: row.kind === "service" || row.kind === "product" ? row.kind : null,
+    duration_min: row.duration_min == null ? null : Number(row.duration_min),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -363,6 +503,8 @@ export function mapCustomer(row: CustomerRow, totalPurchases = 0): Customer {
     note: row.note ?? null,
     created_at: row.created_at,
     total_purchases: totalPurchases,
+    visit_notes: mapVisitNotes(row.visit_notes),
+    package_credits: mapPackageCredits(row.package_credits),
   }
 }
 
@@ -441,6 +583,41 @@ export function mapStaff(row: StaffRow): Staff {
     photo_path: row.photo_path ?? null,
     active: row.active !== false,
     created_at: row.created_at,
+    skills: mapStringList(row.skills),
+    schedule: mapStaffSchedule(row.schedule),
+    commission_pct: row.commission_pct == null ? null : Number(row.commission_pct),
+  }
+}
+
+const APPOINTMENT_STATUSES: AppointmentStatus[] = [
+  "booked", "arrived", "in-service", "done", "no-show", "cancelled",
+]
+
+export function mapAppointment(row: AppointmentRow): Appointment {
+  return {
+    id: row.id,
+    customer_id: row.customer_id ?? null,
+    staff_id: row.staff_id ?? null,
+    service_lines: mapServiceLines(row.service_lines),
+    start: row.start,
+    duration_min: Number(row.duration_min ?? 30),
+    status: APPOINTMENT_STATUSES.includes(row.status as AppointmentStatus)
+      ? (row.status as AppointmentStatus)
+      : "booked",
+    notes: row.notes ?? "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
+export function mapPackage(row: PackageRow): ServicePackage {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    price: Number(row.price ?? 0),
+    credits: mapPackageCreditLines(row.credits),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   }
 }
 
@@ -459,6 +636,12 @@ function mapSaleItem(row: SaleItemRow): SaleItem {
     variant_name: row.variant_name ?? null,
     modifier_ids: mapStringList(row.modifier_ids),
     modifier_names: mapStringList(row.modifier_names),
+    service_staff_id: row.service_staff_id ?? null,
+    commission_amt: row.commission_amt == null ? null : Number(row.commission_amt),
+    use_credit: row.use_credit === true,
+    package_id: row.package_id ?? null,
+    credited_qty: row.credited_qty == null ? null : Number(row.credited_qty),
+    kind: row.kind === "service" || row.kind === "product" ? row.kind : null,
   }
 }
 
@@ -489,8 +672,9 @@ export function mapSale(row: SaleRow, items?: SaleItem[]): Sale {
     payments,
     order_type: row.order_type ?? null,
     table_id: row.table_id ?? null,
+    staff_id: row.staff_id ?? null,
+    appointment_id: row.appointment_id ?? null,
     ticket_status: (row.ticket_status === "queued" || row.ticket_status === "preparing"
-      || row.ticket_status === "ready" || row.ticket_status === "served"
       ? row.ticket_status : null) as Sale["ticket_status"],
     sale_date: row.completed_at ?? row.created_at,
     created_at: row.created_at,
@@ -518,7 +702,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
   if (orderIds.length === 0) return map
   const { data, error } = await db()
     .from("order_items")
-    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names")
+    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names,service_staff_id,commission_amt,use_credit,package_id,credited_qty,kind")
     .in("order_id", orderIds)
     .order("position", { ascending: true })
   if (error) throw new Error(error.message)
@@ -806,6 +990,124 @@ export async function deleteCustomer(id: string): Promise<void> {
   check(null, error as unknown as { message: string } | null)
 }
 
+// ---------- salon ----------
+
+export async function fetchAppointments(): Promise<Appointment[]> {
+  const { data, error } = await db()
+    .from("appointments")
+    .select("*")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("start", { ascending: true })
+  const rows = check<AppointmentRow[]>(data, error)
+  return rows.map(mapAppointment)
+}
+
+export async function createAppointment(input: AppointmentInput): Promise<Appointment> {
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    customer_id: input.customer_id ?? null,
+    staff_id: input.staff_id ?? null,
+    service_lines: input.service_lines,
+    start: input.start,
+    duration_min: input.duration_min ?? 30,
+    status: input.status ?? "booked",
+    notes: input.notes ?? "",
+  }
+  const { data, error } = await db().from("appointments").insert(payload).select("*").single()
+  return mapAppointment(check<AppointmentRow>(data, error))
+}
+
+export async function updateAppointment(id: string, input: Partial<AppointmentInput>): Promise<Appointment> {
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.customer_id !== undefined) patch.customer_id = input.customer_id
+  if (input.staff_id !== undefined) patch.staff_id = input.staff_id
+  if (input.service_lines !== undefined) patch.service_lines = input.service_lines
+  if (input.start !== undefined) patch.start = input.start
+  if (input.duration_min !== undefined) patch.duration_min = input.duration_min
+  if (input.status !== undefined) patch.status = input.status
+  if (input.notes !== undefined) patch.notes = input.notes
+  const { data, error } = await db()
+    .from("appointments")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("*")
+    .single()
+  return mapAppointment(check<AppointmentRow>(data, error))
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  const { error } = await db()
+    .from("appointments")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+export async function fetchPackages(): Promise<ServicePackage[]> {
+  const { data, error } = await db()
+    .from("packages")
+    .select("*")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+  const rows = check<PackageRow[]>(data, error)
+  return rows.map(mapPackage)
+}
+
+export async function createPackage(input: PackageInput): Promise<ServicePackage> {
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    name: input.name.trim(),
+    price: input.price,
+    credits: input.credits,
+  }
+  const { data, error } = await db().from("packages").insert(payload).select("*").single()
+  return mapPackage(check<PackageRow>(data, error))
+}
+
+export async function updatePackage(id: string, input: Partial<PackageInput>): Promise<ServicePackage> {
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined) patch.name = input.name.trim()
+  if (input.price !== undefined) patch.price = input.price
+  if (input.credits !== undefined) patch.credits = input.credits
+  const { data, error } = await db()
+    .from("packages")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("*")
+    .single()
+  return mapPackage(check<PackageRow>(data, error))
+}
+
+export async function deletePackage(id: string): Promise<void> {
+  const { error } = await db()
+    .from("packages")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+/** Stamp the commission each service line earned at sale time. */
+export function withCommissions<T extends { price: number; qty: number; service_staff_id?: string | null; commission_amt?: number | null }>(
+  items: T[],
+  staff: Pick<Staff, "id" | "commission_pct">[],
+): T[] {
+  return items.map((item) => {
+    if (!item.service_staff_id) return item
+    const pct = staff.find((s) => s.id === item.service_staff_id)?.commission_pct ?? 0
+    if (!(pct > 0)) return item
+    const amount = Number(item.price ?? 0) * Number(item.qty ?? 1) * pct / 100
+    return { ...item, commission_amt: Math.round(amount * 100) / 100 }
+  })
+}
+
 // ---------- restaurant ----------
 
 type RestaurantTableRow = {
@@ -965,13 +1267,29 @@ export async function setTicketStatus(orderId: string, status: Sale["ticket_stat
 
 export interface SaleInput {
   customer_id?: string | null
-  items: { product_id: string | null; name: string; image_path?: string | null; qty: number; price: number; cost?: number }[]
+  items: {
+    product_id: string | null
+    name: string
+    image_path?: string | null
+    qty: number
+    price: number
+    cost?: number
+    /* salon */
+    service_staff_id?: string | null
+    commission_amt?: number | null
+    use_credit?: boolean
+    package_id?: string | null
+    credited_qty?: number | null
+    kind?: "product" | "service" | null
+  }[]
   payments: { method: string; amount: number }[]
   subtotal: number
   discount: number
   tax: number
   total: number
   note?: string | null
+  staff_id?: string | null
+  appointment_id?: string | null
 }
 
 export async function placeSale(input: SaleInput): Promise<Sale> {
@@ -1007,6 +1325,24 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
     fetched = check<SaleRow | null>(res.data, res.error as unknown as { message: string } | null)
   }
   if (!fetched) throw new Error("Order was placed but could not be read back")
+  // the order RPC predates salon — add the visit's stylist and booking after
+  // the fact, keeping the link for the desktop appointment view
+  if (input.staff_id || input.appointment_id) {
+    const patch: Row = {}
+    if (input.staff_id) patch.staff_id = input.staff_id
+    if (input.appointment_id) patch.appointment_id = input.appointment_id
+    const updated = await client
+      .from("orders")
+      .update(patch)
+      .eq("org_id", orgId())
+      .eq("id", fetched.id)
+      .select("staff_id,appointment_id")
+      .maybeSingle()
+    if (!updated.error && updated.data) {
+      fetched.staff_id = (updated.data as { staff_id?: string | null }).staff_id ?? null
+      fetched.appointment_id = (updated.data as { appointment_id?: string | null }).appointment_id ?? null
+    }
+  }
   const items = await itemsForOrders([fetched.id])
   return mapOrderWithCustomer(fetched, items.get(fetched.id) ?? [])
 }
@@ -1138,6 +1474,9 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
     active: input.active !== false,
   }
   if (input.photo_path !== undefined) payload.photo_path = input.photo_path ?? ""
+  if (input.skills !== undefined) payload.skills = input.skills ?? []
+  if (input.schedule !== undefined) payload.schedule = input.schedule ?? []
+  if (input.commission_pct !== undefined) payload.commission_pct = input.commission_pct ?? null
   if (id) {
     const { data, error } = await db()
       .from("staff")
