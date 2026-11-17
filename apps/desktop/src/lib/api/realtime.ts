@@ -69,12 +69,14 @@ export function useRealtime(onChange: () => void, enabled = true) {
           "postgres_changes",
           { event: "*", schema: "public", table, filter: `org_id=eq.${org}` },
           () => {
+            console.log("[rt] change", table)
             if (timer) clearTimeout(timer)
             timer = setTimeout(() => cb.current(), 300)
           },
         )
       }
-      ch.subscribe()
+      console.log("[rt] subscribe", org)
+      ch.subscribe((status: string) => console.log("[rt] status", status, org))
       channel = ch
     }
 
