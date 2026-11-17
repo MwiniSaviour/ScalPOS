@@ -54,6 +54,9 @@ export function useImageSrc(ref: string | null | undefined): string | null {
   }, [ref, isCloud, preview])
 
   if (!ref) return null
+  // Only private-bucket refs need resolving; plain paths ("/products/rice.jpg")
+  // and absolute links are already usable as an <img src>.
+  if (!isCloud) return ref
   return resolved?.ref === ref ? resolved.url : preview
 }
 
