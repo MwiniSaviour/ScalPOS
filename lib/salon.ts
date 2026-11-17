@@ -1,4 +1,4 @@
-import type { Customer, OrderItem } from "./types";
+import type { Customer, Order, OrderItem, Package, Product } from "./types";
 import type { Staff } from "./staff";
 
 /**
@@ -145,6 +145,163 @@ export function commissionOf(
 /** Is this order line a service — something that never touches stock? */
 export function isServiceLine(line: OrderItem): boolean {
   return line.kind === "service";
+}
+
+/**
+ * The initials a receipt shows for the person who served a line.
+ *
+ * "Akua Mensah" becomes "AM", a single name becomes its first two letters.
+ */
+export function staffInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/**
+ * What a package credit paid for on a line.
+ *
+ * The credits cover whole units of a service, so the value served is the
+ * catalogue price of the covered units — the money the client did not pay.
+ */
+export function creditValueOf(
+  line: { useCredit?: boolean; creditedQty?: number },
+  cataloguePrice: number,
+): number {
+  if (!line.useCredit || !line.creditedQty) return 0;
+  return Math.round(cataloguePrice * line.creditedQty * 100) / 100;
+}
+
+/**
+ * What a package holds, in words — "4 × Manicure, 2 × Pedicure".
+ *
+ * Used on receipts so the client sees what they bought, not just a name.
+ */
+export function packageContents(
+  pkg: Pick<Package, "credits">,
+  products: Pick<Product, "id" | "name">[],
+): string {
+  return pkg.credits
+    .map((c) => {
+      const name = products.find((p) => p.id === c.productId)?.name ?? "Service";
+      return `${c.qty} × ${name}`;
+    })
+    .join(", ");
+}
+
+/** What a receipt and the order detail say about one line. */
+export type LineLabels = {
+  /** the initials of the person who served the line */
+  staffInitials?: string;
+  /** the line was paid for with package credits */
+  credit: boolean;
+  /** what a package purchase holds */
+  packageSummary?: string;
+};
+
+/**
+ * The labels one order line carries on a receipt.
+ *
+ * A service line names the stylist who served it, a credit line is tagged as
+ * paid for by a package, and a package purchase lists what it holds.
+ */
+export function lineLabels(
+  item: OrderItem,
+  ctx: {
+    staff: Pick<Staff, "id" | "name">[];
+    packages?: Pick<Package, "id" | "credits">[];
+    products?: Pick<Product, "id" | "name">[];
+  },
+): LineLabels {
+  const member = item.serviceStaffId
+    ? ctx.staff.find((s) => s.id === item.serviceStaffId)
+    : undefined;
+  // only a package *purchase* lists what the package holds — a line paid for
+  // with credits already names the service it paid for
+  const pkg =
+    item.packageId && !item.useCredit ? ctx.packages?.find((p) => p.id === item.packageId) : undefined;
+  return {
+    staffInitials: member ? staffInitials(member.name) : undefined,
+    credit: !!item.useCredit,
+    packageSummary:
+      pkg && ctx.products
+        ? packageContents(pkg, ctx.products)
+        : undefined,
+  };
+}
+
+/** One stylist's earnings over a period. */
+export type CommissionRow = {
+  staffId: string;
+  name: string;
+  /** the visits this stylist served */
+  visits: number;
+  /** what the clients were charged for the work */
+  revenue: number;
+  /** what package credits covered */
+  creditValue: number;
+  /** the commission earned */
+  commission: number;
+};
+
+export type CommissionReport = {
+  rows: CommissionRow[];
+  totals: { visits: number; revenue: number; creditValue: number; commission: number };
+};
+
+/**
+ * What every stylist earned over a set of orders.
+ *
+ * Visits are counted per order, revenue is what the clients were charged for
+ * the lines the stylist served, and the credit value is the part of that work
+ * package credits paid for — the two together are the full value of the work.
+ * Commission comes from the amount stamped on the line at sale time, so a
+ * later rate change never rewrites past earnings.
+ */
+export function commissionReport(
+  orders: Order[],
+  staff: Pick<Staff, "id" | "name">[],
+  products: Pick<Product, "id" | "price">[],
+): CommissionReport {
+  const byStaff = new Map<string, CommissionRow & { orderIds: Set<string> }>();
+  for (const order of orders) {
+    if (order.status === "refunded") continue;
+    for (const item of order.items) {
+      if (!item.serviceStaffId) continue;
+      const member = staff.find((s) => s.id === item.serviceStaffId);
+      const row = byStaff.get(item.serviceStaffId) ?? {
+        staffId: item.serviceStaffId,
+        name: member?.name ?? "Unknown",
+        visits: 0,
+        revenue: 0,
+        creditValue: 0,
+        commission: 0,
+        orderIds: new Set<string>(),
+      };
+      row.orderIds.add(order.id);
+      row.revenue += item.price * item.qty;
+      row.creditValue += creditValueOf(
+        item,
+        products.find((p) => p.id === item.productId)?.price ?? 0,
+      );
+      row.commission += item.commissionAmt ?? 0;
+      byStaff.set(item.serviceStaffId, row);
+    }
+  }
+  const rows = [...byStaff.values()]
+    .map(({ orderIds, ...row }) => ({ ...row, visits: orderIds.size }))
+    .sort((a, b) => b.commission - a.commission || b.revenue - a.revenue);
+  const totals = rows.reduce(
+    (acc, r) => ({
+      visits: acc.visits + r.visits,
+      revenue: acc.revenue + r.revenue,
+      creditValue: acc.creditValue + r.creditValue,
+      commission: acc.commission + r.commission,
+    }),
+    { visits: 0, revenue: 0, creditValue: 0, commission: 0 },
+  );
+  return { rows, totals };
 }
 
 /**

@@ -16,6 +16,7 @@ import { hasFeature } from "@/lib/features";
 import { dateShort, timeOf } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { itemChoices, orderTypeLabel, ticketNumber } from "@/lib/restaurant";
+import { lineLabels } from "@/lib/salon";
 import { dueOf, paidOf, usePos } from "@/lib/store";
 import { termsOf } from "@/lib/terms";
 import { cn } from "@/lib/ui";
@@ -111,16 +112,18 @@ function orderContext(
 }
 
 /**
- * Plain-text receipt — this is what the shop copies and sends to the customer,
- * so it must carry the same information as the printed receipt: shop details,
+ * The plain-text receipt — what the shop copies and sends to the customer.
+ *
+ * It must carry the same information as the printed receipt: shop details,
  * subtotal, discount, tax, total, payments and the balance.
  */
 export function receiptText(order: Order, settings?: Settings): string {
   const paid = paidOf(order);
   const due = dueOf(order);
   const tax = orderTax(order);
-  const allocations = batchLines(order, usePos.getState().batches);
-  const context = settings ? orderContext(order, settings, usePos.getState().tables) : null;
+  const state = usePos.getState();
+  const allocations = batchLines(order, state.batches);
+  const context = settings ? orderContext(order, settings, state.tables) : null;
   const lines: string[] = [];
   if (settings) {
     lines.push(settings.shopName);
@@ -139,6 +142,14 @@ export function receiptText(order: Order, settings?: Settings): string {
   for (const i of order.items) {
     lines.push(`${itemName(i)} × ${i.qty} — ${fmtMoney(i.price * i.qty)}`);
     if (i.prescriptionRef) lines.push(`  Rx ref ${i.prescriptionRef}`);
+    const labels = lineLabels(i, {
+      staff: state.staff,
+      packages: state.packages,
+      products: state.products,
+    });
+    if (labels.staffInitials) lines.push(`  Served by ${labels.staffInitials}`);
+    if (labels.credit) lines.push("  Credit");
+    if (labels.packageSummary) lines.push(`  ${labels.packageSummary}`);
     const choices = itemChoices(i);
     if (choices) lines.push(`  ${choices}`);
   }
@@ -152,6 +163,8 @@ export function receiptText(order: Order, settings?: Settings): string {
   }
   if (order.payments.length === 0) lines.push(`Paid ${fmtMoney(paid)}`);
   lines.push(due > 0 ? `Balance due ${fmtMoney(due)}` : "Fully paid");
+  const creditsLeft = creditsLeftOf(order, state.customers);
+  if (creditsLeft > 0) lines.push(`Package credits left ${creditsLeft}`);
   if (allocations.length > 0) {
     lines.push("");
     for (const b of allocations) {
@@ -163,6 +176,16 @@ export function receiptText(order: Order, settings?: Settings): string {
     lines.push(settings.receiptFooter.trim());
   }
   return lines.join("\n");
+}
+
+/**
+ * The package credits a client still owns.
+ *
+ * A receipt shows it so the client knows what is left to spend.
+ */
+function creditsLeftOf(order: Order, customers: { id: string; packageCredits?: { remaining: number }[] }[]): number {
+  const customer = order.customerId ? customers.find((c) => c.id === order.customerId) : undefined;
+  return (customer?.packageCredits ?? []).reduce((s, c) => s + Math.max(0, c.remaining), 0);
 }
 
 export function Receipt({
@@ -178,8 +201,13 @@ export function Receipt({
   const tax = orderTax(order);
   const batches = usePos((s) => s.batches);
   const tables = usePos((s) => s.tables);
+  const staff = usePos((s) => s.staff);
+  const packages = usePos((s) => s.packages);
+  const products = usePos((s) => s.products);
+  const customers = usePos((s) => s.customers);
   const allocations = batchLines(order, batches);
   const context = orderContext(order, settings, tables);
+  const creditsLeft = creditsLeftOf(order, customers);
 
   return (
     <div
@@ -228,6 +256,7 @@ export function Receipt({
       <div className="flex flex-col gap-1.5">
         {order.items.map((i, idx) => {
           const choices = itemChoices(i);
+          const labels = lineLabels(i, { staff, packages, products });
           return (
             <div
               key={`${i.productId}-${i.packName ?? ""}-${idx}`}
@@ -235,13 +264,28 @@ export function Receipt({
             >
               <span className="min-w-0 flex-1 text-[13px] leading-5 text-ink">
                 <span className="block">
-                  {itemName(i)} <span className="text-ink3">× {i.qty}</span>
+                  {itemName(i)} <span className="text-ink3">× {i.qty}</span>{" "}
+                  {labels.staffInitials && (
+                    <span className="ml-1 inline-flex h-[18px] items-center rounded-full bg-surface2 px-1.5 text-[11px] font-semibold text-ink2">
+                      {labels.staffInitials}
+                    </span>
+                  )}
+                  {labels.credit && (
+                    <span className="ml-1 inline-flex h-[18px] items-center rounded-full bg-accent/12 px-1.5 text-[11px] font-semibold text-accent">
+                      Credit
+                    </span>
+                  )}
                 </span>
                 {i.prescriptionRef && (
                   <span className="block text-[11px] leading-4 text-ink3">
                     Rx ref {i.prescriptionRef}
                   </span>
                 )}
+                {labels.packageSummary ? (
+                  <span className="block text-[11px] leading-4 text-ink3">
+                    {labels.packageSummary}
+                  </span>
+                ) : null}
                 {choices ? (
                   <span className="block text-[11px] leading-4 text-ink3">{choices}</span>
                 ) : null}
@@ -308,6 +352,15 @@ export function Receipt({
         </>
       )}
 
+      {creditsLeft > 0 && (
+        <>
+          <div className="receipt-rule my-3 border-t border-dashed border-line" />
+          <p className="text-center text-[12px] leading-5 text-ink2">
+            {creditsLeft} package credit{creditsLeft === 1 ? "" : "s"} left on your account
+          </p>
+        </>
+      )}
+
       {settings.receiptFooter.trim() && (
         <>
           <div className="receipt-rule my-3 border-t border-dashed border-line" />
@@ -327,11 +380,13 @@ export function Receipt({
 export function receiptToPrintData(order: Order, settings: Settings): ReceiptPrintData {
   const due = dueOf(order);
   const tax = orderTax(order);
-  const allocations = batchLines(order, usePos.getState().batches);
-  const context = orderContext(order, settings, usePos.getState().tables);
+  const state = usePos.getState();
+  const allocations = batchLines(order, state.batches);
+  const context = orderContext(order, settings, state.tables);
   const batchFooter = allocations
     .map((b) => `Batch ${b.batchNo}${b.expiry ? ` exp ${b.expiry}` : ""} x${b.qty}`)
     .join(" · ");
+  const creditsLeft = creditsLeftOf(order, state.customers);
   return {
     shopName: settings.shopName,
     address: settings.address?.trim() ?? "",
@@ -345,12 +400,27 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
     orderId: order.id,
     orderDate: `${dateShort(order.createdAt)} - ${timeOf(order.createdAt)}`,
     context,
-    items: order.items.map((i) => ({
-      name: itemName(i),
-      qty: i.qty,
-      amount: fmtMoney(i.price * i.qty),
-      detail: itemChoices(i) || undefined,
-    })),
+    items: order.items.map((i) => {
+      const labels = lineLabels(i, {
+        staff: state.staff,
+        packages: state.packages,
+        products: state.products,
+      });
+      const detail = [
+        itemChoices(i),
+        labels.staffInitials ? `by ${labels.staffInitials}` : "",
+        labels.credit ? "Credit" : "",
+        labels.packageSummary ?? "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return {
+        name: itemName(i),
+        qty: i.qty,
+        amount: fmtMoney(i.price * i.qty),
+        detail: detail || undefined,
+      };
+    }),
     subtotal: fmtMoney(order.subtotal),
     discount: order.discount > 0 ? fmtMoney(order.discount) : null,
     tax: tax ? { label: tax.label, amount: fmtMoney(tax.amount) } : null,
@@ -360,7 +430,13 @@ export function receiptToPrintData(order: Order, settings: Settings): ReceiptPri
       amount: fmtMoney(p.amount),
     })),
     balance: due > 0 ? fmtMoney(due) : null,
-    footer: [settings.receiptFooter.trim(), batchFooter].filter(Boolean).join(" · "),
+    footer: [
+      creditsLeft > 0 ? `${creditsLeft} package credit${creditsLeft === 1 ? "" : "s"} left` : "",
+      settings.receiptFooter.trim(),
+      batchFooter,
+    ]
+      .filter(Boolean)
+      .join(" · "),
   };
 }
 

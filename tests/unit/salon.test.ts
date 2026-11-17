@@ -2,17 +2,22 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import {
   commissionOf,
+  commissionReport,
   creditAwareUnitPrices,
   creditPrice,
+  creditValueOf,
   creditsOf,
   isServiceLine,
+  lineLabels,
+  packageContents,
   primaryStaffOf,
   restoreCredits,
   spendCredits,
+  staffInitials,
   voidCredits,
   voidCreditsFrom,
 } from "../../lib/salon.ts";
-import type { Customer, OrderItem } from "../../lib/types.ts";
+import type { Customer, Order, OrderItem } from "../../lib/types.ts";
 import type { Staff } from "../../lib/staff.ts";
 
 const staff = (id: string, pct?: number): Staff =>
@@ -259,5 +264,187 @@ describe("creditAwareUnitPrices", () => {
   test("a line price override wins over the shelf price", () => {
     const out = creditAwareUnitPrices([{ qty: 1, price: 60, normalPrice: 100 }], cust());
     assert.deepEqual(out, [60]);
+  });
+});
+
+describe("staffInitials", () => {
+  test("a first and a last name give two letters", () => {
+    assert.equal(staffInitials("Akua Mensah"), "AM");
+  });
+
+  test("a single name gives its first two letters", () => {
+    assert.equal(staffInitials("Nana"), "NA");
+  });
+
+  test("an empty name gives nothing", () => {
+    assert.equal(staffInitials("   "), "");
+  });
+});
+
+describe("creditValueOf", () => {
+  test("a credited line is worth the catalogue price of the covered units", () => {
+    assert.equal(creditValueOf({ useCredit: true, creditedQty: 2 }, 70), 140);
+  });
+
+  test("a line paid for normally has no credit value", () => {
+    assert.equal(creditValueOf({ creditedQty: 2 }, 70), 0);
+    assert.equal(creditValueOf({ useCredit: true }, 70), 0);
+  });
+});
+
+describe("packageContents", () => {
+  test("a package lists what it holds", () => {
+    assert.equal(
+      packageContents(
+        { credits: [{ productId: "p_mani", qty: 4 }, { productId: "p_trim", qty: 1 }] },
+        [
+          { id: "p_mani", name: "Manicure" },
+          { id: "p_trim", name: "Cut & Trim" },
+        ],
+      ),
+      "4 × Manicure, 1 × Cut & Trim",
+    );
+  });
+
+  test("a deleted service still shows up", () => {
+    assert.equal(packageContents({ credits: [{ productId: "gone", qty: 2 }] }, []), "2 × Service");
+  });
+});
+
+describe("lineLabels", () => {
+  const ctx = {
+    staff: [{ id: "s1", name: "Akua Mensah" }],
+    packages: [{ id: "pk1", credits: [{ productId: "p_mani", qty: 4 }] }],
+    products: [{ id: "p_mani", name: "Manicure" }],
+  };
+
+  test("a service line names its stylist", () => {
+    const labels = lineLabels(
+      { productId: "p_mani", name: "Manicure", qty: 1, price: 70, kind: "service", serviceStaffId: "s1" },
+      ctx,
+    );
+    assert.equal(labels.staffInitials, "AM");
+    assert.equal(labels.credit, false);
+  });
+
+  test("a credit line is tagged as credit", () => {
+    const labels = lineLabels(
+      {
+        productId: "p_mani",
+        name: "Manicure",
+        qty: 1,
+        price: 0,
+        kind: "service",
+        serviceStaffId: "s1",
+        useCredit: true,
+        creditedQty: 1,
+        packageId: "pk1",
+      },
+      ctx,
+    );
+    assert.equal(labels.credit, true);
+    assert.equal(labels.staffInitials, "AM");
+    assert.equal(labels.packageSummary, undefined);
+  });
+
+  test("a package purchase lists what it holds", () => {
+    const labels = lineLabels(
+      { productId: "pk1", name: "Nails ×4", qty: 1, price: 280, packageId: "pk1" },
+      ctx,
+    );
+    assert.equal(labels.packageSummary, "4 × Manicure");
+  });
+});
+
+describe("commissionReport", () => {
+  const order = (id: string, items: OrderItem[], createdAt = 1): Order =>
+    ({
+      id,
+      items,
+      customerId: null,
+      subtotal: 0,
+      discount: 0,
+      total: 0,
+      status: "completed",
+      payments: [],
+      payStatus: "paid",
+      createdAt,
+      completedAt: createdAt,
+    }) as Order;
+
+  const staffList = [
+    { id: "s1", name: "Akua Mensah" },
+    { id: "s2", name: "Nana Yaa" },
+  ];
+  const products = [
+    { id: "p_mani", price: 70 },
+    { id: "p_trim", price: 60 },
+  ];
+
+  test("counts visits, revenue, credit value and commission per stylist", () => {
+    const report = commissionReport(
+      [
+        order("o1", [
+          { productId: "p_mani", name: "Manicure", qty: 1, price: 70, kind: "service", serviceStaffId: "s1", commissionAmt: 17.5 },
+          { productId: "p_trim", name: "Cut & Trim", qty: 1, price: 60, kind: "service", serviceStaffId: "s2", commissionAmt: 12 },
+        ]),
+        order("o2", [
+          { productId: "p_mani", name: "Manicure", qty: 1, price: 70, kind: "service", serviceStaffId: "s1", commissionAmt: 17.5 },
+        ]),
+      ],
+      staffList,
+      products,
+    );
+    assert.equal(report.rows.length, 2);
+    const akua = report.rows.find((r) => r.staffId === "s1");
+    assert.equal(akua?.visits, 2);
+    assert.equal(akua?.revenue, 140);
+    assert.equal(akua?.commission, 35);
+    assert.equal(report.totals.commission, 47);
+  });
+
+  test("a credited line counts the value the credits covered", () => {
+    const report = commissionReport(
+      [
+        order("o1", [
+          {
+            productId: "p_mani",
+            name: "Manicure",
+            qty: 1,
+            price: 0,
+            kind: "service",
+            serviceStaffId: "s1",
+            useCredit: true,
+            creditedQty: 1,
+            commissionAmt: 0,
+          },
+        ]),
+      ],
+      staffList,
+      products,
+    );
+    assert.equal(report.rows[0].revenue, 0);
+    assert.equal(report.rows[0].creditValue, 70);
+  });
+
+  test("a refunded order earns nothing", () => {
+    const refunded = {
+      ...order("o1", [
+        { productId: "p_mani", name: "Manicure", qty: 1, price: 70, kind: "service", serviceStaffId: "s1", commissionAmt: 17.5 },
+      ]),
+      status: "refunded" as const,
+    };
+    const report = commissionReport([refunded], staffList, products);
+    assert.equal(report.rows.length, 0);
+    assert.equal(report.totals.commission, 0);
+  });
+
+  test("a line without a stylist earns nothing", () => {
+    const report = commissionReport(
+      [order("o1", [{ productId: "p_mani", name: "Manicure", qty: 1, price: 70, kind: "service" }])],
+      staffList,
+      products,
+    );
+    assert.equal(report.rows.length, 0);
   });
 });

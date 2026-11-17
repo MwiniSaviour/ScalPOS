@@ -24,6 +24,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { dateShort, timeOf } from "@/lib/format";
 import { CURRENCY_SYMBOL, fmtMoney } from "@/lib/money";
+import { lineLabels } from "@/lib/salon";
 import * as store from "@/lib/store";
 import type { PaymentMethod } from "@/lib/types";
 
@@ -44,6 +45,9 @@ export default function OrderDetailScreen() {
   const customers = store.usePos((s) => s.customers);
   const batches = store.usePos((s) => s.batches);
   const recipes = store.usePos((s) => s.recipes);
+  const staff = store.usePos((s) => s.staff);
+  const packages = store.usePos((s) => s.packages);
+  const products = store.usePos((s) => s.products);
   const settings = store.useSettings();
   const addPaymentsToOrder = store.usePos((s) => s.addPaymentsToOrder);
   const refundOrder = store.usePos((s) => s.refundOrder);
@@ -62,6 +66,8 @@ export default function OrderDetailScreen() {
   const tax = order ? orderTax(order) : null;
   const canRecord = !!order && order.status !== "refunded" && due > 0;
   const customer = order?.customerId ? customers.find((c) => c.id === order.customerId) : undefined;
+  const creditsLeft =
+    (customer?.packageCredits ?? []).reduce((s, c) => s + Math.max(0, c.remaining), 0);
   const hasRecipeItems =
     !!order &&
     (order.items.some((i) => (i.recipeConsumption?.length ?? 0) > 0) ||
@@ -168,6 +174,7 @@ export default function OrderDetailScreen() {
               const b = batches.find((x) => x.id === a.batchId);
               return { batchNo: b?.batchNo || a.batchId, expiry: b?.expiry ?? "", qty: a.qty };
             });
+            const labels = lineLabels(i, { staff, packages, products });
             return (
               <div
                 key={`${i.productId}-${i.packName ?? ""}-${idx}`}
@@ -179,8 +186,21 @@ export default function OrderDetailScreen() {
                     {[i.name, i.variantName].filter(Boolean).join(" · ")}
                     {i.packName ? ` — ${i.packName}` : ""}{" "}
                     <span className="text-ink3">× {i.qty}</span>
+                    {labels.staffInitials && (
+                      <span className="ml-1 inline-flex h-5 items-center rounded-full bg-surface2 px-1.5 text-[11px] font-semibold text-ink2">
+                        {labels.staffInitials}
+                      </span>
+                    )}
+                    {labels.credit && (
+                      <span className="ml-1 inline-flex h-5 items-center rounded-full bg-accent/12 px-1.5 text-[11px] font-semibold text-accent">
+                        Credit
+                      </span>
+                    )}
                   </span>
                   <span className="tabnum block text-[13px] text-ink3">@ {fmtMoney(i.price)}</span>
+                  {labels.packageSummary && (
+                    <span className="block truncate text-[12px] text-ink3">{labels.packageSummary}</span>
+                  )}
                   {i.modifierNames && i.modifierNames.length > 0 && (
                     <span className="block truncate text-[12px] text-ink3">
                       {i.modifierNames.join(", ")}
@@ -268,6 +288,12 @@ export default function OrderDetailScreen() {
               </span>
             )}
           </div>
+          {creditsLeft > 0 && (
+            <div className="flex items-center justify-between gap-3 px-4 pb-3.5">
+              <span className="text-[14px] text-ink3">Package credits left</span>
+              <span className="tabnum text-[15px] font-semibold text-ink">{creditsLeft}</span>
+            </div>
+          )}
         </Card>
       </main>
 
