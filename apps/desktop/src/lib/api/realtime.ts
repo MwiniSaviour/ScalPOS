@@ -20,10 +20,15 @@ const TABLES = [
   "restaurant_tables",
 ] as const
 
+// Realtime rejects a channel with too many postgres_changes subscriptions
+// ("Unable to subscribe to changes with given parameters") — it still reports
+// SUBSCRIBED, but silently delivers no events. Keep every channel small.
+const TABLES_PER_CHANNEL = 6
+
 /**
- * One realtime channel per mounted component, filtered to the signed-in org.
- * Any remote change (mobile or another desktop) triggers a debounced refetch,
- * so data on screen tracks the shop live without manual refresh.
+ * One set of realtime channels per mounted component, filtered to the signed-in
+ * org. Any remote change (mobile or another desktop) triggers a debounced
+ * refetch, so data on screen tracks the shop live without manual refresh.
  */
 export function useRealtime(onChange: () => void, enabled = true) {
   const cb = useRef(onChange)
@@ -39,7 +44,7 @@ export function useRealtime(onChange: () => void, enabled = true) {
     } catch {
       return
     }
-    let channel: ReturnType<typeof client.channel> | null = null
+    let channels: ReturnType<typeof client.channel>[] = []
     let timer: ReturnType<typeof setTimeout> | null = null
     let org = ""
 
@@ -50,45 +55,42 @@ export function useRealtime(onChange: () => void, enabled = true) {
       } catch {
         return
       }
-      if (next === org && channel) return
-      if (channel) {
-        void client.removeChannel(channel)
-        channel = null
-      }
+      if (next === org && channels.length) return
+      for (const ch of channels) void client.removeChannel(ch)
+      channels = []
       org = next
-      // The Supabase client sets the realtime token once at construction, which
-      // marks it as a manual token that is never refreshed. Clerk's token only
-      // lives a minute, so the channel died a minute later. Asking for the
-      // callback-based token keeps it fresh across reconnects.
+
+      // Ask for the callback-based token rather than the client's one-time
+      // manual token, which expires with the Clerk session.
       try {
         await client.realtime.setAuth()
       } catch {}
-      const ch = client.channel(`scalpos-desktop-${Math.random().toString(36).slice(2, 9)}`)
-      for (const table of TABLES) {
-        ch.on(
-          "postgres_changes",
-          { event: "*", schema: "public", table, filter: `org_id=eq.${org}` },
-          () => {
-            console.log("[rt] change", table)
-            if (timer) clearTimeout(timer)
-            timer = setTimeout(() => cb.current(), 300)
-          },
-        )
+
+      for (let i = 0; i < TABLES.length; i += TABLES_PER_CHANNEL) {
+        const group = TABLES.slice(i, i + TABLES_PER_CHANNEL)
+        const ch = client.channel(`scalpos-desktop-${Math.random().toString(36).slice(2, 9)}`)
+        for (const table of group) {
+          ch.on(
+            "postgres_changes",
+            { event: "*", schema: "public", table, filter: `org_id=eq.${org}` },
+            () => {
+              if (timer) clearTimeout(timer)
+              timer = setTimeout(() => cb.current(), 300)
+            },
+          )
+        }
+        void ch.subscribe()
+        channels.push(ch)
       }
-      console.log("[rt] subscribe", org)
-      ch.subscribe((status: string) => console.log("[rt] status", status, org))
-      channel = ch
     }
 
     void subscribe()
-    // Switching shops (or entering demo mode) changes the org filter — the
-    // old channel would keep listening to the previous shop.
-    const onOrgChanged = () => subscribe()
-    window.addEventListener(ORG_CHANGED_EVENT, onOrgChanged)
+    // Switching shops (or entering demo mode) changes the org filter.
+    window.addEventListener(ORG_CHANGED_EVENT, subscribe)
     return () => {
-      window.removeEventListener(ORG_CHANGED_EVENT, onOrgChanged)
+      window.removeEventListener(ORG_CHANGED_EVENT, subscribe)
       if (timer) clearTimeout(timer)
-      if (channel) void client.removeChannel(channel)
+      for (const ch of channels) void client.removeChannel(ch)
     }
   }, [enabled])
 }
