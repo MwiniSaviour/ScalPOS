@@ -1,10 +1,13 @@
 "use client"
 
-import { Component, useEffect, type ErrorInfo, type ReactNode } from "react"
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react"
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { usePathname, useRouter } from "next/navigation"
 import { registerTokenProvider } from "@/lib/auth/session"
 import { OrgProvider } from "@/lib/auth/org"
+import { hasLocalShop } from "@/lib/offline/local-data"
+import PinGate from "@/components/pin-gate"
+import LocalSetupScreen from "@/components/local-setup-screen"
 
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ""
 
@@ -30,6 +33,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
+  const [localShop, setLocalShop] = useState(() => hasLocalShop())
   const onAuthPage = pathname.startsWith("/auth")
   const onSsoCallback = pathname.startsWith("/auth/sso-callback")
   const onPublicPage =
@@ -38,17 +42,30 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     pathname === "/data-deletion"
 
   useEffect(() => {
-    if (!isLoaded || onPublicPage || onSsoCallback) return
+    if (!isLoaded || onPublicPage || onSsoCallback || localShop) return
     if (!isSignedIn && !onAuthPage) router.replace("/auth/login")
     if (isSignedIn && onAuthPage) router.replace("/dashboard")
-  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router])
+  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router, localShop])
 
   if (onPublicPage || onSsoCallback) return <>{children}</>
   if (!isLoaded) return <BootScreen />
-  if (!isSignedIn && !onAuthPage) return <BootScreen />
+  if (localShop && !isSignedIn) {
+    return (
+      <OrgProvider>
+        <PinGate>{children}</PinGate>
+      </OrgProvider>
+    )
+  }
+  if (!isSignedIn && !onAuthPage) {
+    return <LocalSetupScreen onReady={() => setLocalShop(true)} onSignIn={() => router.push("/auth/login")} />
+  }
   if (isSignedIn && onAuthPage) return <BootScreen />
   if (onAuthPage) return <>{children}</>
-  return <OrgProvider>{children}</OrgProvider>
+  return (
+    <OrgProvider>
+      <PinGate>{children}</PinGate>
+    </OrgProvider>
+  )
 }
 
 function BootScreen() {

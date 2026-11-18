@@ -181,4 +181,10 @@ if (typeof window !== "undefined") {
   window.addEventListener("online", () => {
     void replayQueued();
   });
+  window.addEventListener("focus", () => {
+    if (isOnline()) void replayQueued();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && isOnline()) void replayQueued();
+  });
 }

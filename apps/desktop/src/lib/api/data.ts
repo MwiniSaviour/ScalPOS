@@ -31,7 +31,15 @@ import type {
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
 import { offlineMode } from "@/lib/offline-fetch"
-import { getOrgId } from "@/lib/auth/org"
+import { getOrgId, hasActiveShop } from "@/lib/auth/org"
+import { hasLocalShop, localSettings, updateLocalSettings, localProducts, localProduct, localCategories, localCustomers, localStaff, localAppointments, localPackages, localSales, localSale, deleteLocalAppointment, deleteLocalPackage, deleteLocalStaff } from "@/lib/offline/local-data"
+import type { LocalAppointmentInput } from "@/lib/offline/local-data"
+import { createLocalProduct, updateLocalProduct, deleteLocalProduct, createLocalCategory, createLocalCustomer, updateLocalCustomer, deleteLocalCustomer, localAdjustStock, localFindByBarcode, saveLocalAppointment, saveLocalPackage, saveLocalStaff, localPlaceSale } from "@/lib/offline/local-adapters"
+
+/** Local-first mode: no cloud shop connected, so everything stays on this PC. */
+function localOnly(): boolean {
+  return hasLocalShop() && !hasActiveShop()
+}
 import { freshToken } from "@/lib/auth/session"
 
 type Row = Record<string, unknown>
@@ -716,6 +724,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
 }
 
 export async function fetchCategories(): Promise<Category[]> {
+  if (localOnly()) return localCategories()
   const { data, error } = await db()
     .from("categories")
     .select("*")
@@ -727,6 +736,7 @@ export async function fetchCategories(): Promise<Category[]> {
 }
 
 export async function fetchProducts(): Promise<Product[]> {
+  if (localOnly()) return localProducts()
   const { data, error } = await db()
     .from("products")
     .select(PRODUCT_SELECT)
@@ -738,6 +748,7 @@ export async function fetchProducts(): Promise<Product[]> {
 }
 
 export async function fetchProduct(id: string): Promise<Product | null> {
+  if (localOnly()) return localProduct(id)
   const { data, error } = await db()
     .from("products")
     .select(PRODUCT_SELECT)
@@ -750,6 +761,7 @@ export async function fetchProduct(id: string): Promise<Product | null> {
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
+  if (localOnly()) return createLocalProduct(input)
   const payload: Row = {
     org_id: orgId(),
     local_id: makeLocalId(),
@@ -785,6 +797,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
 }
 
 export async function updateProduct(id: string, input: Partial<ProductInput>): Promise<Product> {
+  if (localOnly()) return updateLocalProduct(id, input)
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
   if (input.sku !== undefined) patch.sku = input.sku
@@ -821,6 +834,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
 }
 
 export async function adjustStock(productId: string, delta: number, reason: string, ref?: string): Promise<void> {
+  if (localOnly()) return localAdjustStock(productId, delta)
   const { error } = await db().rpc("receive_stock_tx", {
     p_org: orgId(),
     p_product_id: productId,
@@ -853,6 +867,7 @@ export async function fetchStockMoves(productId: string): Promise<StockMove[]> {
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalProduct(id)
   const { error } = await db()
     .from("products")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString(), active: false })
@@ -862,6 +877,7 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
+  if (localOnly()) return createLocalCategory(input)
   const payload: Row = { org_id: orgId(), local_id: makeLocalId(), name: input.name }
   // `color` is NOT NULL with a palette default — omit it so the default applies
   // instead of writing an explicit null.
@@ -907,6 +923,7 @@ export async function deleteCategory(id: string): Promise<void> {
 }
 
 export async function fetchCustomers(): Promise<Customer[]> {
+  if (localOnly()) return localCustomers()
   const { data, error } = await db()
     .from("customers")
     .select("*")
@@ -935,6 +952,7 @@ async function customerOrderTotals(customerIds: string[]): Promise<Map<string, n
 }
 
 export async function fetchCustomer(id: string): Promise<Customer | null> {
+  if (localOnly()) return (await localCustomers()).find((c) => c.id === id) ?? null
   const { data, error } = await db()
     .from("customers")
     .select("*")
@@ -949,6 +967,7 @@ export async function fetchCustomer(id: string): Promise<Customer | null> {
 }
 
 export async function createCustomer(input: CustomerInput): Promise<Customer> {
+  if (localOnly()) return createLocalCustomer(input)
   const { data, error } = await db()
     .from("customers")
     .insert({
@@ -966,6 +985,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
 }
 
 export async function updateCustomer(id: string, input: Partial<CustomerInput>): Promise<Customer> {
+  if (localOnly()) return updateLocalCustomer(id, input)
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
   if (input.phone !== undefined) patch.phone = input.phone
@@ -983,6 +1003,7 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>):
 }
 
 export async function deleteCustomer(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalCustomer(id)
   const { error } = await db()
     .from("customers")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -994,6 +1015,7 @@ export async function deleteCustomer(id: string): Promise<void> {
 // ---------- salon ----------
 
 export async function fetchAppointments(): Promise<Appointment[]> {
+  if (localOnly()) return localAppointments()
   const { data, error } = await db()
     .from("appointments")
     .select("*")
@@ -1005,6 +1027,7 @@ export async function fetchAppointments(): Promise<Appointment[]> {
 }
 
 export async function createAppointment(input: AppointmentInput): Promise<Appointment> {
+  if (localOnly()) return saveLocalAppointment(input)
   const payload: Row = {
     org_id: orgId(),
     local_id: makeLocalId(),
@@ -1021,6 +1044,7 @@ export async function createAppointment(input: AppointmentInput): Promise<Appoin
 }
 
 export async function updateAppointment(id: string, input: Partial<AppointmentInput>): Promise<Appointment> {
+  if (localOnly()) return saveLocalAppointment({ customer_id: null, staff_id: null, service_lines: [], start: new Date().toISOString(), ...input } as LocalAppointmentInput, id)
   const patch: Row = { updated_at: new Date().toISOString() }
   if (input.customer_id !== undefined) patch.customer_id = input.customer_id
   if (input.staff_id !== undefined) patch.staff_id = input.staff_id
@@ -1040,6 +1064,7 @@ export async function updateAppointment(id: string, input: Partial<AppointmentIn
 }
 
 export async function deleteAppointment(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalAppointment(id)
   const { error } = await db()
     .from("appointments")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -1049,6 +1074,7 @@ export async function deleteAppointment(id: string): Promise<void> {
 }
 
 export async function fetchPackages(): Promise<ServicePackage[]> {
+  if (localOnly()) return localPackages()
   const { data, error } = await db()
     .from("packages")
     .select("*")
@@ -1060,6 +1086,7 @@ export async function fetchPackages(): Promise<ServicePackage[]> {
 }
 
 export async function createPackage(input: PackageInput): Promise<ServicePackage> {
+  if (localOnly()) return saveLocalPackage(input)
   const payload: Row = {
     org_id: orgId(),
     local_id: makeLocalId(),
@@ -1072,6 +1099,8 @@ export async function createPackage(input: PackageInput): Promise<ServicePackage
 }
 
 export async function updatePackage(id: string, input: Partial<PackageInput>): Promise<ServicePackage> {
+  const current = localOnly() ? (await localPackages()).find((p) => p.id === id) : null
+  if (localOnly()) return saveLocalPackage({ name: current?.name ?? "", price: current?.price ?? 0, credits: current?.credits ?? [], ...input }, id)
   const patch: Row = { updated_at: new Date().toISOString() }
   if (input.name !== undefined) patch.name = input.name.trim()
   if (input.price !== undefined) patch.price = input.price
@@ -1087,6 +1116,7 @@ export async function updatePackage(id: string, input: Partial<PackageInput>): P
 }
 
 export async function deletePackage(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalPackage(id)
   const { error } = await db()
     .from("packages")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -1294,6 +1324,7 @@ export interface SaleInput {
 }
 
 export async function placeSale(input: SaleInput): Promise<Sale> {
+  if (localOnly()) return localPlaceSale(input)
   const client = db()
   const { data: settingsRow, error: settingsError } = await client
     .from("settings")
@@ -1411,6 +1442,7 @@ export function buildOrderLocalId(nextNo: number): string {
 }
 
 export async function fetchSales(): Promise<Sale[]> {
+  if (localOnly()) return localSales()
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1424,6 +1456,7 @@ export async function fetchSales(): Promise<Sale[]> {
 }
 
 export async function fetchSale(id: string): Promise<Sale | null> {
+  if (localOnly()) return localSale(id)
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1438,6 +1471,7 @@ export async function fetchSale(id: string): Promise<Sale | null> {
 }
 
 export async function fetchSaleByLocalId(localId: string): Promise<Sale | null> {
+  if (localOnly()) return (await localSales()).find((s) => s.invoice_no === localId) ?? null
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1479,6 +1513,7 @@ export async function recordOrderPayment(
 }
 
 export async function fetchSettings(): Promise<ShopSettings | null> {
+  if (localOnly()) return localSettings()
   const { data, error } = await db().from("settings").select("*").eq("org_id", orgId()).maybeSingle()
   const row = check<SettingsRow | null>(data, error as unknown as { message: string } | null)
   if (!row) return null
@@ -1503,6 +1538,7 @@ export function mapSettings(row: SettingsRow): ShopSettings {
 }
 
 export async function updateSettings(input: Partial<ShopSettings>): Promise<ShopSettings> {
+  if (localOnly()) return updateLocalSettings(input)
   const patch: Row = { ...input }
   delete patch.next_order_no
   const { data, error } = await db().from("settings").update(patch).eq("org_id", orgId()).select("*").single()
@@ -1511,6 +1547,7 @@ export async function updateSettings(input: Partial<ShopSettings>): Promise<Shop
 }
 
 export async function fetchStaff(): Promise<Staff[]> {
+  if (localOnly()) return localStaff()
   const { data, error } = await db()
     .from("staff")
     .select("*")
@@ -1522,6 +1559,7 @@ export async function fetchStaff(): Promise<Staff[]> {
 }
 
 export async function upsertStaff(id: string | null, input: StaffInput): Promise<Staff> {
+  if (localOnly()) return saveLocalStaff({ ...input, id })
   const payload: Row = {
     name: input.name.trim(),
     role: input.role,
@@ -1554,6 +1592,7 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
 }
 
 export async function deleteStaff(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalStaff(id)
   const { error } = await db()
     .from("staff")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -1925,6 +1964,7 @@ async function applyDerivedStock(
 }
 
 export async function findProductByBarcode(barcode: string): Promise<Product | null> {
+  if (localOnly()) return localFindByBarcode(barcode)
   const client = db()
   const { data, error } = await client
     .from("products")
