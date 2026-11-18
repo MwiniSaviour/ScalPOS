@@ -1,5 +1,7 @@
 "use client";
 
+import { freshToken } from "./auth/session";
+
 /**
  * Offline mirror for the desktop data layer.
  *
@@ -146,9 +148,18 @@ export async function replayQueued(): Promise<number> {
   let sent = 0;
   for (const row of rows.sort((a, b) => (a.id ?? 0) - (b.id ?? 0))) {
     try {
+      // the token captured when the write was queued is likely expired by
+      // replay time — use the current one, keeping the queue intact if auth
+      // cannot be refreshed
+      const headers = { ...row.headers }
+      const token = await freshToken(true)
+      if (token) {
+        const authKey = Object.keys(headers).find((k) => k.toLowerCase() === "authorization")
+        if (authKey) headers[authKey] = `Bearer ${token}`
+      }
       const res = await fetch(row.url, {
         method: row.method,
-        headers: row.headers,
+        headers,
         ...(row.body ? { body: row.body } : {}),
       });
       if (!res.ok) break;
