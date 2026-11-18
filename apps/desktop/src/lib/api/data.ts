@@ -30,6 +30,7 @@ import type {
   VisitNote,
 } from "@/lib/types"
 import { getSupabase } from "@/lib/supabase/client"
+import { offlineMode } from "@/lib/offline-fetch"
 import { getOrgId } from "@/lib/auth/org"
 import { freshToken } from "@/lib/auth/session"
 
@@ -1324,6 +1325,11 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
     const res = await client.from("orders").select(select).eq("local_id", localId).maybeSingle()
     fetched = check<SaleRow | null>(res.data, res.error as unknown as { message: string } | null)
   }
+  if (!fetched && offlineMode()) {
+    // the RPC write is queued for replay — show the sale locally now so the
+    // register can keep moving without a connection
+    return offlineSale(input, localId)
+  }
   if (!fetched) throw new Error("Order was placed but could not be read back")
   // the order RPC predates salon — add the visit's stylist and booking after
   // the fact, keeping the link for the desktop appointment view
@@ -1345,6 +1351,55 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
   }
   const items = await itemsForOrders([fetched.id])
   return mapOrderWithCustomer(fetched, items.get(fetched.id) ?? [])
+}
+
+/** The receipt shown for a sale that is queued for later upload. */
+function offlineSale(input: SaleInput, localId: string): Sale {
+  const now = new Date().toISOString()
+  const paid = input.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const items: SaleItem[] = input.items.map((it, i) => ({
+    id: `${localId}#${i}`,
+    sale_id: localId,
+    product_id: it.product_id ?? null,
+    product_name: it.name,
+    quantity: it.qty,
+    unit_price: it.price,
+    subtotal: Math.round(it.qty * it.price * 100) / 100,
+    variant_id: null,
+    variant_name: null,
+    modifier_ids: null,
+    modifier_names: null,
+    service_staff_id: it.service_staff_id ?? null,
+    commission_amt: it.commission_amt ?? null,
+    use_credit: it.use_credit ?? false,
+    package_id: it.package_id ?? null,
+    credited_qty: it.credited_qty ?? null,
+    kind: it.kind ?? null,
+  }))
+  const method = (input.payments[0]?.method ?? "cash") as PaymentMethod
+  return {
+    id: localId,
+    invoice_no: localId,
+    customer_id: input.customer_id ?? null,
+    employee_id: null,
+    subtotal: input.subtotal,
+    tax: input.tax,
+    discount: input.discount,
+    total: input.total,
+    payment_method: method,
+    payment_status: paid >= input.total ? "paid" : "pending",
+    status: paid >= input.total ? "completed" : "pending",
+    pay_status: paid >= input.total ? "paid" : paid > 0 ? "partial" : "unpaid",
+    payments: input.payments.map((p) => ({ method: p.method as PaymentMethod, amount: p.amount })),
+    order_type: null,
+    table_id: null,
+    ticket_status: null,
+    staff_id: input.staff_id ?? null,
+    appointment_id: input.appointment_id ?? null,
+    sale_date: now,
+    created_at: now,
+    items,
+  }
 }
 
 export function buildOrderLocalId(nextNo: number): string {

@@ -1,0 +1,39 @@
+name: Desktop release (Windows)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/desktop/package-lock.json
+
+      - name: Install desktop dependencies
+        working-directory: apps/desktop
+        run: npm ci
+
+      - name: Build desktop web bundle
+        working-directory: apps/desktop
+        run: npm run build
+
+      - name: Package Windows installer
+        working-directory: apps/desktop
+        run: npx electron-builder --win --config electron-builder.yml
+
+      - name: Publish installer to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.exe
+          fail_on_unmatched_files: true
