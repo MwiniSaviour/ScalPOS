@@ -19,7 +19,6 @@ export type ImportRow = {
 
 export type ImportOptions = {
   updateExisting: boolean
-  setStock: boolean
   createCategories: boolean
 }
 

@@ -2032,9 +2032,7 @@ export async function importProducts(rows: ImportRow[], options: ImportOptions):
           ...(row.category && categoryId ? { category_id: categoryId } : {}),
         }
         await updateLocalProduct(match.id, patch)
-        if (options.setStock && row.stock !== match.stock) {
-          await localAdjustStock(match.id, row.stock - match.stock)
-        }
+        // Import never changes the stock of an existing product.
         const next = await localProduct(match.id)
         if (next) {
           const index = products.findIndex((product) => product.id === match.id)
@@ -2067,7 +2065,6 @@ export async function importProducts(rows: ImportRow[], options: ImportOptions):
     p_org: orgId(),
     p_rows: rows,
     p_update_existing: options.updateExisting,
-    p_set_stock: options.setStock,
     p_create_categories: options.createCategories,
   })
   return check<ImportResult>(data, error as unknown as { message: string } | null)
