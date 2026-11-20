@@ -29,12 +29,13 @@ import type {
   Variant,
   VisitNote,
 } from "@/lib/types"
+import type { ImportOptions, ImportResult, ImportRow } from "@/lib/import/validate"
 import { getSupabase } from "@/lib/supabase/client"
 import { offlineMode } from "@/lib/offline-fetch"
 import { getOrgId, hasActiveShop } from "@/lib/auth/org"
 import { hasLocalShop, localSettings, updateLocalSettings, localProducts, localProduct, localCategories, localCustomers, localStaff, localAppointments, localPackages, localSales, localSale, deleteLocalAppointment, deleteLocalPackage, deleteLocalStaff } from "@/lib/offline/local-data"
 import type { LocalAppointmentInput } from "@/lib/offline/local-data"
-import { createLocalProduct, updateLocalProduct, deleteLocalProduct, createLocalCategory, createLocalCustomer, updateLocalCustomer, deleteLocalCustomer, localAdjustStock, localFindByBarcode, saveLocalAppointment, saveLocalPackage, saveLocalStaff, localPlaceSale } from "@/lib/offline/local-adapters"
+import { type LocalProductInput, createLocalProduct, updateLocalProduct, deleteLocalProduct, createLocalCategory, createLocalCustomer, updateLocalCustomer, deleteLocalCustomer, localAdjustStock, localFindByBarcode, saveLocalAppointment, saveLocalPackage, saveLocalStaff, localPlaceSale } from "@/lib/offline/local-adapters"
 
 /** Local-first mode: no cloud shop connected, so everything stays on this PC. */
 function localOnly(): boolean {
@@ -1975,4 +1976,99 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
     .maybeSingle()
   const row = check<ProductRow | null>(data, error)
   return row ? mapRow(row) : null
+}
+
+export async function importProducts(rows: ImportRow[], options: ImportOptions): Promise<ImportResult> {
+  if (rows.length === 0) return { created: 0, updated: 0, skipped: 0 }
+
+  if (localOnly()) {
+    const products = [...(await localProducts())]
+    const categories = [...(await localCategories())]
+    let created = 0
+    let updated = 0
+    let skipped = 0
+
+    const findProduct = (row: ImportRow): Product | undefined => {
+      if (row.barcode) {
+        const barcode = row.barcode.toLowerCase()
+        const byBarcode = products.find((product) => (product.barcode ?? "").trim().toLowerCase() === barcode)
+        if (byBarcode) return byBarcode
+      }
+      if (row.sku) {
+        const sku = row.sku.toLowerCase()
+        return products.find((product) => (product.sku ?? "").trim().toLowerCase() === sku)
+      }
+      return undefined
+    }
+
+    const resolveCategory = async (name: string): Promise<string | null> => {
+      if (!name) return null
+      const key = name.toLowerCase()
+      const existing = categories.find((category) => category.name.trim().toLowerCase() === key)
+      if (existing) return existing.id
+      if (!options.createCategories) return null
+      const category = await createLocalCategory({ name: name.trim() })
+      categories.push(category)
+      return category.id
+    }
+
+    for (const row of rows) {
+      const match = findProduct(row)
+      const categoryId = await resolveCategory(row.category)
+      if (match) {
+        if (!options.updateExisting) {
+          skipped += 1
+          continue
+        }
+        const patch: Partial<LocalProductInput> = {
+          name: row.name,
+          price: row.price,
+          cost_price: row.cost_price,
+          unit: row.unit,
+          low_stock_at: row.low_stock_at,
+          active: row.active,
+          ...(row.sku ? { sku: row.sku } : {}),
+          ...(row.barcode ? { barcode: row.barcode } : {}),
+          ...(row.category && categoryId ? { category_id: categoryId } : {}),
+        }
+        await updateLocalProduct(match.id, patch)
+        if (options.setStock && row.stock !== match.stock) {
+          await localAdjustStock(match.id, row.stock - match.stock)
+        }
+        const next = await localProduct(match.id)
+        if (next) {
+          const index = products.findIndex((product) => product.id === match.id)
+          if (index >= 0) products[index] = next
+        }
+        updated += 1
+        continue
+      }
+
+      const product = await createLocalProduct({
+        name: row.name,
+        sku: row.sku || undefined,
+        barcode: row.barcode || null,
+        price: row.price,
+        cost_price: row.cost_price,
+        stock: row.stock,
+        category_id: categoryId,
+        description: row.description || null,
+        unit: row.unit,
+        low_stock_at: row.low_stock_at,
+        active: row.active,
+      })
+      products.push(product)
+      created += 1
+    }
+    return { created, updated, skipped }
+  }
+
+  const { data, error } = await db().rpc("import_products", {
+    p_org: orgId(),
+    p_rows: rows,
+    p_update_existing: options.updateExisting,
+    p_set_stock: options.setStock,
+    p_create_categories: options.createCategories,
+  })
+  return check<ImportResult>(data, error as unknown as { message: string } | null)
 }
