@@ -4,7 +4,8 @@ import { deflateRawSync } from "node:zlib";
 import { parseCsv, parseXlsx } from "../../apps/desktop/src/lib/import/parse.ts";
 import { validateTable } from "../../apps/desktop/src/lib/import/validate.ts";
 import { mapHeaders, normalizeHeader } from "../../apps/desktop/src/lib/import/columns.ts";
-
+import { appendScannedBarcode } from "../../apps/desktop/src/lib/import/scan.ts";
+import { parseInvoiceText } from "../../apps/desktop/src/lib/import/invoice.ts";
 type ZipEntry = { name: string; data: Buffer; method: 0 | 8 };
 
 function makeZip(entries: ZipEntry[]): ArrayBuffer {
@@ -172,4 +173,36 @@ describe("XLSX import", () => {
       assert.equal(table.rowNumbers[1], 4);
     });
   }
+});
+
+describe("Scan import", () => {
+  test("appends unique barcodes and ignores duplicates", () => {
+    const once = appendScannedBarcode([], "123456");
+    const twice = appendScannedBarcode(once, "123456");
+    const different = appendScannedBarcode(twice, " 987654 ");
+    assert.equal(once.length, 1);
+    assert.equal(twice.length, 1);
+    assert.equal(different.length, 2);
+    assert.equal(different[1][2], "987654");
+    assert.equal(different[1][0], "");
+  });
+});
+
+describe("Invoice OCR import", () => {
+  test("extracts names and numeric columns from OCR text", () => {
+    const rows = parseInvoiceText(
+      "Invoice\nRice 5kg 2 12.50 25.00\nCooking Oil 1L 3 8.00 24.00\nTotal 49.00",
+    );
+    assert.equal(rows.length, 2);
+    assert.equal(rows[0][0], "Rice 5kg");
+    assert.equal(rows[0][5], "2");
+    assert.equal(rows[0][3], "12.5");
+    assert.equal(rows[1][0], "Cooking Oil 1L");
+    assert.equal(rows[1][5], "3");
+    assert.equal(rows[1][3], "8");
+  });
+
+  test("skips empty and header-only lines", () => {
+    assert.deepEqual(parseInvoiceText("Invoice\nTotal 10\n"), []);
+  });
 });
