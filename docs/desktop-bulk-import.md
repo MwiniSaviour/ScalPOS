@@ -10,7 +10,7 @@ Desktop-only CSV/XLSX import for the products catalog. It keeps the existing des
 - Cloud import is atomic through one `import_products` RPC.
 - Local-only shops import directly into IndexedDB.
 
-Deferred: mobile import, paste grid, barcode scanning loop, invoice/OCR extraction, legacy `.xls`, encrypted workbooks, ZIP64 workbooks.
+Deferred: mobile/Android import (planned after the barcode scanning loop and invoice/OCR extraction are fully implemented), paste grid, barcode scanning loop, invoice/OCR extraction, legacy `.xls`, encrypted workbooks, ZIP64 workbooks.
 
 ## File format
 
