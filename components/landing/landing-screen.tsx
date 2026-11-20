@@ -8,6 +8,7 @@ import {
   Check,
   ChevronDown,
   Menu,
+  MonitorDown,
   Moon,
   Sun,
   X,
@@ -992,6 +993,17 @@ export default function LandingScreen() {
               Get started
             </button>
           </form>
+
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-300">
+            <a
+              href="https://github.com/MwiniSaviour/ScalPOS/releases/latest/download/ScalPOS-win-x64.exe"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              <MonitorDown className="size-4" />
+              <span>Download for Windows</span>
+            </a>
+            <span className="text-slate-400">Desktop app that works offline</span>
+          </div>
 
           <div className="mt-5 flex items-center justify-center gap-6 text-xs text-slate-300">
             <button

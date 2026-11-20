@@ -19,6 +19,8 @@ const DEPS: Record<string, string[]> = {
   stock_moves: ["products", "orders", "product_batches"],
   settings: [],
   staff: [],
+  appointments: ["customers", "staff"],
+  packages: [],
 };
 
 function computeRanks(): Record<string, number> {

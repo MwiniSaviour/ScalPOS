@@ -12,6 +12,8 @@ import {
 import { useAuth } from "@clerk/clerk-react"
 import { createClient } from "@supabase/supabase-js"
 import { bootstrapOrg } from "@/lib/supabase/client"
+import { hasLocalShop } from "@/lib/offline/local-data"
+import { syncLocalToCloud } from "@/lib/offline/local-sync"
 
 export type Shop = {
   id: string
@@ -89,6 +91,11 @@ export function notifyOrgChanged(): void {
 
 export function getOrgRole(): Shop["role"] {
   return activeShop?.role ?? "cashier"
+}
+
+/** True when a cloud shop is connected (or a demo cloud shop is active). */
+export function hasActiveShop(): boolean {
+  return !!activeShop || !!demoOrgId
 }
 
 function readCache(userId: string | null | undefined): Shop | null {
@@ -192,6 +199,7 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         setNeedsShop(false)
         setError(null)
         writeCache(userId, next)
+        if (hasLocalShop()) void syncLocalToCloud()
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not connect to your shop.")
       } finally {

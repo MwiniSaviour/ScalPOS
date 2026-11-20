@@ -19,11 +19,13 @@ import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import type { Staff } from "@/lib/staff";
 import type {
+  Appointment,
   Batch,
   BatchAllocation,
   Category,
   Customer,
   Order,
+  Package,
   Pack,
   Product,
   Recipe,
@@ -45,7 +47,7 @@ const LAST_PULL_KEY = "nova-pos-last-pull";
 
 const PULL_INTERVAL = 30_000;
 
-const TABLES = ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "order_items", "stock_moves", "staff"] as const;
+const TABLES = ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "order_items", "stock_moves", "staff", "appointments", "packages"] as const;
 type Table = (typeof TABLES)[number];
 
 type IdMap = Record<Table, Record<string, string>>;
@@ -65,6 +67,8 @@ function emptyMap(): IdMap {
     order_items: {},
     stock_moves: {},
     staff: {},
+    appointments: {},
+    packages: {},
   };
 }
 
@@ -170,6 +174,8 @@ type Store = {
   recipes: Recipe[];
   tables: RestaurantTable[];
   staff: Staff[];
+  appointments: Appointment[];
+  packages: Package[];
   settings: Settings;
 };
 
@@ -266,6 +272,8 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
         ? x.variants.map((m) => ({ id: m.id, name: m.name, priceDelta: m.priceDelta }))
         : null,
       unavailable_until: x.unavailableUntil || null,
+      kind: x.kind ?? null,
+      duration_min: x.durationMin ?? null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -317,6 +325,8 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       address: x.address,
       note: x.note,
       allergies: x.allergies ?? "",
+      visit_notes: x.visitNotes && x.visitNotes.length ? x.visitNotes : null,
+      package_credits: x.packageCredits && x.packageCredits.length ? x.packageCredits : null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -337,6 +347,61 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       // Local "idb:" photos stay on this device; never upload the ref.
       photo_path: x.photoId && !isLocalImageRef(x.photoId) ? x.photoId : "",
       active: x.active,
+      skills: x.skills && x.skills.length ? x.skills : null,
+      schedule: x.schedule && x.schedule.length
+        ? x.schedule.map((s) => ({ day: s.day, start: s.start, end: s.end }))
+        : null,
+      commission_pct: x.commissionPct ?? null,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "appointments") {
+    const x = s.appointments.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    let customerId = x.customerId ? map.customers[x.customerId] : undefined;
+    if (x.customerId && !customerId && s.customers.some((c) => c.id === x.customerId)) {
+      // the client has never been pushed — push it first so the booking can
+      // name it
+      await pushLocalRow("customers", x.customerId);
+      customerId = readMap().customers[x.customerId];
+    }
+    const staffId = x.staffId ? map.staff[x.staffId] : undefined;
+    await put(table, {
+      ...(map.appointments[x.id] ? { id: map.appointments[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      customer_id: customerId ?? null,
+      staff_id: staffId ?? null,
+      service_lines: x.serviceLines.map((l) => ({
+        productId: l.productId,
+        price: l.price,
+        qty: l.qty ?? 1,
+      })),
+      start: x.start,
+      duration_min: x.durationMin,
+      status: x.status,
+      notes: x.notes ?? "",
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "packages") {
+    const x = s.packages.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    await put(table, {
+      ...(map.packages[x.id] ? { id: map.packages[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      name: x.name,
+      price: x.price,
+      credits: x.credits.map((c) => ({ productId: c.productId, qty: c.qty })),
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -456,6 +521,8 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       order_type: x.orderType ?? null,
       table_id: x.tableId ?? null,
       ticket_status: x.ticketStatus ?? null,
+      staff_id: x.staffId ? (map.staff[x.staffId] ?? null) : null,
+      appointment_id: x.appointmentId ? (map.appointments[x.appointmentId] ?? null) : null,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
       deleted_at: null,
@@ -506,6 +573,12 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
               qty: c.qty,
             }))
           : null,
+        service_staff_id: it.serviceStaffId ? (map.staff[it.serviceStaffId] ?? null) : null,
+        commission_amt: it.commissionAmt ?? null,
+        use_credit: it.useCredit === true,
+        package_id: it.packageId ? (map.packages[it.packageId] ?? null) : null,
+        credited_qty: it.creditedQty ?? null,
+        kind: it.kind ?? null,
         updated_at: upd,
         deleted_at: null,
       });
@@ -591,8 +664,38 @@ function custLocal(r: RemoteRow): Customer {
     address: String(r.address ?? ""),
     note: String(r.note ?? ""),
     allergies: typeof r.allergies === "string" ? r.allergies : undefined,
+    visitNotes: visitNotesLocal(r.visit_notes),
+    packageCredits: creditsLocal(r.package_credits),
     createdAt: ms(r.created_at) ?? Date.now(),
   };
+}
+
+/** visit notes: [{ "t": 1731400000000, "text": "..." }] */
+function visitNotesLocal(raw: unknown): { t: number; text: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
+    .map((v) => ({ t: n(v.t), text: String(v.text ?? "") }))
+    .filter((v) => v.text !== "");
+  return out.length > 0 ? out : undefined;
+}
+
+/** package credits: [{ "packageId": "<uuid>", "remaining": 2 }] */
+function creditsLocal(
+  raw: unknown,
+): { packageId: string; remaining: number; sourceOrderId?: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
+    .map((v) => ({
+      packageId: String(v.packageId ?? ""),
+      remaining: Math.max(0, n(v.remaining)),
+      ...(typeof v.sourceOrderId === "string" && v.sourceOrderId
+        ? { sourceOrderId: v.sourceOrderId }
+        : {}),
+    }))
+    .filter((v) => v.packageId !== "");
+  return out.length > 0 ? out : undefined;
 }
 
 function prodLocal(r: RemoteRow, rev: Record<string, string>): Product {
@@ -616,6 +719,8 @@ function prodLocal(r: RemoteRow, rev: Record<string, string>): Product {
     modifiers: modifiersLocal(r.modifiers),
     variants: modifiersLocal(r.variants),
     unavailableUntil: typeof r.unavailable_until === "string" ? r.unavailable_until : undefined,
+    kind: r.kind === "service" ? "service" : undefined,
+    durationMin: r.duration_min === null || r.duration_min === undefined ? undefined : n(r.duration_min),
     createdAt: ms(r.created_at) ?? Date.now(),
     updatedAt: ms(r.updated_at) ?? 0,
   };
@@ -689,6 +794,64 @@ function staffLocal(r: RemoteRow): Staff {
     phone: String(r.phone ?? ""),
     photoId: typeof r.photo_path === "string" && r.photo_path ? r.photo_path : undefined,
     active: r.active !== false,
+    skills: strListLocal(r.skills),
+    schedule: scheduleLocal(r.schedule),
+    commissionPct: r.commission_pct === null || r.commission_pct === undefined ? undefined : n(r.commission_pct),
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
+/** schedule rows: [{ "day": 1, "start": "09:00", "end": "17:00" }] */
+function scheduleLocal(raw: unknown): { day: number; start: string; end: string }[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out = raw
+    .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
+    .map((v) => ({ day: n(v.day), start: String(v.start ?? ""), end: String(v.end ?? "") }))
+    .filter((v) => v.start !== "" && v.end !== "");
+  return out.length > 0 ? out : undefined;
+}
+
+/** A booked visit. */
+function apptLocal(r: RemoteRow, rev: Record<string, string>): Appointment {
+  const raw = Array.isArray(r.service_lines) ? (r.service_lines as unknown[]) : [];
+  const serviceLines = raw
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l) => ({
+      productId: String(l.productId ?? ""),
+      price: n(l.price),
+      qty: typeof l.qty === "number" && l.qty > 0 ? l.qty : 1,
+    }))
+    .filter((l) => l.productId !== "");
+  return {
+    id: String(r.local_id ?? ""),
+    customerId:
+      typeof r.customer_id === "string" ? rev[r.customer_id] ?? r.customer_id : null,
+    ...(typeof r.staff_id === "string" && r.staff_id ? { staffId: rev[r.staff_id] ?? r.staff_id } : {}),
+    serviceLines,
+    start: typeof r.start === "string" ? r.start : new Date().toISOString(),
+    durationMin: n(r.duration_min, 30),
+    status: (["booked", "arrived", "in-service", "done", "no-show", "cancelled"].includes(String(r.status))
+      ? r.status
+      : "booked") as Appointment["status"],
+    notes: typeof r.notes === "string" ? r.notes : "",
+    createdAt: ms(r.created_at) ?? Date.now(),
+    updatedAt: ms(r.updated_at) ?? 0,
+  };
+}
+
+/** A service package. */
+function pkgLocal(r: RemoteRow): Package {
+  const raw = Array.isArray(r.credits) ? (r.credits as unknown[]) : [];
+  const credits = raw
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l) => ({ productId: String(l.productId ?? ""), qty: n(l.qty) }))
+    .filter((l) => l.productId !== "");
+  return {
+    id: String(r.local_id ?? ""),
+    name: String(r.name ?? ""),
+    price: n(r.price),
+    credits,
     createdAt: ms(r.created_at) ?? Date.now(),
     updatedAt: ms(r.updated_at) ?? 0,
   };
@@ -696,6 +859,8 @@ function staffLocal(r: RemoteRow): Staff {
 
 function ordLocal(r: RemoteRow, map: IdMap, items: Order["items"]): Order {
   const revCust = revFrom(map.customers);
+  const revStaff = revFrom(map.staff);
+  const revAppt = revFrom(map.appointments);
   return {
     id: String(r.local_id ?? ""),
     items,
@@ -720,6 +885,12 @@ function ordLocal(r: RemoteRow, map: IdMap, items: Order["items"]): Order {
     ticketStatus: (["queued", "preparing", "ready", "served"].includes(String(r.ticket_status))
       ? r.ticket_status
       : undefined) as Order["ticketStatus"],
+    ...(typeof r.staff_id === "string" && r.staff_id
+      ? { staffId: revStaff[r.staff_id] ?? r.staff_id }
+      : {}),
+    ...(typeof r.appointment_id === "string" && r.appointment_id
+      ? { appointmentId: revAppt[r.appointment_id] ?? r.appointment_id }
+      : {}),
   };
 }
 
@@ -763,13 +934,19 @@ function carryPharmacy(pulled: Product, prev: Product | undefined): Product {
   if (next.unavailableUntil === undefined && prev.unavailableUntil !== undefined) {
     next.unavailableUntil = prev.unavailableUntil;
   }
+  if (next.kind === undefined && prev.kind !== undefined) next.kind = prev.kind;
+  if (next.durationMin === undefined && prev.durationMin !== undefined) {
+    next.durationMin = prev.durationMin;
+  }
   if (
     next.prescriptionOnly === pulled.prescriptionOnly &&
     next.controlled === pulled.controlled &&
     next.packs === pulled.packs &&
     next.modifiers === pulled.modifiers &&
     next.variants === pulled.variants &&
-    next.unavailableUntil === pulled.unavailableUntil
+    next.unavailableUntil === pulled.unavailableUntil &&
+    next.kind === pulled.kind &&
+    next.durationMin === pulled.durationMin
   ) {
     return pulled;
   }
@@ -778,8 +955,27 @@ function carryPharmacy(pulled: Product, prev: Product | undefined): Product {
 
 /** Carry the allergies a remote row does not carry over from the local row. */
 function carryAllergies(pulled: Customer, prev: Customer | undefined): Customer {
-  if (!prev || pulled.allergies !== undefined || prev.allergies === undefined) return pulled;
-  return { ...pulled, allergies: prev.allergies };
+  if (!prev) return pulled;
+  const next = { ...pulled };
+  // a remote row from before the salon columns must not wipe local notes or
+  // the credits a client still owns
+  if (next.visitNotes === undefined && prev.visitNotes !== undefined) {
+    next.visitNotes = prev.visitNotes;
+  }
+  if (next.packageCredits === undefined && prev.packageCredits !== undefined) {
+    next.packageCredits = prev.packageCredits;
+  }
+  if (next.allergies === undefined && prev.allergies !== undefined) {
+    next.allergies = prev.allergies;
+  }
+  if (
+    next.allergies === pulled.allergies &&
+    next.visitNotes === pulled.visitNotes &&
+    next.packageCredits === pulled.packageCredits
+  ) {
+    return pulled;
+  }
+  return next;
 }
 
 /** Carry the pharmacy fields a remote order item does not carry over. */
@@ -824,6 +1020,8 @@ function localStamp(table: Table, row: Record<string, unknown>): number {
     case "orders": return n((row.completedAt as number | null) ?? row.createdAt);
     case "stock_moves": return n(row.t);
     case "staff": return n(row.updatedAt ?? row.createdAt);
+    case "appointments": return n(row.updatedAt ?? row.createdAt);
+    case "packages": return n(row.updatedAt ?? row.createdAt);
     default: return 0;
   }
 }
@@ -838,6 +1036,8 @@ function remoteStamp(table: Table, r: RemoteRow): number {
     case "orders": return ms(r.completed_at) ?? ms(r.created_at) ?? 0;
     case "stock_moves": return ms(r.occurred_at) ?? ms(r.created_at) ?? 0;
     case "staff": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
+    case "appointments": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
+    case "packages": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
     default: return 0;
   }
 }
@@ -898,6 +1098,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
 
     const revProd = revFrom(map.products);
     const revBatch = revFrom(map.product_batches);
+    const revStaff = revFrom(map.staff);
     const itemsByOrder = new Map<string, Order["items"]>();
     for (const r of rows.order_items ?? []) {
       const orderLocal = typeof r.local_id === "string" ? r.local_id.split("#")[0] : null;
@@ -919,6 +1120,15 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         variantId: typeof r.variant_id === "string" && r.variant_id ? r.variant_id : undefined,
         variantName: typeof r.variant_name === "string" && r.variant_name ? r.variant_name : undefined,
         recipeConsumption: consumptionLocal(r.recipe_consumption, revProd),
+        serviceStaffId:
+          typeof r.service_staff_id === "string" && r.service_staff_id
+            ? revStaff[r.service_staff_id] ?? r.service_staff_id
+            : undefined,
+        commissionAmt: r.commission_amt === null || r.commission_amt === undefined ? undefined : n(r.commission_amt),
+        useCredit: r.use_credit === true,
+        packageId: typeof r.package_id === "string" && r.package_id ? r.package_id : undefined,
+        creditedQty: r.credited_qty === null || r.credited_qty === undefined ? undefined : n(r.credited_qty),
+        kind: r.kind === "service" ? "service" : undefined,
       });
       itemsByOrder.set(orderLocal, list);
     }
@@ -1038,6 +1248,17 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         s.staff as unknown as (Record<string, unknown> & { id: string })[],
         (rows.staff ?? []).map(staffLocal) as unknown as (Record<string, unknown> & { id: string })[],
       );
+      const revStaff = revFrom(map.staff);
+      const appointments = mergeLocal(
+        "appointments",
+        s.appointments as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.appointments ?? []).map((r) => apptLocal(r, { ...revCust, ...revStaff })) as unknown as (Record<string, unknown> & { id: string })[],
+      ) as unknown as Appointment[];
+      const packages = mergeLocal(
+        "packages",
+        s.packages as unknown as (Record<string, unknown> & { id: string })[],
+        (rows.packages ?? []).map(pkgLocal) as unknown as (Record<string, unknown> & { id: string })[],
+      ) as unknown as Package[];
       return {
         ...s,
         categories,
@@ -1049,6 +1270,8 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
         batches,
         recipes,
         tables,
+        appointments,
+        packages,
       } as unknown as typeof s;
     });
 
@@ -1170,6 +1393,19 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
           if (cur && (cur.updatedAt ?? cur.createdAt) >= (local.updatedAt ?? local.createdAt)) return s;
           return { ...s, staff: putAt(s.staff, local) } as unknown as typeof s;
         }
+        case "appointments": {
+          const rev = { ...revFrom(map.customers), ...revFrom(map.staff) };
+          const local = apptLocal(row, rev);
+          const cur = s.appointments.find((x) => x.id === local.id);
+          if (cur && (cur.updatedAt ?? cur.createdAt) >= (local.updatedAt ?? local.createdAt)) return s;
+          return { ...s, appointments: putAt(s.appointments, local) } as unknown as typeof s;
+        }
+        case "packages": {
+          const local = pkgLocal(row);
+          const cur = s.packages.find((x) => x.id === local.id);
+          if (cur && (cur.updatedAt ?? cur.createdAt) >= (local.updatedAt ?? local.createdAt)) return s;
+          return { ...s, packages: putAt(s.packages, local) } as unknown as typeof s;
+        }
         default:
           return s;
       }
@@ -1196,17 +1432,17 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
     s.products.map(
       (x): [string, string] => [
         x.id,
-        `${x.name}|${x.categoryId}|${x.price}|${x.cost}|${x.stock}|${x.lowStockAt}|${x.unit}|${x.sku}|${x.barcode}|${x.imageUrl}|${x.description}|${x.active}|${x.prescriptionOnly ?? false}|${x.controlled ?? false}|${JSON.stringify(x.packs ?? [])}`,
+        `${x.name}|${x.categoryId}|${x.price}|${x.cost}|${x.stock}|${x.lowStockAt}|${x.unit}|${x.sku}|${x.barcode}|${x.imageUrl}|${x.description}|${x.active}|${x.prescriptionOnly ?? false}|${x.controlled ?? false}|${JSON.stringify(x.packs ?? [])}|${x.kind ?? ""}|${x.durationMin ?? ""}`,
       ],
     ),
   );
-  set("customers", s.customers.map((x): [string, string] => [x.id, `${x.name}|${x.phone}|${x.address}|${x.note}|${x.allergies ?? ""}`]));
+  set("customers", s.customers.map((x): [string, string] => [x.id, `${x.name}|${x.phone}|${x.address}|${x.note}|${x.allergies ?? ""}|${JSON.stringify(x.visitNotes ?? [])}|${JSON.stringify(x.packageCredits ?? [])}`]));
   set(
     "orders",
     s.orders.map(
       (x): [string, string] => [
         x.id,
-        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${x.orderType ?? ""}|${x.tableId ?? ""}|${x.ticketStatus ?? ""}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price},${i.packName ?? ""},${i.prescriptionRef ?? ""},${i.baseQty ?? ""},${i.variantId ?? ""},${(i.modifierIds ?? []).join("+")},${JSON.stringify(i.batchAllocations ?? [])}`))}`,
+        `${x.status}|${x.payStatus}|${x.payments.length}|${x.total}|${x.subtotal}|${x.discount}|${x.note ?? ""}|${x.customerId}|${x.orderType ?? ""}|${x.tableId ?? ""}|${x.ticketStatus ?? ""}|${x.staffId ?? ""}|${x.appointmentId ?? ""}|${JSON.stringify(x.items.map((i) => `${i.productId},${i.qty},${i.price},${i.packName ?? ""},${i.prescriptionRef ?? ""},${i.baseQty ?? ""},${i.variantId ?? ""},${(i.modifierIds ?? []).join("+")},${i.serviceStaffId ?? ""},${i.commissionAmt ?? ""},${i.useCredit ? "1" : ""},${i.packageId ?? ""},${i.creditedQty ?? ""},${i.kind ?? ""},${JSON.stringify(i.batchAllocations ?? [])}`))}`,
       ],
     ),
   );
@@ -1214,7 +1450,7 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
   set("stock_moves", s.stockMoves.map((x): [string, string] => [x.id, `${x.productId}|${x.qty}|${x.reason}|${x.ref ?? ""}|${x.batchId ?? ""}`]));
   set(
     "staff",
-    s.staff.map((x): [string, string] => [x.id, `${x.name}|${x.role}|${x.phone ?? ""}|${x.photoId ?? ""}|${x.active}`]),
+    s.staff.map((x): [string, string] => [x.id, `${x.name}|${x.role}|${x.phone ?? ""}|${x.photoId ?? ""}|${x.active}|${JSON.stringify(x.skills ?? [])}|${JSON.stringify(x.schedule ?? [])}|${x.commissionPct ?? ""}`]),
   );
   set("product_batches", s.batches.map((x): [string, string] => [x.id, `${x.batchNo}|${x.expiry}|${x.qty}|${x.cost}`]));
   set(
@@ -1229,6 +1465,21 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
   set(
     "restaurant_tables",
     s.tables.map((x): [string, string] => [x.id, `${x.name}|${x.seats}`]),
+  );
+  set(
+    "appointments",
+    s.appointments.map(
+      (x): [string, string] => [
+        x.id,
+        `${x.customerId ?? ""}|${x.staffId ?? ""}|${x.start}|${x.durationMin}|${x.status}|${x.notes ?? ""}|${JSON.stringify(x.serviceLines)}`,
+      ],
+    ),
+  );
+  set(
+    "packages",
+    s.packages.map(
+      (x): [string, string] => [x.id, `${x.name}|${x.price}|${JSON.stringify(x.credits)}`],
+    ),
   );
   return fp;
 }
@@ -1311,6 +1562,8 @@ export async function armSync(conn: SyncConnection) {
         ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
         ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
         ...s.staff.map((x) => ["staff", x.id] as [Table, string]),
+        ...s.appointments.map((x) => ["appointments", x.id] as [Table, string]),
+        ...s.packages.map((x) => ["packages", x.id] as [Table, string]),
       ];
       for (const [t, id] of asks) {
         await enqueue({
@@ -1388,7 +1641,7 @@ export async function armSync(conn: SyncConnection) {
       const next = fingerprint(s);
       void (async () => {
         const { enqueue } = await import("./outbox");
-        for (const t of ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "stock_moves", "staff"] as Table[]) {
+        for (const t of ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "stock_moves", "staff", "appointments", "packages"] as Table[]) {
           const before = prev.get(t)!;
           const after = next.get(t)!;
           for (const [id, fp] of after) {
@@ -1503,6 +1756,8 @@ async function requeueMissing(): Promise<number> {
     ...s.orders.map((x) => ["orders", x.id] as [Table, string]),
     ...s.stockMoves.map((x) => ["stock_moves", x.id] as [Table, string]),
     ...s.staff.map((x) => ["staff", x.id] as [Table, string]),
+    ...s.appointments.map((x) => ["appointments", x.id] as [Table, string]),
+    ...s.packages.map((x) => ["packages", x.id] as [Table, string]),
   ];
   let added = 0;
   for (const [t, id] of rows) {

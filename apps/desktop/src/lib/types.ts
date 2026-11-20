@@ -61,6 +61,74 @@ export interface Variant {
 /** What stage a kitchen ticket is at (restaurant). */
 export type TicketStatus = "queued" | "preparing" | "ready" | "served"
 
+/* ------------------------------- salon ------------------------------- */
+
+/** A working day of a staff member: day of week (0 = Sunday), HH:MM times. */
+export interface StaffSchedule {
+  day: number
+  start: string
+  end: string
+}
+
+/** A note a stylist left on a client's visit. */
+export interface VisitNote {
+  t: number
+  text: string
+}
+
+/** A client's remaining credits of a package they bought. */
+export interface PackageCredit {
+  packageId: string
+  remaining: number
+  sourceOrderId?: string
+}
+
+/** Where a booked appointment stands. */
+export type AppointmentStatus =
+  | "booked"
+  | "arrived"
+  | "in-service"
+  | "done"
+  | "no-show"
+  | "cancelled"
+
+/** One service booked on an appointment; qty defaults to 1. */
+export interface AppointmentServiceLine {
+  productId: string
+  price: number
+  qty?: number
+}
+
+/** A booking in the salon's day view. */
+export interface Appointment {
+  id: string
+  customer_id: string | null
+  staff_id: string | null
+  service_lines: AppointmentServiceLine[]
+  start: string
+  duration_min: number
+  status: AppointmentStatus
+  notes: string
+  created_at: string
+  updated_at: string
+}
+
+/** What a package credit entry holds: a service and how many visits it pays for. */
+export interface PackageCreditLine {
+  productId: string
+  qty: number
+}
+
+/** A bundle of services a client buys once and pays for later with credits. */
+export interface ServicePackage {
+  id: string
+  name: string
+  price: number
+  credits: PackageCreditLine[]
+  created_at: string
+  updated_at: string
+}
+
 /** One ingredient line of a recipe: how much of a product one menu item uses. */
 export interface RecipeLine {
   ingredientProductId: string
@@ -106,6 +174,10 @@ export interface Product {
   variants: Variant[] | null
   /** The item is off the menu until this date (inclusive), or null. */
   unavailable_until: string | null
+  /** "service" costs no stock and is sold by appointment (salon). */
+  kind: "product" | "service" | null
+  /** How long a service takes, in minutes (salon). */
+  duration_min: number | null
   created_at: string
   updated_at: string
 }
@@ -132,6 +204,10 @@ export interface Customer {
   note: string | null
   created_at: string
   total_purchases: number
+  /** notes the stylist left on visits (salon) */
+  visit_notes: VisitNote[] | null
+  /** package credits the client still owns (salon) */
+  package_credits: PackageCredit[] | null
 }
 
 export interface Supplier {
@@ -156,6 +232,13 @@ export interface SaleItem {
   variant_name?: string | null
   modifier_ids?: string[] | null
   modifier_names?: string[] | null
+  /* salon */
+  service_staff_id?: string | null
+  commission_amt?: number | null
+  use_credit?: boolean
+  package_id?: string | null
+  credited_qty?: number | null
+  kind?: "product" | "service" | null
 }
 
 export interface Sale {
@@ -178,6 +261,10 @@ export interface Sale {
   order_type: string | null
   table_id: string | null
   ticket_status: TicketStatus | null
+  /** the stylist who served the visit (salon) */
+  staff_id: string | null
+  /** the appointment the visit came from (salon) */
+  appointment_id: string | null
   sale_date: string
   created_at: string
   items?: SaleItem[]
@@ -200,6 +287,12 @@ export interface Staff {
   photo_path: string | null
   active: boolean
   created_at: string
+  /** service product ids this stylist is trained for (salon) */
+  skills: string[] | null
+  /** working days (salon) */
+  schedule: StaffSchedule[] | null
+  /** share of a service price this stylist earns, in percent (salon) */
+  commission_pct: number | null
 }
 
 export type StockMoveReason = "purchase" | "sale" | "adjust" | "damage" | "return" | "count" | "opening"

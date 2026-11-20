@@ -13,6 +13,7 @@ import { readConnection } from "@/lib/api/bootstrap";
 import type { SyncConnection } from "@/lib/api/bootstrap";
 import { freshToken } from "@/lib/api/session";
 import { getSupabase } from "@/lib/api/supabase";
+import { configPatch, configPayload } from "./settings-config";
 import { BUSINESS_TYPES } from "@/lib/types";
 import type { BusinessType, Settings } from "@/lib/types";
 
@@ -29,6 +30,8 @@ type RemoteSettings = {
   theme?: unknown;
   next_order_no?: unknown;
   business_type?: unknown;
+  restaurant_config?: unknown;
+  salon_config?: unknown;
 };
 
 async function client() {
@@ -73,6 +76,7 @@ export async function pushSettings(conn?: SyncConnection | null): Promise<boolea
     theme: s.theme,
     next_order_no: s.nextOrderNo,
     business_type: s.businessType,
+    ...configPayload(s),
     updated_at: new Date().toISOString(),
   };
 
@@ -139,6 +143,9 @@ export async function pullSettings(conn?: SyncConnection | null): Promise<void> 
   ) {
     patch.businessType = r.business_type as BusinessType;
   }
+  // a remote business type may have just been adopted above — honour it for
+  // the config that comes with it
+  Object.assign(patch, configPatch(r, { ...s, businessType: patch.businessType ?? s.businessType }));
 
   if (Object.keys(patch).length > 0) usePos.getState().updateSettings(patch);
 }

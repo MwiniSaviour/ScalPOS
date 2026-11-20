@@ -18,6 +18,9 @@ import { usePos } from "./store";
 export type StaffRole = "owner" | "supervisor" | "cashier";
 export type StaffAction = "refund" | "editData" | "reports";
 
+/** A working day: day of week (0 = Sunday), start and end as "HH:MM". */
+export type StaffSchedule = { day: number; start: string; end: string };
+
 export type Staff = {
   id: string;
   name: string;
@@ -27,6 +30,13 @@ export type Staff = {
   createdAt: number;
   active: boolean;
   updatedAt?: number;
+  /* salon */
+  /** the services this staff member is trained for — product ids */
+  skills?: string[];
+  /** when this staff member works */
+  schedule?: StaffSchedule[];
+  /** the share of a service price this staff member earns, in percent */
+  commissionPct?: number;
 };
 
 export function roleLabel(role: StaffRole): string {
@@ -126,3 +136,25 @@ export function useCurrentStaff(): Staff | null {
   const cid = usePos((s) => s.currentStaffId);
   return pickCurrent(staff, cid);
 }
+
+/* --------------------------------- salon --------------------------------- */
+
+/**
+ * The active staff who can serve a service.
+ *
+ * Someone with skills set only appears for the services they are trained on;
+ * someone with no skills listed is assumed able to serve anything, so a shop
+ * that never fills skills in still gets a full picker.
+ */
+export function staffForService(
+  staff: Staff[],
+  productId: string,
+): Staff[] {
+  const active = staff.filter((s) => s.active);
+  const trained = active.filter((s) => (s.skills?.length ?? 0) > 0);
+  const matches = trained.filter((s) => s.skills?.includes(productId));
+  return matches.length > 0
+    ? matches
+    : active.filter((s) => (s.skills?.length ?? 0) === 0);
+}
+

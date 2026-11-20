@@ -1,13 +1,14 @@
 "use client";
 
 import { Card } from "@/components/ui/card";
-import { Bell, BellDot, ChevronRight, CircleUserRound } from "lucide-react";
+import { Bell, BellDot, CalendarDays, ChevronRight, CircleUserRound, Package } from "lucide-react";
 import { dateLong, timeAgo } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { paidOf, usePos } from "@/lib/store";
 import { useTerms } from "@/lib/terms";
 import { useNow } from "@/lib/now";
 import { hasOnboarded } from "@/lib/first-run";
+import { hasFeature } from "@/lib/features";
 import { cn } from "@/lib/ui";
 import { useCurrentStaff } from "@/lib/staff";
 import { StaffAvatar } from "./account-screen";
@@ -106,6 +107,40 @@ export default function HomeScreen() {
           </Link>
         </span>
       </header>
+
+      {/* salon quick actions */}
+      {hasFeature(settings.businessType, "appointments") && (
+        <div className="mt-4 grid grid-cols-2 gap-2.5">
+          <Link
+            href="/appointments"
+            className="press flex items-center gap-3 rounded-2xl border border-line2 bg-surface2 px-3.5 py-3"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-accent/12 text-accent">
+              <CalendarDays className="size-[20px]" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-semibold leading-tight text-ink">
+                Appointments
+              </span>
+              <span className="block text-[13px] text-ink3">Bookings today</span>
+            </span>
+          </Link>
+          <Link
+            href="/packages"
+            className="press flex items-center gap-3 rounded-2xl border border-line2 bg-surface2 px-3.5 py-3"
+          >
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-[14px] bg-violet/12 text-violet">
+              <Package className="size-[20px]" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-[15px] font-semibold leading-tight text-ink">
+                Packages
+              </span>
+              <span className="block text-[13px] text-ink3">Credits &amp; bundles</span>
+            </span>
+          </Link>
+        </div>
+      )}
 
       {/* today's sales */}
       <Link href="/reports" className="press mt-5 block">

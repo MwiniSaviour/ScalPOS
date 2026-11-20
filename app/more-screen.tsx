@@ -15,6 +15,12 @@ import { useTerms } from "@/lib/terms";
 import { hasFeature } from "@/lib/features";
 import { useEntitlement, planAllowsEnterprise } from "@/lib/entitlement";
 import { isDemoMode, enableDemo, exitDemo } from "@/lib/demo";
+import { demoBusinessTypes } from "@/lib/seed";
+import {
+  BusinessTypePicker,
+  businessTypeLabel,
+} from "@/components/ui/business-type-picker";
+import type { BusinessType } from "@/lib/types";
 import { listConflicts } from "@/lib/sync/outbox";
 import {
   affiliateShareUrl,
@@ -30,6 +36,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
+  CalendarDays,
   ChefHat,
   ChevronRight,
   CircleUserRound,
@@ -42,6 +49,7 @@ import {
   ScrollText,
   Settings,
   Store,
+  Ticket,
   Users,
   UsersRound,
   Warehouse,
@@ -59,6 +67,8 @@ export default function MoreScreen() {
   const enterprise = planAllowsEnterprise(status, plan);
   const [demoOpen, setDemoOpen] = useState(false);
   const [demo] = useState(() => isDemoMode());
+  const demoTypes = demoBusinessTypes();
+  const [demoType, setDemoType] = useState<BusinessType>("retail");
   const [signoutOpen, setSignoutOpen] = useState(false);
   const [conflictCount, setConflictCount] = useState(0);
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
@@ -184,6 +194,22 @@ export default function MoreScreen() {
               icon={<ChefHat className="size-[18px]" />}
               label="Kitchen"
               sub="Tickets through the kitchen"
+            />
+          )}
+          {hasFeature(settings.businessType, "appointments") && (
+            <RowLink
+              href="/appointments"
+              icon={<CalendarDays className="size-[18px]" />}
+              label="Appointments"
+              sub="The book of visits"
+            />
+          )}
+          {hasFeature(settings.businessType, "packages") && (
+            <RowLink
+              href="/packages"
+              icon={<Ticket className="size-[18px]" />}
+              label="Packages"
+              sub="Service packages and credits"
             />
           )}
           <RowLink
@@ -428,19 +454,45 @@ export default function MoreScreen() {
         confirmLabel="Sign out"
       />
 
-      <Confirm
-        open={demoOpen}
-        onClose={() => setDemoOpen(false)}
-        onConfirm={() => (demo ? exitDemo() : enableDemo())}
-        tone={demo ? "danger" : "neutral"}
-        title={demo ? "Exit demo mode?" : "Load demo data?"}
-        body={
-          demo
-            ? "Changes made in demo mode will be discarded and your real shop data — saved on this device before the demo — will be restored."
-            : "Your current shop data is saved on this device first. Demo products, customers and sales are for trying the app and never sync to your cloud account. You can restore your real data anytime from More → Data."
-        }
-        confirmLabel={demo ? "Restore my data" : "Load demo data"}
-      />
+      {demo ? (
+        <Confirm
+          open={demoOpen}
+          onClose={() => setDemoOpen(false)}
+          onConfirm={() => exitDemo()}
+          tone="danger"
+          title="Exit demo mode?"
+          body="Changes made in demo mode will be discarded and your real shop data — saved on this device before the demo — will be restored."
+          confirmLabel="Restore my data"
+        />
+      ) : (
+        <Sheet
+          open={demoOpen}
+          onClose={() => setDemoOpen(false)}
+          title="Load demo data"
+          footer={
+            <Button
+              block
+              onClick={() => {
+                enableDemo(demoType);
+              }}
+            >
+              Load {businessTypeLabel(demoType)} demo
+            </Button>
+          }
+        >
+          <p className="text-[13px] leading-5 text-ink3">
+            Pick the kind of shop you want to try. Demo products, customers and
+            sales are for trying the app and never sync to your cloud account.
+            Your real shop data is saved on this device first.
+          </p>
+          <BusinessTypePicker
+            value={demoType}
+            onChange={setDemoType}
+            values={demoTypes}
+            className="mt-4"
+          />
+        </Sheet>
+      )}
     </div>
   );
 }

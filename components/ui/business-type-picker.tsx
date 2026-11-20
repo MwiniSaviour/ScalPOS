@@ -43,18 +43,24 @@ export function BusinessTypePicker({
   value,
   onChange,
   className,
+  values,
 }: {
   value: BusinessType;
   onChange: (value: BusinessType) => void;
   className?: string;
+  /** limits the picker to some business types — the demo shop only has some */
+  values?: BusinessType[];
 }) {
+  const options = values
+    ? BUSINESS_TYPE_OPTIONS.filter((option) => values.includes(option.value))
+    : BUSINESS_TYPE_OPTIONS;
   return (
     <div
       role="radiogroup"
       aria-label="Business type"
       className={cn("grid grid-cols-2 gap-2.5", className)}
     >
-      {BUSINESS_TYPE_OPTIONS.map((option) => {
+      {options.map((option) => {
         const Icon = option.icon;
         const active = value === option.value;
         return (

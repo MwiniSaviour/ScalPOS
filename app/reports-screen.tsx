@@ -10,10 +10,11 @@ import { hasFeature } from "@/lib/features";
 import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
 import { orderTypeLabel } from "@/lib/restaurant";
+import { commissionReport } from "@/lib/salon";
 import { dueOf, usePos, useSettings } from "@/lib/store";
 import { useNow } from "@/lib/now";
 import { cn } from "@/lib/ui";
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, Smartphone, TriangleAlert, Utensils, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, HandCoins, Smartphone, TriangleAlert, Utensils, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Fragment, useMemo, useState } from "react";
@@ -33,12 +34,14 @@ export default function ReportsScreen() {
   const orders = usePos((s) => s.orders);
   const products = usePos((s) => s.products);
   const batches = usePos((s) => s.batches);
+  const staff = usePos((s) => s.staff);
   const settings = useSettings();
   const now = useNow();
   const [period, setPeriod] = useState<Period>("today");
 
   const showExpiry = hasFeature(settings.businessType, "expiry");
   const showMenuMix = hasFeature(settings.businessType, "order-types");
+  const showCommissions = hasFeature(settings.businessType, "commissions");
 
   const periodInfo = useMemo(() => {
     const days = PERIOD_DAYS[period];
@@ -184,6 +187,12 @@ export default function ReportsScreen() {
   const lowStock = useMemo(
     () => products.filter((p) => p.active && p.stock <= p.lowStockAt).sort((a, b) => a.stock - b.stock),
     [products],
+  );
+
+  /* commissions: what every stylist earned over the period */
+  const commissions = useMemo(
+    () => commissionReport(sold, staff, products),
+    [sold, staff, products],
   );
 
   /* expiry risk: batches still on the shelf that are expired or about to be */
@@ -465,6 +474,53 @@ export default function ReportsScreen() {
                     </span>
                   </div>
                 ))}
+              </>
+            )}
+          </Card>
+        </section>
+      )}
+
+      {/* commissions */}
+      {showCommissions && (
+        <section className="mt-6">
+          <Card inset>
+            <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
+              <h3 className="text-[15px] font-medium text-ink2">Commissions</h3>
+              <span className="text-[14px] text-ink3">
+                {period === "today" ? "today" : `last ${periodInfo.days} days`}
+              </span>
+            </div>
+            {commissions.rows.length === 0 ? (
+              <EmptyState
+                icon={<HandCoins className="size-7" />}
+                title="No service visits yet"
+                hint="Sell a service with a stylist on it and the commission shows up here."
+              />
+            ) : (
+              <>
+                {commissions.rows.map((r) => (
+                  <div key={r.staffId} className="flex items-center gap-3 px-4 py-3">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[16px] font-semibold leading-tight text-ink">
+                        {r.name}
+                      </span>
+                      <span className="mt-0.5 block text-[13px] text-ink3">
+                        {r.visits} {r.visits === 1 ? "visit" : "visits"} ·{" "}
+                        {fmtShort(r.revenue)} service
+                        {r.creditValue > 0 ? ` · ${fmtShort(r.creditValue)} credit` : ""}
+                      </span>
+                    </span>
+                    <span className="tabnum shrink-0 text-[16px] font-bold text-ink">
+                      {fmtMoney(r.commission)}
+                    </span>
+                  </div>
+                ))}
+                <div className="flex items-baseline justify-between gap-3 px-4 py-3.5">
+                  <span className="text-[15px] font-semibold text-ink">Total</span>
+                  <span className="tabnum text-[16px] font-extrabold text-ink">
+                    {fmtMoney(commissions.totals.commission)}
+                  </span>
+                </div>
               </>
             )}
           </Card>

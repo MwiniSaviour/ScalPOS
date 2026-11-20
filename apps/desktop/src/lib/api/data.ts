@@ -1,10 +1,15 @@
 import type {
+  Appointment,
+  AppointmentServiceLine,
+  AppointmentStatus,
   Category,
   Customer,
   Modifier,
   OrderPayStatus,
   OrderStatus,
   Pack,
+  PackageCredit,
+  PackageCreditLine,
   PaymentMethod,
   Product,
   ProductBatch,
@@ -15,14 +20,27 @@ import type {
   RestaurantTable,
   Sale,
   SaleItem,
+  ServicePackage,
   ShopSettings,
   Staff,
+  StaffSchedule,
   StockMove,
   Supplier,
   Variant,
+  VisitNote,
 } from "@/lib/types"
+import type { ImportOptions, ImportResult, ImportRow } from "@/lib/import/validate"
 import { getSupabase } from "@/lib/supabase/client"
-import { getOrgId } from "@/lib/auth/org"
+import { offlineMode } from "@/lib/offline-fetch"
+import { getOrgId, hasActiveShop } from "@/lib/auth/org"
+import { hasLocalShop, localSettings, updateLocalSettings, localProducts, localProduct, localCategories, localCustomers, localStaff, localAppointments, localPackages, localSales, localSale, deleteLocalAppointment, deleteLocalPackage, deleteLocalStaff } from "@/lib/offline/local-data"
+import type { LocalAppointmentInput } from "@/lib/offline/local-data"
+import { type LocalProductInput, createLocalProduct, updateLocalProduct, deleteLocalProduct, createLocalCategory, createLocalCustomer, updateLocalCustomer, deleteLocalCustomer, localAdjustStock, localFindByBarcode, saveLocalAppointment, saveLocalPackage, saveLocalStaff, localPlaceSale } from "@/lib/offline/local-adapters"
+
+/** Local-first mode: no cloud shop connected, so everything stays on this PC. */
+function localOnly(): boolean {
+  return hasLocalShop() && !hasActiveShop()
+}
 import { freshToken } from "@/lib/auth/session"
 
 type Row = Record<string, unknown>
@@ -50,6 +68,8 @@ type ProductRow = {
   modifiers: unknown
   variants: unknown
   unavailable_until: string | null
+  kind: string | null
+  duration_min: number | string | null
   created_at: string
   updated_at: string
 }
@@ -72,6 +92,8 @@ type CustomerRow = {
   address: string | null
   note: string | null
   created_at: string
+  visit_notes: unknown
+  package_credits: unknown
 }
 
 type SupplierRow = {
@@ -103,6 +125,9 @@ type StaffRow = {
   photo_path: string | null
   active: boolean | null
   created_at: string
+  skills: unknown
+  schedule: unknown
+  commission_pct: number | string | null
 }
 
 type SaleItemRow = {
@@ -116,6 +141,12 @@ type SaleItemRow = {
   variant_name: string | null
   modifier_ids: unknown
   modifier_names: unknown
+  service_staff_id: string | null
+  commission_amt: number | string | null
+  use_credit: boolean | null
+  package_id: string | null
+  credited_qty: number | string | null
+  kind: string | null
 }
 
 type PaymentRow = { method?: string; amount?: number | string }
@@ -134,9 +165,33 @@ type SaleRow = {
   order_type: string | null
   table_id: string | null
   ticket_status: string | null
+  staff_id: string | null
+  appointment_id: string | null
   completed_at: string | null
   created_at: string
   customer?: CustomerRow | CustomerRow[] | null
+}
+
+type AppointmentRow = {
+  id: string
+  customer_id: string | null
+  staff_id: string | null
+  service_lines: unknown
+  start: string
+  duration_min: number | string | null
+  status: string | null
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+type PackageRow = {
+  id: string
+  name: string | null
+  price: number | string | null
+  credits: unknown
+  created_at: string
+  updated_at: string
 }
 
 type SettingsRow = {
@@ -242,6 +297,25 @@ export interface StaffInput {
   phone?: string | null
   photo_path?: string | null
   active?: boolean
+  skills?: string[] | null
+  schedule?: StaffSchedule[] | null
+  commission_pct?: number | null
+}
+
+export interface AppointmentInput {
+  customer_id?: string | null
+  staff_id?: string | null
+  service_lines: AppointmentServiceLine[]
+  start: string
+  duration_min?: number
+  status?: AppointmentStatus
+  notes?: string
+}
+
+export interface PackageInput {
+  name: string
+  price: number
+  credits: PackageCreditLine[]
 }
 
 export const PRODUCT_SELECT = "*, category:categories(id,name,color)"
@@ -293,6 +367,80 @@ function mapStringList(raw: unknown): string[] | null {
   return out.length > 0 ? out : null
 }
 
+/* jsonb helpers for the salon columns — anything malformed is dropped */
+
+function mapVisitNotes(raw: unknown): VisitNote[] | null {
+  if (!Array.isArray(raw)) return null
+  const notes = raw
+    .filter((n): n is Record<string, unknown> => !!n && typeof n === "object")
+    .map((n) => ({ t: Number(n.t) || 0, text: String(n.text ?? "") }))
+    .filter((n) => n.text !== "")
+  return notes.length > 0 ? notes : null
+}
+
+function mapPackageCredits(raw: unknown): PackageCredit[] | null {
+  if (!Array.isArray(raw)) return null
+  const credits = raw
+    .filter((c): c is Record<string, unknown> => !!c && typeof c === "object")
+    .map((c) => {
+      const packageId = String(c.packageId ?? "")
+      const remaining = Number(c.remaining ?? 0)
+      if (!packageId || !Number.isFinite(remaining)) return null
+      return {
+        packageId,
+        remaining,
+        ...(typeof c.sourceOrderId === "string" ? { sourceOrderId: c.sourceOrderId } : {}),
+      } as PackageCredit
+    })
+    .filter((c): c is PackageCredit => c !== null)
+  return credits.length > 0 ? credits : null
+}
+
+function mapServiceLines(raw: unknown): AppointmentServiceLine[] {
+  if (!Array.isArray(raw)) return []
+  const lines: AppointmentServiceLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const line = entry as { productId?: unknown; price?: unknown; qty?: unknown }
+    const productId = typeof line.productId === "string" ? line.productId : ""
+    if (!productId) continue
+    const price = Number(line.price ?? 0)
+    const qty = Number(line.qty ?? 1)
+    lines.push({
+      productId,
+      price: Number.isFinite(price) ? price : 0,
+      ...(Number.isFinite(qty) && qty > 0 ? { qty } : {}),
+    })
+  }
+  return lines
+}
+
+function mapPackageCreditLines(raw: unknown): PackageCreditLine[] {
+  if (!Array.isArray(raw)) return []
+  const lines: PackageCreditLine[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== "object") continue
+    const line = entry as { productId?: unknown; qty?: unknown }
+    const productId = typeof line.productId === "string" ? line.productId : ""
+    const qty = Number(line.qty ?? 0)
+    if (!productId || !Number.isFinite(qty) || qty <= 0) continue
+    lines.push({ productId, qty })
+  }
+  return lines
+}
+
+function mapStaffSchedule(raw: unknown): StaffSchedule[] | null {
+  if (!Array.isArray(raw)) return null
+  const rows = raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+    .map((r) => ({
+      day: Number(r.day) || 0,
+      start: String(r.start ?? "09:00"),
+      end: String(r.end ?? "17:00"),
+    }))
+  return rows.length > 0 ? rows : null
+}
+
 function mapBatch(row: ProductBatchRow): ProductBatch {
   return {
     id: row.id,
@@ -337,6 +485,8 @@ function mapRow(row: ProductRow): Product {
     modifiers: mapOptions(row.modifiers) as Modifier[] | null,
     variants: mapOptions(row.variants) as Variant[] | null,
     unavailable_until: row.unavailable_until ?? null,
+    kind: row.kind === "service" || row.kind === "product" ? row.kind : null,
+    duration_min: row.duration_min == null ? null : Number(row.duration_min),
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
@@ -363,6 +513,8 @@ export function mapCustomer(row: CustomerRow, totalPurchases = 0): Customer {
     note: row.note ?? null,
     created_at: row.created_at,
     total_purchases: totalPurchases,
+    visit_notes: mapVisitNotes(row.visit_notes),
+    package_credits: mapPackageCredits(row.package_credits),
   }
 }
 
@@ -441,6 +593,41 @@ export function mapStaff(row: StaffRow): Staff {
     photo_path: row.photo_path ?? null,
     active: row.active !== false,
     created_at: row.created_at,
+    skills: mapStringList(row.skills),
+    schedule: mapStaffSchedule(row.schedule),
+    commission_pct: row.commission_pct == null ? null : Number(row.commission_pct),
+  }
+}
+
+const APPOINTMENT_STATUSES: AppointmentStatus[] = [
+  "booked", "arrived", "in-service", "done", "no-show", "cancelled",
+]
+
+export function mapAppointment(row: AppointmentRow): Appointment {
+  return {
+    id: row.id,
+    customer_id: row.customer_id ?? null,
+    staff_id: row.staff_id ?? null,
+    service_lines: mapServiceLines(row.service_lines),
+    start: row.start,
+    duration_min: Number(row.duration_min ?? 30),
+    status: APPOINTMENT_STATUSES.includes(row.status as AppointmentStatus)
+      ? (row.status as AppointmentStatus)
+      : "booked",
+    notes: row.notes ?? "",
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
+}
+
+export function mapPackage(row: PackageRow): ServicePackage {
+  return {
+    id: row.id,
+    name: row.name ?? "",
+    price: Number(row.price ?? 0),
+    credits: mapPackageCreditLines(row.credits),
+    created_at: row.created_at,
+    updated_at: row.updated_at,
   }
 }
 
@@ -459,6 +646,12 @@ function mapSaleItem(row: SaleItemRow): SaleItem {
     variant_name: row.variant_name ?? null,
     modifier_ids: mapStringList(row.modifier_ids),
     modifier_names: mapStringList(row.modifier_names),
+    service_staff_id: row.service_staff_id ?? null,
+    commission_amt: row.commission_amt == null ? null : Number(row.commission_amt),
+    use_credit: row.use_credit === true,
+    package_id: row.package_id ?? null,
+    credited_qty: row.credited_qty == null ? null : Number(row.credited_qty),
+    kind: row.kind === "service" || row.kind === "product" ? row.kind : null,
   }
 }
 
@@ -489,8 +682,9 @@ export function mapSale(row: SaleRow, items?: SaleItem[]): Sale {
     payments,
     order_type: row.order_type ?? null,
     table_id: row.table_id ?? null,
+    staff_id: row.staff_id ?? null,
+    appointment_id: row.appointment_id ?? null,
     ticket_status: (row.ticket_status === "queued" || row.ticket_status === "preparing"
-      || row.ticket_status === "ready" || row.ticket_status === "served"
       ? row.ticket_status : null) as Sale["ticket_status"],
     sale_date: row.completed_at ?? row.created_at,
     created_at: row.created_at,
@@ -518,7 +712,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
   if (orderIds.length === 0) return map
   const { data, error } = await db()
     .from("order_items")
-    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names")
+    .select("id,order_id,product_id,name,image_path,qty,price,cost,position,created_at,variant_id,variant_name,modifier_ids,modifier_names,service_staff_id,commission_amt,use_credit,package_id,credited_qty,kind")
     .in("order_id", orderIds)
     .order("position", { ascending: true })
   if (error) throw new Error(error.message)
@@ -531,6 +725,7 @@ async function itemsForOrders(orderIds: string[]): Promise<Map<string, SaleItem[
 }
 
 export async function fetchCategories(): Promise<Category[]> {
+  if (localOnly()) return localCategories()
   const { data, error } = await db()
     .from("categories")
     .select("*")
@@ -542,6 +737,7 @@ export async function fetchCategories(): Promise<Category[]> {
 }
 
 export async function fetchProducts(): Promise<Product[]> {
+  if (localOnly()) return localProducts()
   const { data, error } = await db()
     .from("products")
     .select(PRODUCT_SELECT)
@@ -553,6 +749,7 @@ export async function fetchProducts(): Promise<Product[]> {
 }
 
 export async function fetchProduct(id: string): Promise<Product | null> {
+  if (localOnly()) return localProduct(id)
   const { data, error } = await db()
     .from("products")
     .select(PRODUCT_SELECT)
@@ -565,6 +762,7 @@ export async function fetchProduct(id: string): Promise<Product | null> {
 }
 
 export async function createProduct(input: ProductInput): Promise<Product> {
+  if (localOnly()) return createLocalProduct(input)
   const payload: Row = {
     org_id: orgId(),
     local_id: makeLocalId(),
@@ -600,6 +798,7 @@ export async function createProduct(input: ProductInput): Promise<Product> {
 }
 
 export async function updateProduct(id: string, input: Partial<ProductInput>): Promise<Product> {
+  if (localOnly()) return updateLocalProduct(id, input)
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
   if (input.sku !== undefined) patch.sku = input.sku
@@ -636,6 +835,7 @@ export async function updateProduct(id: string, input: Partial<ProductInput>): P
 }
 
 export async function adjustStock(productId: string, delta: number, reason: string, ref?: string): Promise<void> {
+  if (localOnly()) return localAdjustStock(productId, delta)
   const { error } = await db().rpc("receive_stock_tx", {
     p_org: orgId(),
     p_product_id: productId,
@@ -668,6 +868,7 @@ export async function fetchStockMoves(productId: string): Promise<StockMove[]> {
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalProduct(id)
   const { error } = await db()
     .from("products")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString(), active: false })
@@ -677,6 +878,7 @@ export async function deleteProduct(id: string): Promise<void> {
 }
 
 export async function createCategory(input: CategoryInput): Promise<Category> {
+  if (localOnly()) return createLocalCategory(input)
   const payload: Row = { org_id: orgId(), local_id: makeLocalId(), name: input.name }
   // `color` is NOT NULL with a palette default — omit it so the default applies
   // instead of writing an explicit null.
@@ -722,6 +924,7 @@ export async function deleteCategory(id: string): Promise<void> {
 }
 
 export async function fetchCustomers(): Promise<Customer[]> {
+  if (localOnly()) return localCustomers()
   const { data, error } = await db()
     .from("customers")
     .select("*")
@@ -750,6 +953,7 @@ async function customerOrderTotals(customerIds: string[]): Promise<Map<string, n
 }
 
 export async function fetchCustomer(id: string): Promise<Customer | null> {
+  if (localOnly()) return (await localCustomers()).find((c) => c.id === id) ?? null
   const { data, error } = await db()
     .from("customers")
     .select("*")
@@ -764,6 +968,7 @@ export async function fetchCustomer(id: string): Promise<Customer | null> {
 }
 
 export async function createCustomer(input: CustomerInput): Promise<Customer> {
+  if (localOnly()) return createLocalCustomer(input)
   const { data, error } = await db()
     .from("customers")
     .insert({
@@ -781,6 +986,7 @@ export async function createCustomer(input: CustomerInput): Promise<Customer> {
 }
 
 export async function updateCustomer(id: string, input: Partial<CustomerInput>): Promise<Customer> {
+  if (localOnly()) return updateLocalCustomer(id, input)
   const patch: Row = {}
   if (input.name !== undefined) patch.name = input.name
   if (input.phone !== undefined) patch.phone = input.phone
@@ -798,12 +1004,140 @@ export async function updateCustomer(id: string, input: Partial<CustomerInput>):
 }
 
 export async function deleteCustomer(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalCustomer(id)
   const { error } = await db()
     .from("customers")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
     .eq("org_id", orgId())
     .eq("id", id)
   check(null, error as unknown as { message: string } | null)
+}
+
+// ---------- salon ----------
+
+export async function fetchAppointments(): Promise<Appointment[]> {
+  if (localOnly()) return localAppointments()
+  const { data, error } = await db()
+    .from("appointments")
+    .select("*")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("start", { ascending: true })
+  const rows = check<AppointmentRow[]>(data, error)
+  return rows.map(mapAppointment)
+}
+
+export async function createAppointment(input: AppointmentInput): Promise<Appointment> {
+  if (localOnly()) return saveLocalAppointment(input)
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    customer_id: input.customer_id ?? null,
+    staff_id: input.staff_id ?? null,
+    service_lines: input.service_lines,
+    start: input.start,
+    duration_min: input.duration_min ?? 30,
+    status: input.status ?? "booked",
+    notes: input.notes ?? "",
+  }
+  const { data, error } = await db().from("appointments").insert(payload).select("*").single()
+  return mapAppointment(check<AppointmentRow>(data, error))
+}
+
+export async function updateAppointment(id: string, input: Partial<AppointmentInput>): Promise<Appointment> {
+  if (localOnly()) return saveLocalAppointment({ customer_id: null, staff_id: null, service_lines: [], start: new Date().toISOString(), ...input } as LocalAppointmentInput, id)
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.customer_id !== undefined) patch.customer_id = input.customer_id
+  if (input.staff_id !== undefined) patch.staff_id = input.staff_id
+  if (input.service_lines !== undefined) patch.service_lines = input.service_lines
+  if (input.start !== undefined) patch.start = input.start
+  if (input.duration_min !== undefined) patch.duration_min = input.duration_min
+  if (input.status !== undefined) patch.status = input.status
+  if (input.notes !== undefined) patch.notes = input.notes
+  const { data, error } = await db()
+    .from("appointments")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("*")
+    .single()
+  return mapAppointment(check<AppointmentRow>(data, error))
+}
+
+export async function deleteAppointment(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalAppointment(id)
+  const { error } = await db()
+    .from("appointments")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+export async function fetchPackages(): Promise<ServicePackage[]> {
+  if (localOnly()) return localPackages()
+  const { data, error } = await db()
+    .from("packages")
+    .select("*")
+    .eq("org_id", orgId())
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+  const rows = check<PackageRow[]>(data, error)
+  return rows.map(mapPackage)
+}
+
+export async function createPackage(input: PackageInput): Promise<ServicePackage> {
+  if (localOnly()) return saveLocalPackage(input)
+  const payload: Row = {
+    org_id: orgId(),
+    local_id: makeLocalId(),
+    name: input.name.trim(),
+    price: input.price,
+    credits: input.credits,
+  }
+  const { data, error } = await db().from("packages").insert(payload).select("*").single()
+  return mapPackage(check<PackageRow>(data, error))
+}
+
+export async function updatePackage(id: string, input: Partial<PackageInput>): Promise<ServicePackage> {
+  const current = localOnly() ? (await localPackages()).find((p) => p.id === id) : null
+  if (localOnly()) return saveLocalPackage({ name: current?.name ?? "", price: current?.price ?? 0, credits: current?.credits ?? [], ...input }, id)
+  const patch: Row = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined) patch.name = input.name.trim()
+  if (input.price !== undefined) patch.price = input.price
+  if (input.credits !== undefined) patch.credits = input.credits
+  const { data, error } = await db()
+    .from("packages")
+    .update(patch)
+    .eq("org_id", orgId())
+    .eq("id", id)
+    .select("*")
+    .single()
+  return mapPackage(check<PackageRow>(data, error))
+}
+
+export async function deletePackage(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalPackage(id)
+  const { error } = await db()
+    .from("packages")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("org_id", orgId())
+    .eq("id", id)
+  check(null, error as unknown as { message: string } | null)
+}
+
+/** Stamp the commission each service line earned at sale time. */
+export function withCommissions<T extends { price: number; qty: number; service_staff_id?: string | null; commission_amt?: number | null }>(
+  items: T[],
+  staff: Pick<Staff, "id" | "commission_pct">[],
+): T[] {
+  return items.map((item) => {
+    if (!item.service_staff_id) return item
+    const pct = staff.find((s) => s.id === item.service_staff_id)?.commission_pct ?? 0
+    if (!(pct > 0)) return item
+    const amount = Number(item.price ?? 0) * Number(item.qty ?? 1) * pct / 100
+    return { ...item, commission_amt: Math.round(amount * 100) / 100 }
+  })
 }
 
 // ---------- restaurant ----------
@@ -965,16 +1299,33 @@ export async function setTicketStatus(orderId: string, status: Sale["ticket_stat
 
 export interface SaleInput {
   customer_id?: string | null
-  items: { product_id: string | null; name: string; image_path?: string | null; qty: number; price: number; cost?: number }[]
+  items: {
+    product_id: string | null
+    name: string
+    image_path?: string | null
+    qty: number
+    price: number
+    cost?: number
+    /* salon */
+    service_staff_id?: string | null
+    commission_amt?: number | null
+    use_credit?: boolean
+    package_id?: string | null
+    credited_qty?: number | null
+    kind?: "product" | "service" | null
+  }[]
   payments: { method: string; amount: number }[]
   subtotal: number
   discount: number
   tax: number
   total: number
   note?: string | null
+  staff_id?: string | null
+  appointment_id?: string | null
 }
 
 export async function placeSale(input: SaleInput): Promise<Sale> {
+  if (localOnly()) return localPlaceSale(input)
   const client = db()
   const { data: settingsRow, error: settingsError } = await client
     .from("settings")
@@ -1006,9 +1357,81 @@ export async function placeSale(input: SaleInput): Promise<Sale> {
     const res = await client.from("orders").select(select).eq("local_id", localId).maybeSingle()
     fetched = check<SaleRow | null>(res.data, res.error as unknown as { message: string } | null)
   }
+  if (!fetched && offlineMode()) {
+    // the RPC write is queued for replay — show the sale locally now so the
+    // register can keep moving without a connection
+    return offlineSale(input, localId)
+  }
   if (!fetched) throw new Error("Order was placed but could not be read back")
+  // the order RPC predates salon — add the visit's stylist and booking after
+  // the fact, keeping the link for the desktop appointment view
+  if (input.staff_id || input.appointment_id) {
+    const patch: Row = {}
+    if (input.staff_id) patch.staff_id = input.staff_id
+    if (input.appointment_id) patch.appointment_id = input.appointment_id
+    const updated = await client
+      .from("orders")
+      .update(patch)
+      .eq("org_id", orgId())
+      .eq("id", fetched.id)
+      .select("staff_id,appointment_id")
+      .maybeSingle()
+    if (!updated.error && updated.data) {
+      fetched.staff_id = (updated.data as { staff_id?: string | null }).staff_id ?? null
+      fetched.appointment_id = (updated.data as { appointment_id?: string | null }).appointment_id ?? null
+    }
+  }
   const items = await itemsForOrders([fetched.id])
   return mapOrderWithCustomer(fetched, items.get(fetched.id) ?? [])
+}
+
+/** The receipt shown for a sale that is queued for later upload. */
+function offlineSale(input: SaleInput, localId: string): Sale {
+  const now = new Date().toISOString()
+  const paid = input.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+  const items: SaleItem[] = input.items.map((it, i) => ({
+    id: `${localId}#${i}`,
+    sale_id: localId,
+    product_id: it.product_id ?? null,
+    product_name: it.name,
+    quantity: it.qty,
+    unit_price: it.price,
+    subtotal: Math.round(it.qty * it.price * 100) / 100,
+    variant_id: null,
+    variant_name: null,
+    modifier_ids: null,
+    modifier_names: null,
+    service_staff_id: it.service_staff_id ?? null,
+    commission_amt: it.commission_amt ?? null,
+    use_credit: it.use_credit ?? false,
+    package_id: it.package_id ?? null,
+    credited_qty: it.credited_qty ?? null,
+    kind: it.kind ?? null,
+  }))
+  const method = (input.payments[0]?.method ?? "cash") as PaymentMethod
+  return {
+    id: localId,
+    invoice_no: localId,
+    customer_id: input.customer_id ?? null,
+    employee_id: null,
+    subtotal: input.subtotal,
+    tax: input.tax,
+    discount: input.discount,
+    total: input.total,
+    payment_method: method,
+    payment_status: paid >= input.total ? "paid" : "pending",
+    status: paid >= input.total ? "completed" : "pending",
+    pay_status: paid >= input.total ? "paid" : paid > 0 ? "partial" : "unpaid",
+    payments: input.payments.map((p) => ({ method: p.method as PaymentMethod, amount: p.amount })),
+    order_type: null,
+    table_id: null,
+    ticket_status: null,
+    staff_id: input.staff_id ?? null,
+    appointment_id: input.appointment_id ?? null,
+    sale_date: now,
+    created_at: now,
+    items,
+  }
 }
 
 export function buildOrderLocalId(nextNo: number): string {
@@ -1020,6 +1443,7 @@ export function buildOrderLocalId(nextNo: number): string {
 }
 
 export async function fetchSales(): Promise<Sale[]> {
+  if (localOnly()) return localSales()
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1033,6 +1457,7 @@ export async function fetchSales(): Promise<Sale[]> {
 }
 
 export async function fetchSale(id: string): Promise<Sale | null> {
+  if (localOnly()) return localSale(id)
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1047,6 +1472,7 @@ export async function fetchSale(id: string): Promise<Sale | null> {
 }
 
 export async function fetchSaleByLocalId(localId: string): Promise<Sale | null> {
+  if (localOnly()) return (await localSales()).find((s) => s.invoice_no === localId) ?? null
   const { data, error } = await db()
     .from("orders")
     .select(orderSelect())
@@ -1088,6 +1514,7 @@ export async function recordOrderPayment(
 }
 
 export async function fetchSettings(): Promise<ShopSettings | null> {
+  if (localOnly()) return localSettings()
   const { data, error } = await db().from("settings").select("*").eq("org_id", orgId()).maybeSingle()
   const row = check<SettingsRow | null>(data, error as unknown as { message: string } | null)
   if (!row) return null
@@ -1112,6 +1539,7 @@ export function mapSettings(row: SettingsRow): ShopSettings {
 }
 
 export async function updateSettings(input: Partial<ShopSettings>): Promise<ShopSettings> {
+  if (localOnly()) return updateLocalSettings(input)
   const patch: Row = { ...input }
   delete patch.next_order_no
   const { data, error } = await db().from("settings").update(patch).eq("org_id", orgId()).select("*").single()
@@ -1120,6 +1548,7 @@ export async function updateSettings(input: Partial<ShopSettings>): Promise<Shop
 }
 
 export async function fetchStaff(): Promise<Staff[]> {
+  if (localOnly()) return localStaff()
   const { data, error } = await db()
     .from("staff")
     .select("*")
@@ -1131,6 +1560,7 @@ export async function fetchStaff(): Promise<Staff[]> {
 }
 
 export async function upsertStaff(id: string | null, input: StaffInput): Promise<Staff> {
+  if (localOnly()) return saveLocalStaff({ ...input, id })
   const payload: Row = {
     name: input.name.trim(),
     role: input.role,
@@ -1138,6 +1568,9 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
     active: input.active !== false,
   }
   if (input.photo_path !== undefined) payload.photo_path = input.photo_path ?? ""
+  if (input.skills !== undefined) payload.skills = input.skills ?? []
+  if (input.schedule !== undefined) payload.schedule = input.schedule ?? []
+  if (input.commission_pct !== undefined) payload.commission_pct = input.commission_pct ?? null
   if (id) {
     const { data, error } = await db()
       .from("staff")
@@ -1160,6 +1593,7 @@ export async function upsertStaff(id: string | null, input: StaffInput): Promise
 }
 
 export async function deleteStaff(id: string): Promise<void> {
+  if (localOnly()) return deleteLocalStaff(id)
   const { error } = await db()
     .from("staff")
     .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
@@ -1531,6 +1965,7 @@ async function applyDerivedStock(
 }
 
 export async function findProductByBarcode(barcode: string): Promise<Product | null> {
+  if (localOnly()) return localFindByBarcode(barcode)
   const client = db()
   const { data, error } = await client
     .from("products")
@@ -1541,4 +1976,99 @@ export async function findProductByBarcode(barcode: string): Promise<Product | n
     .maybeSingle()
   const row = check<ProductRow | null>(data, error)
   return row ? mapRow(row) : null
+}
+
+export async function importProducts(rows: ImportRow[], options: ImportOptions): Promise<ImportResult> {
+  if (rows.length === 0) return { created: 0, updated: 0, skipped: 0 }
+
+  if (localOnly()) {
+    const products = [...(await localProducts())]
+    const categories = [...(await localCategories())]
+    let created = 0
+    let updated = 0
+    let skipped = 0
+
+    const findProduct = (row: ImportRow): Product | undefined => {
+      if (row.barcode) {
+        const barcode = row.barcode.toLowerCase()
+        const byBarcode = products.find((product) => (product.barcode ?? "").trim().toLowerCase() === barcode)
+        if (byBarcode) return byBarcode
+      }
+      if (row.sku) {
+        const sku = row.sku.toLowerCase()
+        return products.find((product) => (product.sku ?? "").trim().toLowerCase() === sku)
+      }
+      return undefined
+    }
+
+    const resolveCategory = async (name: string): Promise<string | null> => {
+      if (!name) return null
+      const key = name.toLowerCase()
+      const existing = categories.find((category) => category.name.trim().toLowerCase() === key)
+      if (existing) return existing.id
+      if (!options.createCategories) return null
+      const category = await createLocalCategory({ name: name.trim() })
+      categories.push(category)
+      return category.id
+    }
+
+    for (const row of rows) {
+      const match = findProduct(row)
+      const categoryId = await resolveCategory(row.category)
+      if (match) {
+        if (!options.updateExisting) {
+          skipped += 1
+          continue
+        }
+        const patch: Partial<LocalProductInput> = {
+          name: row.name,
+          price: row.price,
+          cost_price: row.cost_price,
+          unit: row.unit,
+          low_stock_at: row.low_stock_at,
+          active: row.active,
+          ...(row.sku ? { sku: row.sku } : {}),
+          ...(row.barcode ? { barcode: row.barcode } : {}),
+          ...(row.category && categoryId ? { category_id: categoryId } : {}),
+        }
+        await updateLocalProduct(match.id, patch)
+        if (options.setStock && row.stock !== match.stock) {
+          await localAdjustStock(match.id, row.stock - match.stock)
+        }
+        const next = await localProduct(match.id)
+        if (next) {
+          const index = products.findIndex((product) => product.id === match.id)
+          if (index >= 0) products[index] = next
+        }
+        updated += 1
+        continue
+      }
+
+      const product = await createLocalProduct({
+        name: row.name,
+        sku: row.sku || undefined,
+        barcode: row.barcode || null,
+        price: row.price,
+        cost_price: row.cost_price,
+        stock: row.stock,
+        category_id: categoryId,
+        description: row.description || null,
+        unit: row.unit,
+        low_stock_at: row.low_stock_at,
+        active: row.active,
+      })
+      products.push(product)
+      created += 1
+    }
+    return { created, updated, skipped }
+  }
+
+  const { data, error } = await db().rpc("import_products", {
+    p_org: orgId(),
+    p_rows: rows,
+    p_update_existing: options.updateExisting,
+    p_set_stock: options.setStock,
+    p_create_categories: options.createCategories,
+  })
+  return check<ImportResult>(data, error as unknown as { message: string } | null)
 }

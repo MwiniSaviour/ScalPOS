@@ -23,18 +23,32 @@ import {
   recipeDraw,
 } from "./restaurant";
 import { id, orderId, startOfDay } from "./format";
+import {
+  commissionOf,
+  creditAwareUnitPrices,
+  creditPrice,
+  creditsOf,
+  isServiceLine,
+  primaryStaffOf,
+  restoreCredits,
+  spendCredits,
+  voidCreditsFrom,
+} from "./salon";
 import { pruneImages } from "./image-store";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
 import { notifyLocal } from "./notify";
 import { insertLowStockNotification } from "./api/notifications";
 import type { Staff } from "./staff";
 import type {
+  Appointment,
+  AppointmentStatus,
   Batch,
   Category,
   CartLine,
   Customer,
   Order,
   OrderItem,
+  Package,
   Payment,
   PaymentMethod,
   Product,
@@ -71,6 +85,10 @@ export function payStatusOf(o: Order): PayStatusCalc {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+/* ------------------------------- salon helpers ------------------------------ */
+
+/** The salon helpers live in lib/salon.ts so they can be unit tested. */
 
 type ProductLike = {
   id: string;
@@ -199,6 +217,9 @@ type PosState = {
   tables: RestaurantTable[];
   staff: Staff[];
   currentStaffId: string | null;
+  /* salon */
+  appointments: Appointment[];
+  packages: Package[];
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -210,6 +231,8 @@ type PosState = {
   cartOrderType: string | null;
   cartTableId: string | null;
   cartTabOrderId: string | null;
+  /* salon — the appointment the cart in progress belongs to */
+  cartAppointmentId: string | null;
 
   /* lifecycle */
   rehydrate: () => void;
@@ -225,6 +248,10 @@ type PosState = {
       variantName?: string;
       modifierIds?: string[];
       modifierNames?: string[];
+      /* salon */
+      staffId?: string;
+      useCredit?: boolean;
+      packageId?: string;
     },
   ) => void;
   setCartContext: (patch: {
@@ -233,6 +260,13 @@ type PosState = {
     tabOrderId?: string | null;
   }) => void;
   setCartQty: (key: string, qty: number) => void;
+  /** staff / package-credit options on one cart line */
+  setCartLine: (
+    key: string,
+    patch: { staffId?: string | null; useCredit?: boolean; packageId?: string | null },
+  ) => void;
+  /** a package purchase — the package itself is the line, not a product */
+  addPackageToCart: (packageId: string, qty?: number) => void;
   clearCart: () => void;
   setCartCustomer: (cid: string | null) => void;
   setCartDiscount: (n: number) => void;
@@ -281,6 +315,22 @@ type PosState = {
   deleteStaff: (sid: string) => void;
   setCurrentStaff: (sid: string) => void;
 
+  /* salon */
+  upsertAppointment: (
+    a: Partial<Appointment> & {
+      start: string;
+      serviceLines: { productId: string; price: number }[];
+    },
+  ) => Appointment;
+  setAppointmentStatus: (id: string, status: AppointmentStatus) => void;
+  deleteAppointment: (id: string) => void;
+  upsertPackage: (p: Partial<Package> & { name: string; price: number }) => Package;
+  deletePackage: (id: string) => void;
+  /** how many credits of a package a client still owns */
+  creditBalanceOf: (customerId: string | null, packageId: string) => number;
+  /** tags the cart with the appointment it is selling */
+  setCartAppointment: (id: string | null) => void;
+
   /* settings */
   updateSettings: (patch: Partial<Settings>) => void;
 
@@ -303,6 +353,8 @@ export const usePos = create<PosState>()(
       tables: [],
       staff: [],
       currentStaffId: null,
+      appointments: [],
+      packages: [],
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -313,6 +365,7 @@ export const usePos = create<PosState>()(
       cartOrderType: null,
       cartTableId: null,
       cartTabOrderId: null,
+      cartAppointmentId: null,
 
       rehydrate: () => {
         const persisted =
@@ -351,12 +404,14 @@ export const usePos = create<PosState>()(
         if (!p) return;
         const cart = [...get().cart];
         const packIdx = opts?.packIdx;
-        // a different variant or modifier set is a different line on the ticket
+        // a different variant, modifier set or stylist is a different line
         const key = cartLineKey({
           productId: pid,
           packIdx,
           variantId: opts?.variantId,
           modifierIds: opts?.modifierIds,
+          staffId: opts?.staffId,
+          packageId: opts?.packageId,
         });
         const i = cart.findIndex((l) => cartLineKey(l) === key);
         const factor = packFactor(p, packIdx);
@@ -366,7 +421,8 @@ export const usePos = create<PosState>()(
         const onHand = sellableStock(get().batches, pid);
         const base = get().batches.some((b) => b.productId === pid) ? onHand : p.stock;
         const available = base <= 0 ? 0 : Math.floor(base / factor);
-        const capped = Math.min(want, available);
+        // a service is sold by appointment — it never comes off a shelf
+        const capped = p.kind === "service" ? want : Math.min(want, available);
         if (capped <= 0) {
           get().toast(p.stock <= 0 ? "Out of stock" : "Not enough stock for a full pack", "error");
           return;
@@ -385,6 +441,9 @@ export const usePos = create<PosState>()(
           ...(opts?.modifierNames && opts.modifierNames.length
             ? { modifierNames: opts.modifierNames }
             : {}),
+          ...(opts?.staffId ? { staffId: opts.staffId } : {}),
+          ...(opts?.useCredit ? { useCredit: true } : {}),
+          ...(opts?.packageId ? { packageId: opts.packageId } : {}),
         };
         if (i >= 0) cart[i] = { ...cart[i], ...line };
         else cart.push(line);
@@ -402,9 +461,44 @@ export const usePos = create<PosState>()(
         const onHand = sellableStock(s.batches, line.productId);
         const base = s.batches.some((b) => b.productId === line.productId) ? onHand : (p?.stock ?? 0);
         const available = base > 0 ? Math.floor(base / factor) : 0;
-        const capped = Math.max(0, Math.min(qty, available));
+        // a service is not stock — the register may hold as many as it sells
+        const capped =
+          p?.kind === "service" ? Math.max(0, qty) : Math.max(0, Math.min(qty, available));
         if (capped === 0) cart = cart.filter((l) => cartLineKey(l) !== key);
         else cart[i] = { ...line, qty: capped };
+        set({ cart, cartUpdatedAt: Date.now() });
+      },
+
+      setCartLine: (key, patch) => {
+        const s = get();
+        let cart = [...s.cart];
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
+        if (i < 0) return;
+        const line: CartLine = { ...cart[i] };
+        if (patch.staffId !== undefined) {
+          if (patch.staffId) line.staffId = patch.staffId;
+          else delete line.staffId;
+        }
+        if (patch.packageId !== undefined) {
+          if (patch.packageId) line.packageId = patch.packageId;
+          else delete line.packageId;
+        }
+        if (patch.useCredit !== undefined) {
+          if (patch.useCredit) line.useCredit = true;
+          else delete line.useCredit;
+        }
+        // a credit line without a package cannot be priced — drop the flag
+        if (line.useCredit && !line.packageId) delete line.useCredit;
+        const nextKey = cartLineKey(line);
+        // the staff/package are part of a line's identity: folding a line into
+        // an existing twin keeps one row and one quantity
+        const j = cart.findIndex((l, idx) => idx !== i && cartLineKey(l) === nextKey);
+        if (j >= 0) {
+          cart[j] = { ...cart[j], qty: cart[j].qty + line.qty };
+          cart = cart.filter((_, idx) => idx !== i);
+        } else {
+          cart[i] = line;
+        }
         set({ cart, cartUpdatedAt: Date.now() });
       },
 
@@ -418,7 +512,23 @@ export const usePos = create<PosState>()(
           cartOrderType: null,
           cartTableId: null,
           cartTabOrderId: null,
+          cartAppointmentId: null,
         }),
+
+      addPackageToCart: (packageId, qty = 1) => {
+        const s = get();
+        const pkg = s.packages.find((p) => p.id === packageId);
+        if (!pkg) return;
+        const cart = [...s.cart];
+        // a package line is its own thing — the package id is the line id
+        const key = cartLineKey({ productId: pkg.id, packageId: pkg.id });
+        const i = cart.findIndex((l) => cartLineKey(l) === key);
+        if (i >= 0) cart[i] = { ...cart[i], qty: cart[i].qty + qty };
+        else cart.push({ productId: pkg.id, qty, packageId: pkg.id });
+        set({ cart, cartUpdatedAt: Date.now() });
+      },
+
+      setCartAppointment: (id) => set({ cartAppointmentId: id, cartUpdatedAt: Date.now() }),
 
       setCartContext: (patch) => {
         set({
@@ -460,48 +570,113 @@ export const usePos = create<PosState>()(
         }
         const tab = tabId ? s.orders.find((o) => o.id === tabId && o.status === "pending") : undefined;
 
+        // A package purchase is not a product — it has no stock and no catalog
+        // row, so it is priced from the package itself.
+        const packageCartLines = s.cart.filter((l) => l.packageId && !l.useCredit);
+        const productCartLines = s.cart.filter((l) => !(l.packageId && !l.useCredit));
+
         // Work out the lines and the batch allocations (FEFO) up front.
-        const plan = planSale(s.cart, s.products, s.batches, { now, recipes: s.recipes });
-        if (plan.lines.length === 0) return null;
+        const plan = planSale(productCartLines, s.products, s.batches, { now, recipes: s.recipes });
+        const packageItems: OrderItem[] = [];
+        for (const l of packageCartLines) {
+          const pkg = s.packages.find((p) => p.id === l.packageId);
+          if (!pkg) continue;
+          packageItems.push({
+            productId: pkg.id,
+            name: pkg.name,
+            imageUrl: "",
+            qty: l.qty,
+            price: pkg.price,
+            cost: 0,
+            packageId: pkg.id,
+          });
+        }
+        if (plan.lines.length === 0 && packageItems.length === 0) return null;
         if (plan.shortfall > 0) {
           get().toast(`Not enough stock for ${plan.shortageProduct ?? "an item"}`, "error");
           return null;
         }
+        // A client pays visits with the credits of a package they bought. The
+        // balance is read once and spent line by line, so two credit lines can
+        // never claim the same credit.
+        const creditCustomer = s.cartCustomerId
+          ? (s.customers.find((c) => c.id === s.cartCustomerId) ?? null)
+          : null;
+        const creditBalances = new Map<string, number>();
+        const creditSpend = new Map<string, number>();
+        for (const c of creditCustomer?.packageCredits ?? []) {
+          creditBalances.set(c.packageId, (creditBalances.get(c.packageId) ?? 0) + Math.max(0, c.remaining));
+        }
 
-        const cartItems: OrderItem[] = plan.lines.map((pl) => ({
-          productId: pl.product.id,
-          name: pl.product.name,
-          imageUrl: pl.product.imageUrl,
-          qty: pl.line.qty,
-          price: pl.line.price ?? pl.product.price,
-          cost: round2(pl.product.cost * pl.factor),
-          baseQty: pl.baseQty,
-          ...(pl.allocations.length > 0 ? { batchAllocations: pl.allocations } : {}),
-          ...(pl.packName ? { packName: pl.packName } : {}),
-          ...(pl.line.variantId ? { variantId: pl.line.variantId } : {}),
-          ...(pl.line.variantName ? { variantName: pl.line.variantName } : {}),
-          ...(pl.line.modifierIds && pl.line.modifierIds.length
-            ? { modifierIds: pl.line.modifierIds }
-            : {}),
-          ...(pl.line.modifierNames && pl.line.modifierNames.length
-            ? { modifierNames: pl.line.modifierNames }
-            : {}),
-          ...(rxRef && pl.product.prescriptionOnly ? { prescriptionRef: rxRef } : {}),
-          ...(itemConsumption({ productId: pl.product.id, qty: pl.line.qty }, s.recipes).length
-            ? {
-                recipeConsumption: itemConsumption(
-                  { productId: pl.product.id, qty: pl.line.qty },
-                  s.recipes,
-                ),
-              }
-            : {}),
-        }));
+        // A package carries its credits to a client — without one attached the
+        // credits would land nowhere, so the sale cannot go through.
+        if (packageItems.length > 0 && !creditCustomer) {
+          get().toast("Attach a customer to sell a package", "error");
+          return null;
+        }
+
+        const cartItems: OrderItem[] = plan.lines.map((pl) => {
+          const isService = pl.product.kind === "service";
+          const staffId = pl.line.staffId;
+          // a credit line is priced by what the client still owns
+          let price = pl.line.price ?? pl.product.price;
+          let creditedQty: number | undefined;
+          const pkgId = pl.line.packageId;
+          if (pl.line.useCredit && pkgId) {
+            const balance = creditBalances.get(pkgId) ?? 0;
+            const covered = Math.min(balance, pl.line.qty);
+            if (covered > 0) {
+              creditBalances.set(pkgId, balance - covered);
+              creditSpend.set(pkgId, (creditSpend.get(pkgId) ?? 0) + covered);
+              creditedQty = covered;
+              // what the credit does not cover is priced normally
+              price = creditPrice(pl.product.price, pl.line.qty, covered);
+            }
+          }
+          const item: OrderItem = {
+            productId: pl.product.id,
+            name: pl.product.name,
+            imageUrl: pl.product.imageUrl,
+            qty: pl.line.qty,
+            price,
+            cost: round2(pl.product.cost * pl.factor),
+            baseQty: pl.baseQty,
+            ...(pl.allocations.length > 0 ? { batchAllocations: pl.allocations } : {}),
+            ...(pl.packName ? { packName: pl.packName } : {}),
+            ...(pl.line.variantId ? { variantId: pl.line.variantId } : {}),
+            ...(pl.line.variantName ? { variantName: pl.line.variantName } : {}),
+            ...(pl.line.modifierIds && pl.line.modifierIds.length
+              ? { modifierIds: pl.line.modifierIds }
+              : {}),
+            ...(pl.line.modifierNames && pl.line.modifierNames.length
+              ? { modifierNames: pl.line.modifierNames }
+              : {}),
+            ...(rxRef && pl.product.prescriptionOnly ? { prescriptionRef: rxRef } : {}),
+            ...(itemConsumption({ productId: pl.product.id, qty: pl.line.qty }, s.recipes).length
+              ? {
+                  recipeConsumption: itemConsumption(
+                    { productId: pl.product.id, qty: pl.line.qty },
+                    s.recipes,
+                  ),
+                }
+              : {}),
+            ...(isService ? { kind: "service" as const } : {}),
+            ...(isService && staffId ? { serviceStaffId: staffId } : {}),
+            ...(creditedQty !== undefined
+              ? { useCredit: true, creditedQty, packageId: pkgId }
+              : {}),
+          };
+          if (isService && staffId) {
+            item.commissionAmt = commissionOf(item, s.staff);
+          }
+          return item;
+        });
 
         // An open tab keeps the items it already had; the cart only carries
         // the difference.
         const items: OrderItem[] = tab
           ? mergeTabItems(tab.items, s.cart, s.products, s.recipes)
-          : cartItems;
+          : [...cartItems, ...packageItems];
         if (items.length === 0) return null;
 
         const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -512,6 +687,10 @@ export const usePos = create<PosState>()(
         const paid = payments.reduce((sum, p) => sum + p.amount, 0);
         const credit = Math.max(0, total - paid);
         const status = credit > 0 ? "pending" : "completed";
+        // the visit belongs to the stylist who served most of it, and to the
+        // appointment it was booked from
+        const staffId = primaryStaffOf(items);
+        const appointmentId = s.cartAppointmentId ?? undefined;
         const order: Order = {
           id: tab ? tab.id : orderId(s.settings.nextOrderNo, now),
           items,
@@ -528,12 +707,16 @@ export const usePos = create<PosState>()(
           ...(orderType ? { orderType } : {}),
           ...(tableId ? { tableId } : {}),
           ...(tab ? { ticketStatus: "queued" as const } : { ticketStatus: "queued" as const }),
+          ...(staffId ? { staffId } : {}),
+          ...(appointmentId ? { appointmentId } : {}),
         };
 
         // stock moves: one per order line, split per batch when the line was
         // allocated from batches. Counts are base units.
         const moves: StockMove[] = [];
         for (const pl of plan.lines) {
+          // a service is not stock — nothing comes off the shelf
+          if (pl.product.kind === "service") continue;
           if (pl.allocations.length > 0) {
             for (const a of pl.allocations) {
               moves.push({
@@ -597,12 +780,50 @@ export const usePos = create<PosState>()(
 
         const orderNo = s.settings.nextOrderNo + 1;
 
+        // The client's package credits move with the sale: a credit line
+        // spends what the client had, a package purchase grants what it
+        // carries.
+        let customers = s.customers;
+        if (creditCustomer && creditSpend.size > 0) {
+          customers = customers.map((c) =>
+            c.id === creditCustomer.id
+              ? { ...c, packageCredits: spendCredits(c.packageCredits ?? [], creditSpend) }
+              : c,
+          );
+        }
+        if (creditCustomer && packageItems.length > 0) {
+          const granted = packageItems
+            .map((item) => s.packages.find((p) => p.id === item.packageId))
+            .filter((p): p is Package => !!p)
+            .map((p) => ({
+              packageId: p.id,
+              remaining: p.credits.reduce((sum, l) => sum + l.qty, 0),
+              sourceOrderId: order.id,
+            }));
+          if (granted.length > 0) {
+            customers = customers.map((c) =>
+              c.id === creditCustomer.id
+                ? { ...c, packageCredits: [...(c.packageCredits ?? []), ...granted] }
+                : c,
+            );
+          }
+        }
+
+        // The visit is sold — the booking it came from is done.
+        const appointments = appointmentId
+          ? s.appointments.map((a) =>
+              a.id === appointmentId ? { ...a, status: "done" as const, updatedAt: now } : a,
+            )
+          : s.appointments;
+
         set({
           orders: tab
             ? s.orders.map((o) => (o.id === order.id ? order : o))
             : [order, ...s.orders],
           products,
           batches,
+          customers,
+          appointments,
           stockMoves: [...moves, ...s.stockMoves],
           settings: tab ? s.settings : { ...s.settings, nextOrderNo: orderNo },
           cart: [],
@@ -613,6 +834,7 @@ export const usePos = create<PosState>()(
           cartOrderType: null,
           cartTableId: null,
           cartTabOrderId: null,
+          cartAppointmentId: null,
         });
 
         fireLowStockAlerts(s.products, products);
@@ -669,6 +891,8 @@ export const usePos = create<PosState>()(
         // moves either — the ledger has to match what actually moved
         if (!skipRestock) {
           for (const i of order.items) {
+            // a service was never taken off the shelf — nothing goes back
+            if (isServiceLine(i)) continue;
             const allocations = i.batchAllocations ?? [];
             if (allocations.length > 0) {
               // restock into the exact batches the sale came out of
@@ -722,7 +946,35 @@ export const usePos = create<PosState>()(
         const orders = s.orders.map((o) =>
           o.id === oid ? { ...o, status: "refunded" as const, payStatus: "refunded" as const } : o,
         );
-        set({ orders, products, batches, stockMoves: [...moves, ...s.stockMoves] });
+
+        // Package credits move with the refund: a refunded credit line gives
+        // the credit back, a refunded package purchase throws away whatever
+        // that purchase left the client with.
+        let customers = s.customers;
+        if (order.customerId) {
+          const restore = new Map<string, number>();
+          const voided = new Set<string>();
+          for (const i of order.items) {
+            if (i.useCredit && i.packageId) {
+              restore.set(i.packageId, (restore.get(i.packageId) ?? 0) + (i.creditedQty ?? 0));
+            } else if (i.packageId) {
+              voided.add(i.packageId);
+            }
+          }
+          if (restore.size > 0 || voided.size > 0) {
+            customers = customers.map((c) => {
+              if (c.id !== order.customerId) return c;
+              let credits = c.packageCredits ?? [];
+              for (const packageId of voided) {
+                credits = voidCreditsFrom(credits, packageId, order.id);
+              }
+              if (restore.size > 0) credits = restoreCredits(credits, restore);
+              return { ...c, packageCredits: credits };
+            });
+          }
+        }
+
+        set({ orders, products, batches, customers, stockMoves: [...moves, ...s.stockMoves] });
         get().toast("Order refunded", "ok");
       },
 
@@ -1093,6 +1345,78 @@ export const usePos = create<PosState>()(
 
       setCurrentStaff: (sid) => set({ currentStaffId: sid }),
 
+      /* salon */
+      upsertAppointment: (patch) => {
+        const s = get();
+        const now = Date.now();
+        const existing = patch.id ? s.appointments.find((a) => a.id === patch.id) : undefined;
+        const saved: Appointment = {
+          id: existing?.id ?? id("ap_"),
+          customerId: patch.customerId ?? existing?.customerId ?? null,
+          ...(patch.staffId ?? existing?.staffId
+            ? { staffId: patch.staffId ?? existing?.staffId }
+            : {}),
+          serviceLines: patch.serviceLines,
+          start: patch.start,
+          durationMin: patch.durationMin ?? existing?.durationMin ?? 30,
+          status: patch.status ?? existing?.status ?? "booked",
+          notes: patch.notes ?? existing?.notes ?? "",
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        set({
+          appointments: existing
+            ? s.appointments.map((a) => (a.id === saved.id ? saved : a))
+            : [...s.appointments, saved],
+        });
+        return saved;
+      },
+
+      setAppointmentStatus: (aid, status) => {
+        const s = get();
+        set({
+          appointments: s.appointments.map((a) =>
+            a.id === aid ? { ...a, status, updatedAt: Date.now() } : a,
+          ),
+        });
+      },
+
+      deleteAppointment: (aid) => {
+        const s = get();
+        set({ appointments: s.appointments.filter((a) => a.id !== aid) });
+      },
+
+      upsertPackage: (patch) => {
+        const s = get();
+        const now = Date.now();
+        const existing = patch.id ? s.packages.find((p) => p.id === patch.id) : undefined;
+        const saved: Package = {
+          id: existing?.id ?? id("pk_"),
+          name: patch.name,
+          price: patch.price,
+          credits: patch.credits ?? existing?.credits ?? [],
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        set({
+          packages: existing
+            ? s.packages.map((p) => (p.id === saved.id ? saved : p))
+            : [...s.packages, saved],
+        });
+        return saved;
+      },
+
+      deletePackage: (pid) => {
+        const s = get();
+        set({ packages: s.packages.filter((p) => p.id !== pid) });
+      },
+
+      creditBalanceOf: (customerId, packageId) => {
+        const s = get();
+        if (!customerId) return 0;
+        return creditsOf(s.customers.find((c) => c.id === customerId) ?? null, packageId);
+      },
+
       updateSettings: (patch) => {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
         if (patch.theme) {
@@ -1132,6 +1456,8 @@ export const usePos = create<PosState>()(
         tables: s.tables,
         staff: s.staff,
         currentStaffId: s.currentStaffId,
+        appointments: s.appointments,
+        packages: s.packages,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,
@@ -1160,24 +1486,72 @@ export function useSettings() {
 export function useCartTotals() {
   const cart = usePos((s) => s.cart);
   const products = usePos((s) => s.products);
+  const packages = usePos((s) => s.packages);
   const discount = usePos((s) => s.cartDiscount);
   const settings = usePos((s) => s.settings);
+  const customerId = usePos((s) => s.cartCustomerId);
+  const customer = usePos((s) => s.customers.find((c) => c.id === customerId) ?? null);
   const lines = cart
     .map((l) => {
+      // a package purchase is not a product — it is priced from the package
+      if (l.packageId && !l.useCredit) {
+        const pkg = packages.find((p) => p.id === l.packageId);
+        return pkg ? { ...l, product: packageAsProduct(pkg) } : null;
+      }
       const p = products.find((x) => x.id === l.productId);
       return p ? { ...l, product: p } : null;
     })
     .filter(Boolean) as (CartLine & { product: Product })[];
-  const count = lines.reduce((s, l) => s + l.qty, 0);
-  const subtotal = lines.reduce((s, l) => s + (l.price ?? l.product.price) * l.qty, 0);
+  // a credit line is priced by the client's remaining package credits — the
+  // same math placeOrder applies, so the register and the order agree
+  const unitPrices = creditAwareUnitPrices(
+    lines.map((l) => ({
+      qty: l.qty,
+      ...(l.price === undefined ? {} : { price: l.price }),
+      ...(l.useCredit ? { useCredit: true } : {}),
+      ...(l.packageId ? { packageId: l.packageId } : {}),
+      normalPrice: l.product.price,
+    })),
+    customer,
+  );
+  const priced = lines.map((l, i) => ({ ...l, unitPrice: unitPrices[i] }));
+  const count = priced.reduce((s, l) => s + l.qty, 0);
+  const subtotal = priced.reduce((s, l) => s + l.unitPrice * l.qty, 0);
   const net = Math.max(0, subtotal - discount);
   const tax = taxAmount(net, settings.taxRate);
   // taxRate 0 → tax 0 → total is exactly the old subtotal - discount
   const total = tax > 0 && !settings.taxInclusive ? round2(net + tax) : net;
-  return { lines, count, subtotal, discount, tax, total };
+  return { lines: priced, count, subtotal, discount, tax, total };
 }
 
 export function todayRange(now = Date.now()) {
   const start = startOfDay(now);
   return { start, end: now };
+}
+
+/**
+ * A package seen as a product row.
+ *
+ * A package has no catalogue entry and no stock — it is a bundle of services
+ * bought once. The cart still draws it like a product, so it gets a product
+ * shaped stand-in carrying the package's name and price.
+ */
+function packageAsProduct(pkg: Package): Product {
+  return {
+    id: pkg.id,
+    name: pkg.name,
+    categoryId: null,
+    cost: 0,
+    price: pkg.price,
+    stock: 0,
+    lowStockAt: 0,
+    unit: "pcs",
+    sku: "",
+    barcode: "",
+    imageUrl: "",
+    description: "",
+    active: true,
+    createdAt: pkg.createdAt,
+    updatedAt: pkg.updatedAt,
+  };
 }

@@ -2,13 +2,17 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { Plus, Search, Edit2, Trash2, Loader2, AlertCircle } from "lucide-react"
-import type { Staff } from "@/lib/types"
-import { fetchStaff, deleteStaff } from "@/lib/api/data"
+import type { Product, Staff } from "@/lib/types"
+import { fetchProducts, fetchStaff, deleteStaff } from "@/lib/api/data"
 import { useImageSrc } from "@/lib/api/image"
 import { useOrg } from "@/lib/auth/org"
+import { hasFeature } from "@/lib/features"
+import { useBusinessType } from "@/lib/terms"
 import { formatDate, cn } from "@/lib/utils"
 import { ROLE_LABELS } from "@/lib/constants"
 import { EmployeeForm } from "./employee-form"
+
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 const ROLE_BADGE: Record<Staff["role"], string> = {
   owner: "bg-primary-light text-primary",
@@ -43,7 +47,11 @@ function StaffAvatar({ staff }: { staff: Staff }) {
 export default function EmployeesPage() {
   const { shop } = useOrg()
   const isOwner = shop?.role === "owner"
+  const businessType = useBusinessType()
+  const showSalon = hasFeature(businessType, "services")
+  const showCommission = hasFeature(businessType, "commissions")
   const [staff, setStaff] = useState<Staff[]>([])
+  const [services, setServices] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -52,7 +60,9 @@ export default function EmployeesPage() {
 
   const load = useCallback(async () => {
     try {
-      setStaff(await fetchStaff())
+      const [staffList, products] = await Promise.all([fetchStaff(), fetchProducts()])
+      setStaff(staffList)
+      setServices(products.filter((p) => p.kind === "service" && p.active))
       setError(null)
     } catch {
       setError("Failed to load employees. Check your connection.")
@@ -143,6 +153,9 @@ export default function EmployeesPage() {
               <tr className="table-header">
                 <th className="px-6 py-3 text-left">Name</th>
                 <th className="px-6 py-3 text-left">Role</th>
+                {showSalon && <th className="px-6 py-3 text-left">Skills</th>}
+                {showSalon && <th className="px-6 py-3 text-left">Schedule</th>}
+                {showCommission && <th className="px-6 py-3 text-right">Commission</th>}
                 <th className="px-6 py-3 text-left">Phone</th>
                 <th className="px-6 py-3 text-left">Joined</th>
                 <th className="px-6 py-3 text-right">Actions</th>
@@ -182,6 +195,28 @@ export default function EmployeesPage() {
                       {ROLE_LABELS[s.role]}
                     </span>
                   </td>
+                  {showSalon && (
+                    <td className="px-6 py-4 text-sm text-muted">
+                      {s.skills && s.skills.length > 0
+                        ? s.skills
+                            .map((id) => services.find((p) => p.id === id)?.name)
+                            .filter(Boolean)
+                            .join(", ") || "—"
+                        : "Any service"}
+                    </td>
+                  )}
+                  {showSalon && (
+                    <td className="px-6 py-4 text-sm text-muted">
+                      {s.schedule && s.schedule.length > 0
+                        ? s.schedule.map((r) => `${DAYS[r.day] ?? ""} ${r.start}–${r.end}`).join(", ")
+                        : "—"}
+                    </td>
+                  )}
+                  {showCommission && (
+                    <td className="tabnum px-6 py-4 text-right text-sm font-semibold text-foreground">
+                      {s.commission_pct != null ? `${s.commission_pct}%` : "—"}
+                    </td>
+                  )}
                   <td className="px-6 py-4 text-sm text-muted">{s.phone ?? "—"}</td>
                   <td className="px-6 py-4 text-sm text-muted">{formatDate(s.created_at)}</td>
                   <td className="px-6 py-4">
@@ -215,6 +250,7 @@ export default function EmployeesPage() {
         <EmployeeForm
           staff={editing}
           orgId={shop?.id ?? ""}
+          services={services}
           onSave={load}
           onClose={() => { setShowForm(false); setEditing(null) }}
         />

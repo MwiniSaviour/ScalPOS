@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { freshToken } from "@/lib/auth/session"
+import { offlineFetch } from "@/lib/offline-fetch"
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ""
@@ -24,7 +25,7 @@ export function getSupabase(): SupabaseClient {
       accessToken: async () => (await freshToken()) ?? "",
       global: {
         fetch: (input, init = {}) =>
-          fetch(input, {
+          offlineFetch(input, {
             ...init,
             signal: init.signal ?? AbortSignal.timeout(30_000),
           }),

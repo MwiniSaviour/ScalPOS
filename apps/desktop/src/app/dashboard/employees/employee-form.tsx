@@ -1,26 +1,39 @@
 "use client"
 
 import { useRef, useState } from "react"
-import { ImagePlus, Trash2, X } from "lucide-react"
-import type { Staff } from "@/lib/types"
+import { ImagePlus, Plus, Trash2, X } from "lucide-react"
+import type { Product, Staff, StaffSchedule } from "@/lib/types"
 import { inviteEmployee, upsertStaff } from "@/lib/api/data"
 import { uploadStaffImage, useImageSrc } from "@/lib/api/image"
+import { hasFeature } from "@/lib/features"
+import { useBusinessType } from "@/lib/terms"
 import { ROLES, ROLE_LABELS } from "@/lib/constants"
+
+const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
 
 interface EmployeeFormProps {
   staff?: Staff | null
   orgId: string
+  services: Product[]
   onSave: () => Promise<void> | void
   onClose: () => void
 }
 
-export function EmployeeForm({ staff, orgId, onSave, onClose }: EmployeeFormProps) {
+export function EmployeeForm({ staff, orgId, services, onSave, onClose }: EmployeeFormProps) {
   const [name, setName] = useState(staff?.name ?? "")
   const [phone, setPhone] = useState(staff?.phone ?? "")
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<Staff["role"]>(staff?.role ?? "cashier")
   const [active, setActive] = useState(staff?.active ?? true)
   const [photoPath, setPhotoPath] = useState(staff?.photo_path ?? "")
+  const [skills, setSkills] = useState<string[]>(staff?.skills ?? [])
+  const [schedule, setSchedule] = useState<StaffSchedule[]>(staff?.schedule ?? [])
+  const [commissionStr, setCommissionStr] = useState(
+    staff?.commission_pct != null ? String(staff.commission_pct) : "",
+  )
+  const businessType = useBusinessType()
+  const showSalon = hasFeature(businessType, "services")
+  const showCommission = hasFeature(businessType, "commissions")
   const [saving, setSaving] = useState(false)
   const [photoBusy, setPhotoBusy] = useState(false)
   const [error, setError] = useState("")
@@ -47,6 +60,11 @@ export function EmployeeForm({ staff, orgId, onSave, onClose }: EmployeeFormProp
       setError("Name is required")
       return
     }
+    const commission = commissionStr.trim() === "" ? null : Number(commissionStr)
+    if (showCommission && commission !== null && (!Number.isFinite(commission) || commission < 0 || commission > 100)) {
+      setError("Commission must be between 0 and 100")
+      return
+    }
     setSaving(true)
     setError("")
     try {
@@ -56,6 +74,9 @@ export function EmployeeForm({ staff, orgId, onSave, onClose }: EmployeeFormProp
         photo_path: photoPath || null,
         role,
         active,
+        ...(showSalon ? { skills: skills.length > 0 ? skills : [] } : {}),
+        ...(showSalon ? { schedule } : {}),
+        ...(showCommission ? { commission_pct: commission } : {}),
       })
       await onSave()
 
@@ -211,6 +232,112 @@ export function EmployeeForm({ staff, orgId, onSave, onClose }: EmployeeFormProp
               ))}
             </div>
           </div>
+          {showSalon && (
+            <div>
+              <label className="label">Skills — services this stylist can do</label>
+              <div className="max-h-36 space-y-1.5 overflow-y-auto rounded-lg border border-border p-3">
+                {services.length === 0 && <p className="text-xs text-muted">No service products yet.</p>}
+                {services.map((p) => (
+                  <label key={p.id} className="flex items-center gap-2 text-sm text-foreground">
+                    <input
+                      type="checkbox"
+                      checked={skills.includes(p.id)}
+                      onChange={() =>
+                        setSkills((prev) =>
+                          prev.includes(p.id) ? prev.filter((id) => id !== p.id) : [...prev, p.id],
+                        )
+                      }
+                    />
+                    {p.name}
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-muted">Leave empty for a stylist who can serve anything.</p>
+            </div>
+          )}
+
+          {showSalon && (
+            <div>
+              <label className="label">Working hours</label>
+              <div className="space-y-2">
+                {schedule.map((row, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <select
+                      value={row.day}
+                      onChange={(e) =>
+                        setSchedule((prev) =>
+                          prev.map((r, idx) => idx === i ? { ...r, day: Number(e.target.value) } : r),
+                        )
+                      }
+                      className="input-field w-32"
+                      aria-label="Day"
+                    >
+                      {DAYS.map((label, d) => <option key={label} value={d}>{label}</option>)}
+                    </select>
+                    <input
+                      type="time"
+                      value={row.start}
+                      onChange={(e) =>
+                        setSchedule((prev) =>
+                          prev.map((r, idx) => idx === i ? { ...r, start: e.target.value } : r),
+                        )
+                      }
+                      className="input-field w-28"
+                      aria-label="Start"
+                    />
+                    <input
+                      type="time"
+                      value={row.end}
+                      onChange={(e) =>
+                        setSchedule((prev) =>
+                          prev.map((r, idx) => idx === i ? { ...r, end: e.target.value } : r),
+                        )
+                      }
+                      className="input-field w-28"
+                      aria-label="End"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setSchedule((prev) => prev.filter((_, idx) => idx !== i))}
+                      className="btn-ghost p-2 text-danger"
+                      aria-label="Remove hours"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const used = new Set(schedule.map((r) => r.day))
+                    const day = DAYS.findIndex((_, d) => !used.has(d))
+                    setSchedule((prev) => [...prev, { day: day < 0 ? 0 : day, start: "09:00", end: "17:00" }])
+                  }}
+                  className="btn-secondary text-xs"
+                >
+                  <Plus size={14} /> Add working hours
+                </button>
+              </div>
+            </div>
+          )}
+
+          {showCommission && (
+            <div>
+              <label className="label">Commission (%)</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={commissionStr}
+                onChange={(e) => setCommissionStr(e.target.value)}
+                className="input-field"
+                placeholder="e.g. 25"
+              />
+              <p className="mt-1 text-xs text-muted">Share of each service price this stylist earns.</p>
+            </div>
+          )}
+
           <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
             <div>
               <p className="text-sm font-medium text-foreground">Active</p>

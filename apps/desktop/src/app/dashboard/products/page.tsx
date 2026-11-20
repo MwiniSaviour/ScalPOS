@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, useEffect, useMemo } from "react"
-import { Plus, Download, Package, ShoppingCart, ScanBarcode } from "lucide-react"
+import { Plus, Download, Package, ShoppingCart, ScanBarcode, Upload } from "lucide-react"
 import { useProducts, useCategories } from "@/hooks/use-products"
 import { getOrgId } from "@/lib/auth/org"
 import { fetchProductBatchesForProducts } from "@/lib/api/data"
@@ -11,6 +11,7 @@ import { ProductCard } from "@/components/products/product-card"
 import { ProductTable } from "@/components/products/product-table"
 import { ProductForm } from "@/components/products/product-form"
 import { ProductDetail } from "@/components/products/product-detail"
+import { ImportDialog } from "@/components/products/import-dialog"
 import { BarcodeScanner } from "@/components/scanner/barcode-scanner"
 import { formatCurrency, cn } from "@/lib/utils"
 import type { Product, ProductBatch } from "@/lib/types"
@@ -27,6 +28,7 @@ export default function ProductsPage() {
   const [sort, setSort] = useState("created_at")
   const [showForm, setShowForm] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [scanningError, setScanningError] = useState("")
   const [viewing, setViewing] = useState<Product | null>(null)
   const [editing, setEditing] = useState<Product | null>(null)
@@ -165,6 +167,10 @@ export default function ProductsPage() {
           <p className="page-subtitle">{totalProducts} products in inventory</p>
         </div>
         <div className="flex gap-3">
+          <button onClick={() => setShowImport(true)} className="btn-secondary">
+            <Upload size={16} />
+            Import
+          </button>
           <button className="btn-secondary">
             <Download size={16} />
             Export
@@ -356,6 +362,14 @@ export default function ProductsPage() {
             />
           </div>
         </div>
+      )}
+
+      {showImport && (
+        <ImportDialog
+          open
+          onClose={() => setShowImport(false)}
+          onImported={() => void reload()}
+        />
       )}
 
       {showForm && (
