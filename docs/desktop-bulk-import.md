@@ -58,7 +58,7 @@ XLSX is read without external libraries: ZIP central directory scan, `Decompress
 - Match existing products by barcode first, then SKU, case-insensitive.
 - Keep the matched-by-barcode SKU on update; only overwrite SKU/barcode when the file value is non-empty.
 - `updateExisting` (default on) controls updates for matched products.
-- `setStock` (default on) controls stock for matched products only; new products always receive the file stock as opening stock.
+- Import never changes the stock of an existing product. New products receive the file stock as opening stock.
 - Matched-product stock change is a delta (`target - current`).
 - Categories are matched by lowercased name; `createCategories` (default on) creates missing ones.
 - Cloud writes one row from each valid file row into `import_products`; the RPC owns all product/category/stock mutations and returns `{ created, updated, skipped }`.

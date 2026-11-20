@@ -12,7 +12,6 @@ type Step = "choose" | "preview" | "done"
 
 const DEFAULT_OPTIONS: ImportOptions = {
   updateExisting: true,
-  setStock: true,
   createCategories: true,
 }
 
@@ -158,7 +157,7 @@ export function ImportDialog({
               </button>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-3">
+            <div className="grid gap-2 sm:grid-cols-2">
               <label className="flex items-center gap-2 rounded-lg border border-border bg-sidebar-hover/40 px-3 py-2 text-sm text-foreground">
                 <input
                   type="checkbox"
@@ -171,15 +170,6 @@ export function ImportDialog({
               <label className="flex items-center gap-2 rounded-lg border border-border bg-sidebar-hover/40 px-3 py-2 text-sm text-foreground">
                 <input
                   type="checkbox"
-                  checked={options.setStock}
-                  onChange={(event) => setOptions({ ...options, setStock: event.target.checked })}
-                  className="h-4 w-4"
-                />
-                Overwrite stock
-              </label>
-              <label className="flex items-center gap-2 rounded-lg border border-border bg-sidebar-hover/40 px-3 py-2 text-sm text-foreground">
-                <input
-                  type="checkbox"
                   checked={options.createCategories}
                   onChange={(event) => setOptions({ ...options, createCategories: event.target.checked })}
                   className="h-4 w-4"
@@ -187,6 +177,9 @@ export function ImportDialog({
                 Create missing categories
               </label>
             </div>
+            <p className="text-[11px] text-muted">
+              Existing product stock is never changed by import. New products receive the file stock as opening stock.
+            </p>
 
             <div className="rounded-lg border border-border bg-sidebar-hover/40 px-3 py-2 text-xs text-muted">
               <p>
