@@ -34,7 +34,7 @@ jobs:
 
       - name: Package Windows installer
         working-directory: apps/desktop
-        run: npx electron-builder --win --config electron-builder.yml
+        run: npx electron-builder --win --x64 --publish never --config electron-builder.yml
 
       - name: Publish installer to the release
         uses: softprops/action-gh-release@v2
