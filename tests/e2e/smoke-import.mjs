@@ -35,7 +35,7 @@ function serveStatic(root, port) {
           res.writeHead(200, { "content-type": MIME[extname(candidate)] ?? "application/octet-stream" });
           res.end(stat);
           return;
-        } catch {}
+        } catch { void 0; }
       }
       file = join(root, "index.html");
       const html = await readFile(file);
@@ -59,7 +59,7 @@ async function waitForHttp(url, timeout = 60000) {
     try {
       const res = await fetch(url);
       if (res.ok) return;
-    } catch {}
+    } catch { void 0; }
     await wait(500);
   }
   throw new Error(`timed out waiting for ${url}`);
