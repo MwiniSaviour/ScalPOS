@@ -1,5 +1,6 @@
 "use client";
 
+import ContinuousScanOverlay, { type ScanEntry } from "@/components/scanner/continuous-scan-overlay";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -12,7 +13,7 @@ import { Sheet } from "@/components/ui/sheet";
 import { cartLineKey, linePackName, packFactor } from "@/lib/batches";
 import { hasFeature } from "@/lib/features";
 import { CURRENCY_SYMBOL, fmtMoney, parsePrice } from "@/lib/money";
-import { scanBarcode } from "@/lib/barcode";
+import { hidState, sendHidBarcode } from "@/lib/bluetooth-hid";
 import { sellableStock } from "@/lib/batches";
 import { useNow } from "@/lib/now";
 import { isUnavailableToday, orderTypeLabel } from "@/lib/restaurant";
@@ -38,12 +39,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CartLine, Order, Package, Product, RestaurantTable } from "@/lib/types";
 
 export default function SellScreen() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const hydrated = usePos((s) => s.hydrated);
   const products = usePos((s) => s.products);
   const categories = usePos((s) => s.categories);
@@ -68,6 +70,24 @@ export default function SellScreen() {
   const seedTables = usePos((s) => s.seedTables);
   const totals = useCartTotals();
   const now = useNow();
+
+  const [scanOpen, setScanOpen] = useState(false);
+  const [scanEntries, setScanEntries] = useState<ScanEntry[]>([]);
+  const scanStartRef = useRef(false);
+  const openScanFn = useRef<() => void>(() => {});
+  const openScan = () => {
+    setScanEntries([]);
+    setScanOpen(true);
+  };
+  useEffect(() => {
+    openScanFn.current = openScan;
+  }, []);
+  useEffect(() => {
+    if (!hydrated || scanStartRef.current) return;
+    if (searchParams.get("scan") !== "1") return;
+    scanStartRef.current = true;
+    window.setTimeout(() => openScanFn.current(), 0);
+  }, [hydrated, searchParams]);
 
   const [query, setQuery] = useState("");
   const [catId, setCatId] = useState<string | null>(null);
@@ -418,22 +438,41 @@ export default function SellScreen() {
     if (next) setDiscountDraft(totals.discount > 0 ? trimNum(totals.discount) : "");
   };
 
-  const scan = async () => {
-    const code = await scanBarcode();
-    if (!code) return;
+  const onScanned = async (code: string) => {
+    const entry: ScanEntry = {
+      code,
+      label: code,
+      status: "missing",
+      at: Date.now(),
+    };
+    try {
+      const hid = await hidState();
+      if (hid.connected) {
+        await sendHidBarcode(code);
+        entry.status = "sent";
+        entry.label = `Sent to ${hid.name ?? "computer"}`;
+        usePos.getState().toast(`Sent to ${hid.name ?? "computer"}`, "ok");
+        setScanEntries((prev) => [entry, ...prev]);
+        return;
+      }
+    } catch {}
     const hit = usePos
       .getState()
       .products.find((p) => p.barcode.toLowerCase() === code.toLowerCase());
     if (hit) {
+      entry.label = hit.name;
       if (hit.kind !== "service" && (availableById.get(hit.id) ?? hit.stock) <= 0) {
-        usePos.getState().toast("Out of stock", "error");
-        return;
+        entry.status = "stock";
+        usePos.getState().toast(`${hit.name} — out of stock`, "error");
+      } else {
+        addToCart(hit.id);
+        entry.status = "added";
+        usePos.getState().toast(`${hit.name} added`, "ok");
       }
-      tap(hit.id);
     } else {
-      usePos.getState().toast("Barcode not in catalogue — add it in Inventory", "warn");
-      router.push(`/inventory/edit?barcode=${encodeURIComponent(code)}`);
+      usePos.getState().toast("Barcode not in catalogue", "warn");
     }
+    setScanEntries((prev) => [entry, ...prev]);
   };
 
   const applyDiscount = (v: string) => {
@@ -512,7 +551,7 @@ export default function SellScreen() {
           value={query}
           onChange={setQuery}
           placeholder="Search products…"
-          onOpenScanner={() => void scan()}
+          onOpenScanner={openScan}
         />
 
         <div className="edge-fade no-scrollbar -mx-5 mt-2.5 overflow-x-auto px-5">
@@ -1191,6 +1230,14 @@ export default function SellScreen() {
         confirmLabel="Clear"
         tone="danger"
       />
+
+      {scanOpen && (
+        <ContinuousScanOverlay
+          entries={scanEntries}
+          onCode={(code) => void onScanned(code)}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
     </div>
   );
 }

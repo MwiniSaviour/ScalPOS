@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { BluetoothScannerSheet } from "@/components/scanner/bluetooth-scanner";
 import {
   readConnection,
   writeConnection,
@@ -36,6 +37,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
+  Bluetooth,
   CalendarDays,
   ChefHat,
   ChevronRight,
@@ -73,6 +75,7 @@ export default function MoreScreen() {
   const [conflictCount, setConflictCount] = useState(0);
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
   const [referralOpen, setReferralOpen] = useState(false);
+  const [btOpen, setBtOpen] = useState(false);
   const [affiliateCode, setAffiliateCode] = useState("");
   const [codeDraft, setCodeDraft] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
@@ -224,6 +227,23 @@ export default function MoreScreen() {
             label="Categories"
             sub="Group your products"
           />
+          <button
+            onClick={() => setBtOpen(true)}
+            className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+          >
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+              <Bluetooth className="size-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1 text-left">
+              <span className="block truncate text-[17px] font-semibold text-ink">
+                Bluetooth scanner
+              </span>
+              <span className="block truncate text-[14px] text-ink3">
+                Type barcodes into a paired computer
+              </span>
+            </span>
+            <ChevronRight className="size-4 shrink-0 text-ink3" />
+          </button>
         </Card>
       </section>
 
@@ -366,6 +386,8 @@ export default function MoreScreen() {
         </Card>
         <p className="mt-3 pb-6 text-center text-[12px] text-ink3">Version 1.1.0</p>
       </section>
+
+      <BluetoothScannerSheet open={btOpen} onClose={() => setBtOpen(false)} />
 
       <Sheet
         open={referralOpen}

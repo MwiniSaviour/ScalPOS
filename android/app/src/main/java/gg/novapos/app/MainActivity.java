@@ -9,6 +9,7 @@ public class MainActivity extends BridgeActivity {
   public void onCreate(Bundle savedInstanceState) {
     registerPlugin(AppChromePlugin.class);
     registerPlugin(BluetoothPrintPlugin.class);
+    registerPlugin(BluetoothHidPlugin.class);
     registerPlugin(NovaAlertsPlugin.class);
     super.onCreate(savedInstanceState);
   }

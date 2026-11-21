@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { House, Package, Plus, ReceiptText, Users, type LucideIcon } from "lucide-react";
+import { House, Package, Plus, ReceiptText, ScanLine, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/ui";
 import { useTerms } from "@/lib/terms";
@@ -36,14 +36,23 @@ export function TabBar() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40">
       <div className="mx-auto max-w-[420px] px-4 pb-2">
-        <Link
-          href="/sell"
-          aria-label="Start a new sale"
-          className="press flex h-[52px] items-center justify-center gap-2 rounded-lg bg-accent text-accentink"
-        >
-          <Plus className="size-[19px]" />
-          <span className="text-[16px] font-semibold">New sale</span>
-        </Link>
+        <div className="flex h-[52px] overflow-hidden rounded-lg bg-accent text-accentink">
+          <Link
+            href="/sell"
+            aria-label="Start a new sale"
+            className="press flex flex-1 items-center justify-center gap-2"
+          >
+            <Plus className="size-[19px]" />
+            <span className="text-[16px] font-semibold">New sale</span>
+          </Link>
+          <Link
+            href="/sell?scan=1"
+            aria-label="Scan a barcode to add a product"
+            className="press flex w-[64px] items-center justify-center border-l border-accentink/20"
+          >
+            <ScanLine className="size-[22px]" />
+          </Link>
+        </div>
       </div>
       <div className="border-t border-line2 bg-surface shadow-[0_-4px_16px_rgb(15_23_42/0.06)]">
         <div className="mx-auto flex h-14 max-w-[420px] items-stretch">
