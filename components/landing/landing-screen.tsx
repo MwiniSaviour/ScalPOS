@@ -274,6 +274,13 @@ export default function LandingScreen() {
               Log in
             </Link>
 
+            <a
+              href="https://github.com/MwiniSaviour/ScalPOS/releases/latest/download/ScalPOS-win-x64.exe"
+              className="press inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              <MonitorDown className="size-4" />
+              Download
+            </a>
             <button
               type="button"
               onClick={() => launchApp("/sell")}
@@ -408,6 +415,19 @@ export default function LandingScreen() {
               Get started
             </button>
           </form>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="https://github.com/MwiniSaviour/ScalPOS/releases/latest/download/ScalPOS-win-x64.exe"
+              className="press inline-flex items-center gap-2 rounded-lg border border-white/25 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+            >
+              <MonitorDown className="size-4" />
+              Download for Windows
+            </a>
+            <span className="text-xs text-slate-300">
+              Offline desktop register — no browser needed
+            </span>
+          </div>
         </div>
 
         {/* Rising Curve + 4 Editorial Columns + Tabbed App Frame */}
