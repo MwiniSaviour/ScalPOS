@@ -1,5 +1,8 @@
 appId: com.scalmint.pos.desktop
 productName: ScalPOS
+artifactName: "ScalPOS-win-${arch}.${ext}"
+arch:
+  - x64
 asar: false
 directories:
   output: release
@@ -12,9 +15,6 @@ files:
 win:
   target:
     - nsis
-  arch:
-    - x64
-  artifactName: "ScalPOS-win-${arch}.${ext}"
 nsis:
   oneClick: false
   perMachine: false
