@@ -26,6 +26,9 @@ import { RisingCurveInfographic } from "./rising-curve-hero";
 import { InteractiveRegisterDemo } from "./interactive-register-demo";
 import { OutcomesInfographic } from "./outcomes-infographic";
 
+const WINDOWS_DOWNLOAD_URL =
+  "https://github.com/MwiniSaviour/ScalPOS/releases/latest/download/ScalPOS-win-x64.exe";
+
 export default function LandingScreen() {
   const router = useRouter();
   const theme = usePos((s) => s.settings.theme);
@@ -275,30 +278,23 @@ export default function LandingScreen() {
             </Link>
 
             <a
-              href="https://github.com/MwiniSaviour/ScalPOS/releases/latest/download/ScalPOS-win-x64.exe"
-              className="press inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/10 px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-white/20"
+              href={WINDOWS_DOWNLOAD_URL}
+              className="press inline-flex items-center gap-1.5 rounded-lg bg-[#5850ec] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4f46e5]"
             >
               <MonitorDown className="size-4" />
-              Download
+              Download for Windows
             </a>
-            <button
-              type="button"
-              onClick={() => launchApp("/sell")}
-              className="press rounded-lg bg-[#5850ec] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#4f46e5]"
-            >
-              Get started
-            </button>
           </div>
 
           {/* Mobile Menu Button */}
           <div className="flex items-center gap-2.5 md:hidden">
-            <button
-              type="button"
-              onClick={() => launchApp("/sell")}
-              className="press rounded-lg bg-[#5850ec] px-3 py-1.5 text-xs font-semibold text-white"
+            <a
+              href={WINDOWS_DOWNLOAD_URL}
+              className="press inline-flex items-center gap-1 rounded-lg bg-[#5850ec] px-3 py-1.5 text-xs font-semibold text-white"
             >
-              Get started
-            </button>
+              <MonitorDown className="size-3.5" />
+              Download
+            </a>
             <button
               type="button"
               aria-label="Toggle Menu"
@@ -408,12 +404,13 @@ export default function LandingScreen() {
               aria-label="Enter your email or shop name"
               className="w-full flex-1 bg-transparent px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
-            <button
-              type="submit"
-              className="press shrink-0 rounded-lg bg-[#5850ec] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#4f46e5]"
+            <a
+              href={WINDOWS_DOWNLOAD_URL}
+              className="press inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#5850ec] px-5 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-[#4f46e5]"
             >
-              Get started
-            </button>
+              <MonitorDown className="size-4" />
+              Download for Windows
+            </a>
           </form>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
@@ -1006,12 +1003,13 @@ export default function LandingScreen() {
               aria-label="Enter your shop name"
               className="w-full flex-1 bg-transparent px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
             />
-            <button
-              type="submit"
-              className="press shrink-0 rounded-lg bg-[#5850ec] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#4f46e5]"
+            <a
+              href={WINDOWS_DOWNLOAD_URL}
+              className="press inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#5850ec] px-5 py-2.5 text-xs font-semibold text-white hover:bg-[#4f46e5]"
             >
-              Get started
-            </button>
+              <MonitorDown className="size-4" />
+              Download for Windows
+            </a>
           </form>
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-slate-300">
