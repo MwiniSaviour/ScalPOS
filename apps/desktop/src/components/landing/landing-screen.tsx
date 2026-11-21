@@ -430,6 +430,16 @@ export default function LandingScreen() {
               Download for Windows
             </a>
           </form>
+          <p className="mt-3 text-xs text-slate-300">
+            Windows may show SmartScreen for this unsigned installer. Click
+            <span className="font-semibold text-white"> More info</span> →
+            <span className="font-semibold text-white"> Run anyway</span>. Verify
+            the SHA-256
+            <span className="font-mono text-slate-200">
+              {" "}2f12053d6441b367387787109a04837d992f0b7cff9fc2b8732a2cbb507f011e
+            </span>
+            .
+          </p>
         </div>
 
         {/* Rising Curve + 4 Editorial Columns + Tabbed App Frame */}
