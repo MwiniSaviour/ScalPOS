@@ -35,6 +35,8 @@ import {
   voidCreditsFrom,
 } from "./salon";
 import { pruneImages } from "./image-store";
+import { applyImportRows } from "./import/apply.ts";
+import type { ImportOptions, ImportResult, ImportRow } from "./import/validate.ts";
 import { readConnection, type SyncConnection } from "./api/bootstrap";
 import { notifyLocal } from "./notify";
 import { insertLowStockNotification } from "./api/notifications";
@@ -291,6 +293,7 @@ type PosState = {
   /* inventory */
   upsertProduct: (p: Partial<Product> & { name: string; price: number }) => Product;
   upsertCategory: (c: Partial<Category> & { name: string; color?: string }) => Category;
+  importProducts: (rows: ImportRow[], options: ImportOptions) => ImportResult;
 
   adjustStock: (productId: string, qtyDelta: number, reason: StockReason, ref?: string) => void;
   deleteProduct: (pid: string) => void;
@@ -1084,6 +1087,27 @@ export const usePos = create<PosState>()(
         set({ categories: [c, ...s.categories] });
         get().toast("Category added", "ok");
         return c;
+      },
+
+      importProducts: (rows, options) => {
+        const s = get();
+        const applied = applyImportRows(
+          rows,
+          options,
+          s.products,
+          s.categories,
+          s.stockMoves,
+        );
+        set({
+          products: applied.products,
+          categories: applied.categories,
+          stockMoves: applied.stockMoves,
+        });
+        get().toast(
+          `Imported ${applied.result.created} new, ${applied.result.updated} updated`,
+          "ok",
+        );
+        return applied.result;
       },
 
       adjustStock: (pid, delta, reason, ref) => {
