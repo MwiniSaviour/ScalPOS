@@ -1,10 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { useClerk } from "@clerk/clerk-react"
+import { useSyncExternalStore, useState } from "react"
+import { useAuth, useClerk } from "@clerk/clerk-react"
 import { Pill, Scissors, ShieldAlert, Store, RefreshCw, Plus, UtensilsCrossed, type LucideIcon } from "lucide-react"
 import { useOrg } from "@/lib/auth/org"
+import { hasLocalShop } from "@/lib/offline/local-data"
 import type { BusinessType } from "@/lib/types"
+
+const voidSubscribe = () => () => {}
 
 const SHOP_TYPE_OPTIONS: Array<{
   value: BusinessType
@@ -29,9 +32,16 @@ function Shell({ children }: { children: React.ReactNode }) {
 export function OrgGate({ children }: { children: React.ReactNode }) {
   const { shop, loading, error, needsShop, createShop, retry } = useOrg()
   const { signOut } = useClerk()
+  const { isSignedIn } = useAuth()
   const [businessType, setBusinessType] = useState<BusinessType>("retail")
+  const hasLocal = useSyncExternalStore(
+    voidSubscribe,
+    () => hasLocalShop(),
+    () => false,
+  )
+  const localOffline = hasLocal && !isSignedIn
 
-  if (shop) return <>{children}</>
+  if (localOffline || shop) return <>{children}</>
 
   if (needsShop) {
     return (

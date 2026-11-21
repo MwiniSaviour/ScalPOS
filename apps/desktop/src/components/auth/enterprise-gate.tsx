@@ -1,10 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import { useSyncExternalStore } from "react"
 import { Lock, ShieldAlert, RefreshCw } from "lucide-react"
 import { usePathname } from "next/navigation"
-import { useUser } from "@clerk/clerk-react"
+import { useAuth, useUser } from "@clerk/clerk-react"
 import { useOrg, readDemoOrg } from "@/lib/auth/org"
+import { hasLocalShop } from "@/lib/offline/local-data"
 import {
   useEntitlement,
   refreshEntitlement,
@@ -31,14 +33,24 @@ function Spinner({ label }: { label: string }) {
   )
 }
 
+const voidSubscribe = () => () => {}
+
 export function EnterpriseGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user } = useUser()
+  const { isSignedIn } = useAuth()
+  const hasLocal = useSyncExternalStore(
+    voidSubscribe,
+    () => hasLocalShop(),
+    () => false,
+  )
   const { shop } = useOrg()
   const isDemo = !!shop && readDemoOrg(user?.id) === shop.id
   const ent = useEntitlement(isDemo ? null : (shop?.id ?? null))
   const kind = entitlementKind(ent)
+  const localOffline = hasLocal && !isSignedIn
   const allowed =
+    localOffline ||
     (pathname.startsWith("/dashboard/billing") &&
       (isDemo || kind !== "unknown" || !ent.error)) ||
     isDemo ||

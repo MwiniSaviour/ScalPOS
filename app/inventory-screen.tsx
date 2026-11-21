@@ -1,17 +1,18 @@
 "use client";
 
 import { ScreenHeader } from "@/components/shell/screenheader";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Chip } from "@/components/ui/chip";
 import { EmptyState } from "@/components/ui/emptystate";
 import { SearchBar } from "@/components/ui/input";
 import { ProductArt } from "@/components/ui/productart";
+import { ProductImportSheet } from "@/components/product-import-sheet";
 import { fmtMoney, fmtqty } from "@/lib/money";
 import { scanBarcode } from "@/lib/barcode";
 import { hueColor } from "@/lib/ui";
 import { usePos } from "@/lib/store";
-import { ChevronRight, History, PackageOpen, Plus, TriangleAlert } from "lucide-react";
+import { ChevronRight, History, PackageOpen, Plus, TriangleAlert, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -23,6 +24,7 @@ export default function InventoryScreen() {
   const categories = usePos((s) => s.categories);
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState<string>("all");
+  const [importOpen, setImportOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -56,11 +58,16 @@ export default function InventoryScreen() {
         title="Inventory"
         subtitle={`${products.length} item${products.length === 1 ? "" : "s"} catalogue`}
         right={
-          <Link href="/stock" aria-label="Stock history">
-            <span className="press flex size-10 items-center justify-center rounded-full text-ink2 hover:bg-surface2">
-              <History className="size-[19px]" />
-            </span>
-          </Link>
+          <>
+            <IconButton label="Import products" onClick={() => setImportOpen(true)}>
+              <Upload className="size-[19px]" />
+            </IconButton>
+            <Link href="/stock" aria-label="Stock history">
+              <span className="press flex size-10 items-center justify-center rounded-full text-ink2 hover:bg-surface2">
+                <History className="size-[19px]" />
+              </span>
+            </Link>
+          </>
         }
       />
 
@@ -167,6 +174,8 @@ export default function InventoryScreen() {
       >
         <Plus className="size-6" />
       </Link>
+
+      <ProductImportSheet open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
