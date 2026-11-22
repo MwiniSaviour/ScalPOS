@@ -69,7 +69,7 @@ function createWindow() {
     return { action: "deny" };
   });
 
-  void mainWindow.loadURL(baseUrl);
+  void mainWindow.loadURL(`${baseUrl}/dashboard`);
 }
 
 function focusOrOpen(raw) {

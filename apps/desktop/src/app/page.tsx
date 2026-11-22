@@ -1,5 +1,5 @@
-import LandingScreen from "@/components/landing/landing-screen"
+import { redirect } from "next/navigation"
 
 export default function RootPage() {
-  return <LandingScreen />
+  redirect("/dashboard")
 }

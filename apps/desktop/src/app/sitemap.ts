@@ -9,8 +9,7 @@ type Entry = {
 }
 
 const ENTRIES: Entry[] = [
-  { path: "/", changeFrequency: "weekly", priority: 1 },
-  { path: "/dashboard", changeFrequency: "daily", priority: 0.9 },
+  { path: "/dashboard", changeFrequency: "daily", priority: 1 },
   { path: "/dashboard/billing", changeFrequency: "monthly", priority: 0.7 },
   { path: "/auth", changeFrequency: "monthly", priority: 0.6 },
   { path: "/auth/login", changeFrequency: "monthly", priority: 0.6 },
