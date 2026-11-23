@@ -1,5 +1,5 @@
-import { getSupabase } from "@/lib/api/supabase";
-import { readTrialStart } from "@/lib/trial";
+import { getSupabase } from "./supabase";
+import { readTrialStart } from "../trial";
 
 const STORAGE_KEY = "nova-pos-sync-v1";
 

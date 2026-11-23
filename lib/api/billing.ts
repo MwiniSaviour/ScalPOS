@@ -1,5 +1,5 @@
-import type { SyncConnection } from "@/lib/api/bootstrap";
-import { freshToken } from "@/lib/api/session";
+import type { SyncConnection } from "./bootstrap";
+import { freshToken } from "./session";
 
 export type SubPlan = "standard" | "enterprise";
 

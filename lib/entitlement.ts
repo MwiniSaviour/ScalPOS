@@ -1,10 +1,13 @@
 "use client";
 
 import { create } from "zustand";
-import { readConnection } from "@/lib/api/bootstrap";
-import { getSubscription, type SubscriptionState } from "@/lib/api/billing";
-import { hasOnboarded } from "@/lib/first-run";
-import { ensureTrialStart, readTrialStart, TRIAL_MS } from "@/lib/trial";
+import { readConnection } from "./api/bootstrap";
+import { getSubscription, type SubscriptionState } from "./api/billing";
+import { hasOnboarded } from "./first-run";
+import { ensureTrialStart, readTrialStart, TRIAL_MS } from "./trial";
+import { insideOfflineGrace, OFFLINE_GRACE_MS } from "./entitlement-grace";
+
+export { OFFLINE_GRACE_MS };
 
 const CACHE_KEY = "nova-pos-entitlement-v1";
 const ONBOARD_KEY = "nova-pos-onboarded";
@@ -83,11 +86,8 @@ function evaluate(
   }
   if (cached) {
     const exp = cached.expiresAt;
-    if (cached.status === "active" && (exp === null || exp > now)) {
-      return { status: "active", expiresAt: exp };
-    }
-    if (cached.status === "trialing" && exp !== null && exp > now) {
-      return { status: "trialing", expiresAt: exp };
+    if (insideOfflineGrace(cached, now)) {
+      return { status: cached.status as "active" | "trialing", expiresAt: exp };
     }
     // The server said there is no live plan — that outranks a fresh local
     // trial, otherwise disconnecting would reset access.

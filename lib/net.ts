@@ -68,7 +68,7 @@ export function useSyncStatus(): {
     let cancelled = false;
     const refresh = async () => {
       try {
-        const mod = await import("@/lib/sync/outbox");
+        const mod = await import("./sync/outbox");
         const ops = await mod.peek();
         if (cancelled) return;
         const list = Array.isArray(ops) ? ops : [];
@@ -93,7 +93,7 @@ export function useSyncStatus(): {
     let cancelled = false;
     const run = async () => {
       try {
-        const mod = await import("@/lib/sync/outbox");
+        const mod = await import("./sync/outbox");
         const ops = await mod.peek();
         if (!Array.isArray(ops) || ops.length === 0) {
           if (!cancelled) {
@@ -130,7 +130,7 @@ export function useSyncStatus(): {
     let cancelled = false;
     const check = async () => {
       try {
-        const ent = await import("@/lib/entitlement");
+        const ent = await import("./entitlement");
         const { status, plan } = ent.useEntitlement.getState();
         if (cancelled) return;
         setPaused(!ent.planAllowsEnterprise(status, plan));

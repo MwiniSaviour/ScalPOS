@@ -6,7 +6,7 @@ import { Lock, ShieldAlert, RefreshCw } from "lucide-react"
 import { usePathname } from "next/navigation"
 import { useAuth, useUser } from "@clerk/clerk-react"
 import { useOrg, readDemoOrg } from "@/lib/auth/org"
-import { hasLocalShop } from "@/lib/offline/local-data"
+import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
 import {
   useEntitlement,
   refreshEntitlement,
@@ -41,7 +41,7 @@ export function EnterpriseGate({ children }: { children: React.ReactNode }) {
   const { isSignedIn } = useAuth()
   const hasLocal = useSyncExternalStore(
     voidSubscribe,
-    () => hasLocalShop(),
+    () => desktopCanBootLocally(),
     () => false,
   )
   const { shop } = useOrg()

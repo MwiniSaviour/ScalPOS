@@ -1,6 +1,6 @@
-import type { SyncConnection } from "@/lib/api/bootstrap";
-import { createSupabaseClient } from "@/lib/api/supabase";
-import { freshToken } from "@/lib/api/session";
+import type { SyncConnection } from "./bootstrap";
+import { createSupabaseClient } from "./supabase";
+import { freshToken } from "./session";
 
 export type NotifKind = "sale" | "low_stock";
 

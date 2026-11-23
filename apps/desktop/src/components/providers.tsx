@@ -3,11 +3,13 @@
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react"
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { usePathname, useRouter } from "next/navigation"
-import { registerTokenProvider } from "@/lib/auth/session"
+import { registerTokenProvider } from "@pos/api/session"
 import { OrgProvider } from "@/lib/auth/org"
-import { hasLocalShop } from "@/lib/offline/local-data"
+import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
+import { SyncBridge } from "@/components/sync-bridge"
 import PinGate from "@/components/pin-gate"
 import LocalSetupScreen from "@/components/local-setup-screen"
+import { migrateLegacyDesktop } from "@/lib/offline/migrate-legacy"
 
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ""
 
@@ -26,14 +28,14 @@ function TokenBridge() {
       }
     })
   }, [isSignedIn, getToken])
-  return null
+  return <SyncBridge signedIn={Boolean(isSignedIn)} />
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-  const [localShop, setLocalShop] = useState(() => hasLocalShop())
+  const [localShop, setLocalShop] = useState(() => desktopCanBootLocally())
   const onAuthPage = pathname.startsWith("/auth")
   const onSsoCallback = pathname.startsWith("/auth/sso-callback")
   const onPublicPage =
@@ -77,6 +79,19 @@ function BootScreen() {
       </div>
     </div>
   )
+}
+
+function MigrationGate({ children }: { children: ReactNode }) {
+  const [migrated, setMigrated] = useState(false)
+  useEffect(() => {
+    let cancelled = false
+    void migrateLegacyDesktop().finally(() => {
+      if (!cancelled) setMigrated(true)
+    })
+    return () => { cancelled = true }
+  }, [])
+  if (!migrated) return <BootScreen />
+  return <>{children}</>
 }
 
 class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -134,6 +149,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
+    <MigrationGate>
     <ClerkProvider
       publishableKey={publishableKey}
       appearance={{
@@ -149,5 +165,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthGate>{children}</AuthGate>
       </ScreenErrorBoundary>
     </ClerkProvider>
+    </MigrationGate>
   )
 }

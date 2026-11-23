@@ -13,11 +13,11 @@
  *   APPLYING so they never re-enqueue themselves.
  */
 
-import { getSupabase } from "@/lib/api/supabase";
-import { readConnection } from "@/lib/api/bootstrap";
-import type { SyncConnection } from "@/lib/api/bootstrap";
-import { freshToken } from "@/lib/api/session";
-import type { Staff } from "@/lib/staff";
+import { getSupabase } from "../api/supabase";
+import { readConnection } from "../api/bootstrap";
+import type { SyncConnection } from "../api/bootstrap";
+import { freshToken } from "../api/session";
+import type { Staff } from "../staff";
 import type {
   Appointment,
   Batch,
@@ -32,12 +32,14 @@ import type {
   RestaurantTable,
   Settings,
   StockMove,
-} from "@/lib/types";
-import { batchStock } from "@/lib/batches";
-import { isDemoMode } from "@/lib/demo";
-import { cloudAccessAllowed } from "@/lib/entitlement";
-import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "@/lib/image-refs";
-import { getImageBlob, isLocalImageRef } from "@/lib/image-store";
+  Supplier,
+  PurchaseOrder,
+} from "../types";
+import { batchStock } from "../batches";
+import { isDemoMode } from "../demo";
+import { cloudAccessAllowed } from "../entitlement";
+import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "../image-refs";
+import { getImageBlob, isLocalImageRef } from "../image-store";
 import type { Op } from "./types";
 import { pullSettings } from "./settings";
 
@@ -47,7 +49,7 @@ const LAST_PULL_KEY = "nova-pos-last-pull";
 
 const PULL_INTERVAL = 30_000;
 
-const TABLES = ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "order_items", "stock_moves", "staff", "appointments", "packages"] as const;
+const TABLES = ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "order_items", "stock_moves", "staff", "appointments", "packages", "suppliers", "purchase_orders"] as const;
 type Table = (typeof TABLES)[number];
 
 type IdMap = Record<Table, Record<string, string>>;
@@ -69,6 +71,8 @@ function emptyMap(): IdMap {
     staff: {},
     appointments: {},
     packages: {},
+    suppliers: {},
+    purchase_orders: {},
   };
 }
 
@@ -147,7 +151,7 @@ async function imageRefForRemote(
 
 /** Point the local product row at the cloud ref so later ops stay consistent. */
 async function adoptLocalImageUrl(id: string, cloudRef: string) {
-  const usePos = (await import("@/lib/store")).usePos;
+  const usePos = (await import("../store")).usePos;
   APPLYING = true;
   try {
     usePos.setState((s: Store) => {
@@ -176,11 +180,13 @@ type Store = {
   staff: Staff[];
   appointments: Appointment[];
   packages: Package[];
+  suppliers: Supplier[];
+  purchaseOrders: PurchaseOrder[];
   settings: Settings;
 };
 
 async function store(): Promise<Store> {
-  return (await import("@/lib/store")).usePos.getState() as unknown as Store;
+  return (await import("../store")).usePos.getState() as unknown as Store;
 }
 
 async function sb(): Promise<ReturnType<typeof getSupabase>> {
@@ -308,6 +314,59 @@ export async function pushLocalRow(table: Table, localId: string): Promise<void>
       cost: x.cost,
       created_at: iso(x.createdAt) ?? undefined,
       updated_at: upd,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "suppliers") {
+    const x = s.suppliers.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    await put(table, {
+      ...(map.suppliers[x.id] ? { id: map.suppliers[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      name: x.name,
+      contact_person: x.contactPerson,
+      email: x.email,
+      phone: x.phone,
+      address: x.address,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: iso(x.updatedAt) ?? undefined,
+      deleted_at: null,
+    });
+    return;
+  }
+
+  if (table === "purchase_orders") {
+    const x = s.purchaseOrders.find((i) => i.id === localId);
+    if (!x) throw new Error("row deleted locally");
+    let supplierId = x.supplierId ? map.suppliers[x.supplierId] : undefined;
+    if (x.supplierId && !supplierId && s.suppliers.some((v) => v.id === x.supplierId)) {
+      await pushLocalRow("suppliers", x.supplierId);
+      map = readMap();
+      supplierId = map.suppliers[x.supplierId];
+    }
+    for (const line of x.lines) {
+      if (map.products[line.productId] || !s.products.some((p) => p.id === line.productId)) continue;
+      await pushLocalRow("products", line.productId);
+      map = readMap();
+    }
+    const lines = x.lines.map((l) => ({
+      ...l,
+      product_id: map.products[l.productId] ?? l.productId,
+    }));
+    await put(table, {
+      ...(map.purchase_orders[x.id] ? { id: map.purchase_orders[x.id] } : {}),
+      org_id,
+      local_id: x.id,
+      supplier_id: supplierId ?? null,
+      status: x.status,
+      lines,
+      total: x.total,
+      received_at: iso(x.receivedAt) ?? null,
+      created_at: iso(x.createdAt) ?? undefined,
+      updated_at: iso(x.updatedAt) ?? undefined,
       deleted_at: null,
     });
     return;
@@ -601,6 +660,44 @@ export async function softDeleteRemote(table: Table, localId: string): Promise<v
 }
 
 // ---- local shapes from remote rows -----------------------------------------
+
+function supplierLocal(r: RemoteRow): Supplier {
+  return {
+    id: String(r.local_id ?? r.id ?? ""),
+    name: String(r.name ?? ""),
+    contactPerson: (r.contact_person as string) ?? null,
+    email: (r.email as string) ?? null,
+    phone: (r.phone as string) ?? null,
+    address: (r.address as string) ?? null,
+    createdAt: ms(r.created_at) ?? 0,
+    updatedAt: ms(r.updated_at) ?? ms(r.created_at) ?? 0,
+  };
+}
+
+function purchaseOrderLocal(r: RemoteRow, revProd: Record<string, string>): PurchaseOrder {
+  const rawLines = Array.isArray(r.lines) ? r.lines : [];
+  const lines = rawLines
+    .filter((l): l is Record<string, unknown> => typeof l === "object" && l !== null)
+    .map((l) => {
+      const rawId = String(l.product_id ?? l.productId ?? "");
+      return {
+        productId: revProd[rawId] ?? rawId,
+        packName: (l.packName as string) ?? null,
+        qty: n(l.qty),
+        unitCost: n(l.unitCost ?? l.unit_cost),
+      };
+    });
+  return {
+    id: String(r.local_id ?? r.id ?? ""),
+    supplierId: (r.supplier_id as string) ?? null,
+    status: r.status === "received" || r.status === "sent" ? r.status : "draft",
+    lines,
+    total: n(r.total),
+    receivedAt: ms(r.received_at),
+    createdAt: ms(r.created_at) ?? 0,
+    updatedAt: ms(r.updated_at) ?? ms(r.created_at) ?? 0,
+  };
+}
 
 function catLocal(r: RemoteRow): Category {
   return { id: String(r.local_id ?? ""), name: String(r.name ?? ""), color: String(r.color ?? "#059669") };
@@ -1022,6 +1119,8 @@ function localStamp(table: Table, row: Record<string, unknown>): number {
     case "staff": return n(row.updatedAt ?? row.createdAt);
     case "appointments": return n(row.updatedAt ?? row.createdAt);
     case "packages": return n(row.updatedAt ?? row.createdAt);
+    case "suppliers": return n(row.updatedAt ?? row.createdAt);
+    case "purchase_orders": return n(row.updatedAt ?? row.createdAt);
     default: return 0;
   }
 }
@@ -1038,6 +1137,8 @@ function remoteStamp(table: Table, r: RemoteRow): number {
     case "staff": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
     case "appointments": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
     case "packages": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
+    case "suppliers": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
+    case "purchase_orders": return ms(r.updated_at) ?? ms(r.created_at) ?? 0;
     default: return 0;
   }
 }
@@ -1092,7 +1193,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
 
   APPLYING = true;
   try {
-    const usePos = (await import("@/lib/store")).usePos;
+    const usePos = (await import("../store")).usePos;
     const map = readMap();
     registerRemoteIds(map, rows);
 
@@ -1280,7 +1381,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
     const imageRefs: string[] = [];
     for (const r of rows.products ?? []) imageRefs.push(String(r.image_path ?? ""));
     for (const r of rows.order_items ?? []) imageRefs.push(String(r.image_path ?? ""));
-    void import("@/lib/cloud-images")
+    void import("../cloud-images")
       .then((m) => m.warmCloudImages(imageRefs))
       .catch(() => {});
 
@@ -1318,7 +1419,7 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
 
   APPLYING = true;
   try {
-    const usePos = (await import("@/lib/store")).usePos;
+    const usePos = (await import("../store")).usePos;
     usePos.setState((s: Store) => {
       const putAt = <T extends { id: string }>(cur: T[], local: T | null): T[] => {
         if (!local) return cur;
@@ -1376,6 +1477,18 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
           const cur = s.customers.find((x) => x.id === local.id);
           return { ...s, customers: putAt(s.customers, carryAllergies(local, cur)) } as unknown as typeof s;
         }
+        case "suppliers": {
+          const local = supplierLocal(row);
+          const cur = s.suppliers.find((x) => x.id === local.id);
+          if (cur && cur.updatedAt >= local.updatedAt) return s;
+          return { ...s, suppliers: putAt(s.suppliers, local) } as unknown as typeof s;
+        }
+        case "purchase_orders": {
+          const local = purchaseOrderLocal(row, revFrom(map.products));
+          const cur = s.purchaseOrders.find((x) => x.id === local.id);
+          if (cur && cur.updatedAt >= local.updatedAt) return s;
+          return { ...s, purchaseOrders: putAt(s.purchaseOrders, local) } as unknown as typeof s;
+        }
         case "categories": {
           return { ...s, categories: putAt(s.categories, catLocal(row)) } as unknown as typeof s;
         }
@@ -1415,7 +1528,7 @@ export async function onRemoteChange(conn: SyncConnection, change: { table: stri
   }
 
   if (typeof row.image_path === "string" && row.image_path.startsWith(CLOUD_IMAGE_PREFIX)) {
-    void import("@/lib/cloud-images")
+    void import("../cloud-images")
       .then((m) => m.cacheCloudImage(row.image_path as string))
       .catch(() => {});
   }
@@ -1481,6 +1594,18 @@ function fingerprint(s: Store): Map<Table, Map<string, string>> {
       (x): [string, string] => [x.id, `${x.name}|${x.price}|${JSON.stringify(x.credits)}`],
     ),
   );
+  set(
+    "suppliers",
+    s.suppliers.map(
+      (x): [string, string] => [x.id, `${x.name}|${x.phone ?? ""}|${x.email ?? ""}|${x.address ?? ""}|${x.contactPerson ?? ""}`],
+    ),
+  );
+  set(
+    "purchase_orders",
+    s.purchaseOrders.map(
+      (x): [string, string] => [x.id, `${x.supplierId ?? ""}|${x.status}|${x.total}|${x.receivedAt ?? ""}|${JSON.stringify(x.lines)}`],
+    ),
+  );
   return fp;
 }
 
@@ -1542,7 +1667,7 @@ export async function armSync(conn: SyncConnection) {
   await disarmSync();
   armedOrgId = conn.org_id;
 
-  const { usePos } = await import("@/lib/store");
+  const { usePos } = await import("../store");
 
   // 1. one-shot per org: queue every row already stored on this device
   try {
@@ -1564,6 +1689,8 @@ export async function armSync(conn: SyncConnection) {
         ...s.staff.map((x) => ["staff", x.id] as [Table, string]),
         ...s.appointments.map((x) => ["appointments", x.id] as [Table, string]),
         ...s.packages.map((x) => ["packages", x.id] as [Table, string]),
+        ...s.suppliers.map((x) => ["suppliers", x.id] as [Table, string]),
+        ...s.purchaseOrders.map((x) => ["purchase_orders", x.id] as [Table, string]),
       ];
       for (const [t, id] of asks) {
         await enqueue({
@@ -1641,7 +1768,7 @@ export async function armSync(conn: SyncConnection) {
       const next = fingerprint(s);
       void (async () => {
         const { enqueue } = await import("./outbox");
-        for (const t of ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "stock_moves", "staff", "appointments", "packages"] as Table[]) {
+        for (const t of ["categories", "products", "product_batches", "recipes", "restaurant_tables", "customers", "orders", "stock_moves", "staff", "appointments", "packages", "suppliers", "purchase_orders"] as Table[]) {
           const before = prev.get(t)!;
           const after = next.get(t)!;
           for (const [id, fp] of after) {
@@ -1693,7 +1820,7 @@ export async function armSync(conn: SyncConnection) {
 
   // 3. realtime channel
   try {
-    const mod = await import("@/lib/sync/realtime");
+    const mod = await import("./realtime");
     const c = await sb();
     if (c) {
       try {

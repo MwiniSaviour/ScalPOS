@@ -9,13 +9,13 @@
  * shop name, phone, address and MoMo details behind.
  */
 
-import { readConnection } from "@/lib/api/bootstrap";
-import type { SyncConnection } from "@/lib/api/bootstrap";
-import { freshToken } from "@/lib/api/session";
-import { getSupabase } from "@/lib/api/supabase";
+import { readConnection } from "../api/bootstrap";
+import type { SyncConnection } from "../api/bootstrap";
+import { freshToken } from "../api/session";
+import { getSupabase } from "../api/supabase";
 import { configPatch, configPayload } from "./settings-config";
-import { BUSINESS_TYPES } from "@/lib/types";
-import type { BusinessType, Settings } from "@/lib/types";
+import { BUSINESS_TYPES } from "../types";
+import type { BusinessType, Settings } from "../types";
 
 type RemoteSettings = {
   shop_name?: unknown;
@@ -56,7 +56,7 @@ function isPristine(s: Settings): boolean {
 export async function pushSettings(conn?: SyncConnection | null): Promise<boolean> {
   const c = conn ?? readConnection();
   if (!c?.org_id) return false;
-  const { usePos } = await import("@/lib/store");
+  const { usePos } = await import("../store");
   const s = usePos.getState().settings;
   if (isPristine(s)) return false;
   const sb = await client();
@@ -113,7 +113,7 @@ export async function pullSettings(conn?: SyncConnection | null): Promise<void> 
   if (error || !data) return;
 
   const r = data as RemoteSettings;
-  const { usePos } = await import("@/lib/store");
+  const { usePos } = await import("../store");
   const s = usePos.getState().settings;
   const patch: Partial<Settings> = {};
 

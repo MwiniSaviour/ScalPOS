@@ -8,9 +8,9 @@
  * - everything else -> passed through unchanged
  */
 import { useEffect, useState } from "react";
-import { getImageBlob, IMAGE_PREFIX } from "@/lib/image-store";
-import { isCloudImageRef } from "@/lib/image-refs";
-import { downloadCloudImage, locallyCachedImage, rememberDownloadedImage } from "@/lib/cloud-images";
+import { getImageBlob, IMAGE_PREFIX } from "./image-store";
+import { isCloudImageRef } from "./image-refs";
+import { downloadCloudImage, locallyCachedImage, rememberDownloadedImage } from "./cloud-images";
 
 const cache = new Map<string, string>();
 const MAX_CACHE = 160;

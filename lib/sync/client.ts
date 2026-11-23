@@ -1,5 +1,5 @@
-import { getSupabase } from "@/lib/api/supabase";
-import { readConnection } from "@/lib/api/bootstrap";
+import { getSupabase } from "../api/supabase";
+import { readConnection } from "../api/bootstrap";
 import { enqueue } from "./outbox";
 import type { Op, Row } from "./types";
 

@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { LockKeyhole } from "lucide-react"
-import { createLocalShop } from "@/lib/offline/local-data"
+import { usePos } from "@pos/store"
+import { markOnboarded } from "@pos/first-run"
 
 /** Day-one setup: a shop on this PC, no account or internet required. */
 export default function LocalSetupScreen({ onReady, onSignIn }: { onReady: () => void; onSignIn: () => void }) {
@@ -15,7 +16,8 @@ export default function LocalSetupScreen({ onReady, onSignIn }: { onReady: () =>
     setBusy(true)
     setError("")
     try {
-      await createLocalShop({ shop_name: name.trim() })
+      usePos.getState().updateSettings({ shopName: name.trim(), businessType: "retail" })
+      markOnboarded()
       onReady()
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not create the local shop.")

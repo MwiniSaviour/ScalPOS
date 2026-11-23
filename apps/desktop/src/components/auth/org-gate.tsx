@@ -4,7 +4,7 @@ import { useSyncExternalStore, useState } from "react"
 import { useAuth, useClerk } from "@clerk/clerk-react"
 import { Pill, Scissors, ShieldAlert, Store, RefreshCw, Plus, UtensilsCrossed, type LucideIcon } from "lucide-react"
 import { useOrg } from "@/lib/auth/org"
-import { hasLocalShop } from "@/lib/offline/local-data"
+import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
 import type { BusinessType } from "@/lib/types"
 
 const voidSubscribe = () => () => {}
@@ -36,7 +36,7 @@ export function OrgGate({ children }: { children: React.ReactNode }) {
   const [businessType, setBusinessType] = useState<BusinessType>("retail")
   const hasLocal = useSyncExternalStore(
     voidSubscribe,
-    () => hasLocalShop(),
+    () => desktopCanBootLocally(),
     () => false,
   )
   const localOffline = hasLocal && !isSignedIn

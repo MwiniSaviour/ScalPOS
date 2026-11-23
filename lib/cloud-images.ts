@@ -9,16 +9,16 @@
  * downloaded blob into IndexedDB so later renders work offline.
  */
 
-import { getSupabase } from "@/lib/api/supabase";
-import { freshToken, onTokenReady } from "@/lib/api/session";
-import { getImageBlob, isLocalImageRef, saveImageBlob } from "@/lib/image-store";
+import { getSupabase } from "./api/supabase";
+import { freshToken, onTokenReady } from "./api/session";
+import { getImageBlob, isLocalImageRef, saveImageBlob } from "./image-store";
 import {
   cloudImageHash,
   cloudImagePath,
   isCloudImageRef,
   readImageMap,
   rememberCloudImage,
-} from "@/lib/image-refs";
+} from "./image-refs";
 
 const BUCKET = "product-images";
 const inflight = new Map<string, Promise<Blob | null>>();

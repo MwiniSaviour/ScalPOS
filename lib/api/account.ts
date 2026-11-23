@@ -1,8 +1,8 @@
 "use client";
 
-import { writeConnection } from "@/lib/api/bootstrap";
-import { freshToken } from "@/lib/api/session";
-import { clearAllImages } from "@/lib/image-store";
+import { writeConnection } from "./bootstrap";
+import { freshToken } from "./session";
+import { clearAllImages } from "../image-store";
 
 export type DeleteAccountResult = {
   deletedOrgs: number;

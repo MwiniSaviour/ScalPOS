@@ -322,3 +322,32 @@ export type CartLine = {
   /** the package this line belongs to — set on a package purchase */
   packageId?: string;
 };
+
+export type Supplier = {
+  id: string;
+  name: string;
+  contactPerson: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type PurchaseOrderLine = {
+  productId: string;
+  packName: string | null;
+  qty: number;
+  unitCost: number;
+};
+
+export type PurchaseOrder = {
+  id: string;
+  supplierId: string | null;
+  status: "draft" | "sent" | "received";
+  lines: PurchaseOrderLine[];
+  total: number;
+  receivedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
+};

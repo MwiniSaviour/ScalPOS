@@ -1,6 +1,16 @@
 import type { NextConfig } from "next"
+import path from "node:path"
 
 const nextConfig: NextConfig = {
+  outputFileTracingRoot: __dirname.replace(/[\\/]apps[\\/]desktop$/, ""),
+  webpack(config) {
+    config.resolve = config.resolve ?? {}
+    config.resolve.alias = {
+      ...(config.resolve.alias ?? {}),
+      "@pos": path.resolve(__dirname, "../../lib"),
+    }
+    return config
+  },
   experimental: {
     optimizePackageImports: ["lucide-react", "recharts"],
   },

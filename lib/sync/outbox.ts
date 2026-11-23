@@ -1,44 +1,10 @@
-import { isDemoMode } from "@/lib/demo";
+import { isDemoMode } from "../demo";
 import type { Op, Conflict } from "./types";
+import { computeRanks } from "./deps";
 
 const DB_NAME = "nova-pos-outbox-v1";
 const DB_VERSION = 1;
 const STORE = "ops";
-
-const DEPS: Record<string, string[]> = {
-  orgs: [],
-  memberships: ["orgs"],
-  categories: [],
-  products: ["categories"],
-  product_batches: ["products"],
-  recipes: ["products"],
-  restaurant_tables: [],
-  customers: [],
-  orders: ["customers"],
-  order_items: ["orders", "products"],
-  stock_moves: ["products", "orders", "product_batches"],
-  settings: [],
-  staff: [],
-  appointments: ["customers", "staff"],
-  packages: [],
-};
-
-function computeRanks(): Record<string, number> {
-  const rank: Record<string, number> = {};
-  const visiting = new Set<string>();
-  function visit(t: string): number {
-    if (Object.prototype.hasOwnProperty.call(rank, t)) return rank[t];
-    if (visiting.has(t)) return 0;
-    visiting.add(t);
-    const deps = DEPS[t] ?? [];
-    const r = deps.length ? Math.max(...deps.map(visit)) + 1 : 0;
-    visiting.delete(t);
-    rank[t] = r;
-    return r;
-  }
-  for (const t of Object.keys(DEPS)) visit(t);
-  return rank;
-}
 
 const RANKS = computeRanks();
 

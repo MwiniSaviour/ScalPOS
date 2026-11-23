@@ -11,6 +11,7 @@ files:
   - "!.next/cache/**"
   - "!npm-debug.log*"
 win:
+  icon: "icon.ico"
   target:
     - nsis
 nsis:

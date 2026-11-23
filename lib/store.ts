@@ -60,8 +60,12 @@ import type {
   Settings,
   StockMove,
   StockReason,
+  Supplier,
+  PurchaseOrder,
+  PurchaseOrderLine,
   TicketStatus,
 } from "./types";
+import { applyReceipt, poTotal } from "./suppliers";
 
 /* ------------------------------ derived helpers ------------------------------ */
 
@@ -222,6 +226,9 @@ type PosState = {
   /* salon */
   appointments: Appointment[];
   packages: Package[];
+  /* purchasing */
+  suppliers: Supplier[];
+  purchaseOrders: PurchaseOrder[];
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -334,6 +341,13 @@ type PosState = {
   /** tags the cart with the appointment it is selling */
   setCartAppointment: (id: string | null) => void;
 
+  /* purchasing */
+  upsertSupplier: (s: Partial<Supplier> & { name: string }) => Supplier;
+  deleteSupplier: (supplierId: string) => void;
+  upsertPurchaseOrder: (po: Partial<PurchaseOrder> & { lines: PurchaseOrderLine[] }) => PurchaseOrder;
+  deletePurchaseOrder: (poId: string) => void;
+  receivePurchaseOrder: (poId: string) => void;
+
   /* settings */
   updateSettings: (patch: Partial<Settings>) => void;
 
@@ -358,6 +372,8 @@ export const usePos = create<PosState>()(
       currentStaffId: null,
       appointments: [],
       packages: [],
+      suppliers: [],
+      purchaseOrders: [],
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -1458,6 +1474,56 @@ export const usePos = create<PosState>()(
         }
       },
 
+      upsertSupplier: (input) => {
+        const now = Date.now();
+        const row: Supplier = {
+          id: input.id ?? id("sup_"),
+          name: input.name,
+          contactPerson: input.contactPerson ?? null,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          createdAt: input.createdAt ?? now,
+          updatedAt: now,
+        };
+        set((s) => ({ suppliers: [...s.suppliers.filter((x) => x.id !== row.id), row] }));
+        return row;
+      },
+
+      deleteSupplier: (supplierId) =>
+        set((s) => ({ suppliers: s.suppliers.filter((x) => x.id !== supplierId) })),
+
+      upsertPurchaseOrder: (input) => {
+        const now = Date.now();
+        const lines = input.lines.map((l) => ({ ...l }));
+        const row: PurchaseOrder = {
+          id: input.id ?? id("po_"),
+          supplierId: input.supplierId ?? null,
+          status: input.status ?? "draft",
+          lines,
+          total: poTotal(lines),
+          receivedAt: input.receivedAt ?? null,
+          createdAt: input.createdAt ?? now,
+          updatedAt: now,
+        };
+        set((s) => ({ purchaseOrders: [...s.purchaseOrders.filter((x) => x.id !== row.id), row] }));
+        return row;
+      },
+
+      deletePurchaseOrder: (poId) =>
+        set((s) => ({ purchaseOrders: s.purchaseOrders.filter((x) => x.id !== poId) })),
+
+      receivePurchaseOrder: (poId) => {
+        const po = get().purchaseOrders.find((x) => x.id === poId);
+        if (!po || po.status === "received") return;
+        const result = applyReceipt(po, get().products, get().stockMoves, Date.now(), (p) => id(p));
+        set({
+          products: result.products,
+          stockMoves: result.moves,
+          purchaseOrders: get().purchaseOrders.map((x) => (x.id === poId ? result.order : x)),
+        });
+      },
+
       toast: (msg, kind = "ok") => {
         const t = { id: id("t_"), msg, kind };
         set((s) => ({ toasts: [...s.toasts, t] }));
@@ -1482,6 +1548,8 @@ export const usePos = create<PosState>()(
         currentStaffId: s.currentStaffId,
         appointments: s.appointments,
         packages: s.packages,
+        suppliers: s.suppliers,
+        purchaseOrders: s.purchaseOrders,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,

@@ -1,5 +1,5 @@
-import { getSupabase } from "@/lib/api/supabase";
-import { freshToken } from "@/lib/api/session";
+import { getSupabase } from "../api/supabase";
+import { freshToken } from "../api/session";
 
 export type RealtimeChange = {
   table: string;

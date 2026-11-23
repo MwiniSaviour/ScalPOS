@@ -1,7 +1,7 @@
 import { Capacitor } from "@capacitor/core";
 import type { BarcodeFormat } from "@capacitor-mlkit/barcode-scanning";
 import { createElement } from "react";
-import { usePos } from "@/lib/store";
+import { usePos } from "./store";
 
 /**
  * Scan a barcode with the platform's best available path.
