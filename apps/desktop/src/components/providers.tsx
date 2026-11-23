@@ -5,7 +5,7 @@ import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { usePathname, useRouter } from "next/navigation"
 import { registerTokenProvider } from "@pos/api/session"
 import { OrgProvider } from "@/lib/auth/org"
-import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
+import { desktopCanBootLocally, desktopLocalMode } from "@/lib/auth/offline-gate"
 import { SyncBridge } from "@/components/sync-bridge"
 import PinGate from "@/components/pin-gate"
 import LocalSetupScreen from "@/components/local-setup-screen"
@@ -36,6 +36,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
   const [localShop, setLocalShop] = useState(() => desktopCanBootLocally())
+  const localMode = desktopLocalMode() || localShop
   const onAuthPage = pathname.startsWith("/auth")
   const onSsoCallback = pathname.startsWith("/auth/sso-callback")
   const onPublicPage =
@@ -44,14 +45,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     pathname === "/data-deletion"
 
   useEffect(() => {
-    if (!isLoaded || onPublicPage || onSsoCallback || localShop) return
+    if (!isLoaded || onPublicPage || onSsoCallback || localMode) return
     if (!isSignedIn && !onAuthPage) router.replace("/auth/login")
     if (isSignedIn && onAuthPage) router.replace("/dashboard")
-  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router, localShop])
+  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router, localMode])
 
   if (onPublicPage || onSsoCallback) return <>{children}</>
   if (!isLoaded) return <BootScreen />
-  if (localShop && !isSignedIn) {
+  if (localMode) {
     return (
       <OrgProvider>
         <PinGate>{children}</PinGate>

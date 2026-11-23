@@ -4,9 +4,9 @@ import Link from "next/link"
 import { useSyncExternalStore } from "react"
 import { Lock, ShieldAlert, RefreshCw } from "lucide-react"
 import { usePathname } from "next/navigation"
-import { useAuth, useUser } from "@clerk/clerk-react"
+import { useUser } from "@clerk/clerk-react"
 import { useOrg, readDemoOrg } from "@/lib/auth/org"
-import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
+import { desktopLocalMode } from "@/lib/auth/offline-gate"
 import {
   useEntitlement,
   refreshEntitlement,
@@ -38,17 +38,16 @@ const voidSubscribe = () => () => {}
 export function EnterpriseGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user } = useUser()
-  const { isSignedIn } = useAuth()
   const hasLocal = useSyncExternalStore(
     voidSubscribe,
-    () => desktopCanBootLocally(),
+    () => desktopLocalMode(),
     () => false,
   )
   const { shop } = useOrg()
   const isDemo = !!shop && readDemoOrg(user?.id) === shop.id
   const ent = useEntitlement(isDemo ? null : (shop?.id ?? null))
   const kind = entitlementKind(ent)
-  const localOffline = hasLocal && !isSignedIn
+  const localOffline = hasLocal
   const allowed =
     localOffline ||
     (pathname.startsWith("/dashboard/billing") &&
