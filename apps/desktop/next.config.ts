@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
       ...(config.resolve.alias ?? {}),
       "@pos": path.resolve(__dirname, "../../lib"),
     }
+    config.resolve.modules = [
+      ...(config.resolve.modules ?? []),
+      path.resolve(__dirname, "node_modules"),
+    ]
     return config
   },
   experimental: {
