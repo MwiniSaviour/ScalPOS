@@ -3,13 +3,11 @@
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "react"
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { usePathname, useRouter } from "next/navigation"
-import { registerTokenProvider } from "@pos/api/session"
+import { registerTokenProvider } from "@/lib/auth/session"
 import { OrgProvider } from "@/lib/auth/org"
-import { desktopCanBootLocally, desktopLocalMode } from "@/lib/auth/offline-gate"
-import { SyncBridge } from "@/components/sync-bridge"
+import { hasLocalShop } from "@/lib/offline/local-data"
 import PinGate from "@/components/pin-gate"
 import LocalSetupScreen from "@/components/local-setup-screen"
-import { migrateLegacyDesktop } from "@/lib/offline/migrate-legacy"
 
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ""
 
@@ -28,15 +26,14 @@ function TokenBridge() {
       }
     })
   }, [isSignedIn, getToken])
-  return <SyncBridge signedIn={Boolean(isSignedIn)} />
+  return null
 }
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { isLoaded, isSignedIn } = useAuth()
   const pathname = usePathname()
   const router = useRouter()
-  const [localShop, setLocalShop] = useState(() => desktopCanBootLocally())
-  const localMode = desktopLocalMode() || localShop
+  const [localShop, setLocalShop] = useState(() => hasLocalShop())
   const onAuthPage = pathname.startsWith("/auth")
   const onSsoCallback = pathname.startsWith("/auth/sso-callback")
   const onPublicPage =
@@ -45,14 +42,14 @@ function AuthGate({ children }: { children: React.ReactNode }) {
     pathname === "/data-deletion"
 
   useEffect(() => {
-    if (!isLoaded || onPublicPage || onSsoCallback || localMode) return
+    if (!isLoaded || onPublicPage || onSsoCallback || localShop) return
     if (!isSignedIn && !onAuthPage) router.replace("/auth/login")
     if (isSignedIn && onAuthPage) router.replace("/dashboard")
-  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router, localMode])
+  }, [isLoaded, isSignedIn, onAuthPage, onPublicPage, onSsoCallback, router, localShop])
 
   if (onPublicPage || onSsoCallback) return <>{children}</>
   if (!isLoaded) return <BootScreen />
-  if (localMode) {
+  if (localShop && !isSignedIn) {
     return (
       <OrgProvider>
         <PinGate>{children}</PinGate>
@@ -76,23 +73,10 @@ function BootScreen() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <div className="h-9 w-9 animate-spin rounded-full border-2 border-border border-t-primary" />
-        <p className="text-sm text-muted">Loading ScalPOS…</p>
+        <p className="text-sm text-muted">Loading ScalPOSΓÇª</p>
       </div>
     </div>
   )
-}
-
-function MigrationGate({ children }: { children: ReactNode }) {
-  const [migrated, setMigrated] = useState(false)
-  useEffect(() => {
-    let cancelled = false
-    void migrateLegacyDesktop().finally(() => {
-      if (!cancelled) setMigrated(true)
-    })
-    return () => { cancelled = true }
-  }, [])
-  if (!migrated) return <BootScreen />
-  return <>{children}</>
 }
 
 class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -115,7 +99,7 @@ class ScreenErrorBoundary extends Component<{ children: ReactNode }, { error: Er
           <div>
             <h1 className="text-lg font-bold text-foreground">This screen didn&apos;t load</h1>
             <p className="mt-1 text-sm text-muted">
-              Share the details below — they show exactly why this page failed.
+              Share the details below ΓÇö they show exactly why this page failed.
             </p>
           </div>
           <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-sidebar-hover p-3 text-xs leading-5 text-danger">
@@ -150,7 +134,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <MigrationGate>
     <ClerkProvider
       publishableKey={publishableKey}
       appearance={{
@@ -166,6 +149,5 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <AuthGate>{children}</AuthGate>
       </ScreenErrorBoundary>
     </ClerkProvider>
-    </MigrationGate>
   )
 }

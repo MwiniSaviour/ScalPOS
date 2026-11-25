@@ -4,9 +4,9 @@ import Link from "next/link"
 import { useSyncExternalStore } from "react"
 import { Lock, ShieldAlert, RefreshCw } from "lucide-react"
 import { usePathname } from "next/navigation"
-import { useUser } from "@clerk/clerk-react"
+import { useAuth, useUser } from "@clerk/clerk-react"
 import { useOrg, readDemoOrg } from "@/lib/auth/org"
-import { desktopLocalMode } from "@/lib/auth/offline-gate"
+import { hasLocalShop } from "@/lib/offline/local-data"
 import {
   useEntitlement,
   refreshEntitlement,
@@ -38,16 +38,17 @@ const voidSubscribe = () => () => {}
 export function EnterpriseGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user } = useUser()
+  const { isSignedIn } = useAuth()
   const hasLocal = useSyncExternalStore(
     voidSubscribe,
-    () => desktopLocalMode(),
+    () => hasLocalShop(),
     () => false,
   )
   const { shop } = useOrg()
   const isDemo = !!shop && readDemoOrg(user?.id) === shop.id
   const ent = useEntitlement(isDemo ? null : (shop?.id ?? null))
   const kind = entitlementKind(ent)
-  const localOffline = hasLocal
+  const localOffline = hasLocal && !isSignedIn
   const allowed =
     localOffline ||
     (pathname.startsWith("/dashboard/billing") &&
@@ -59,12 +60,12 @@ export function EnterpriseGate({ children }: { children: React.ReactNode }) {
 
   if (!shop) {
     return (
-      <Spinner label="Checking your plan…" />
+      <Spinner label="Checking your planΓÇª" />
     )
   }
 
   if (kind === "unknown") {
-    if (ent.loading) return <Spinner label="Checking your plan…" />
+    if (ent.loading) return <Spinner label="Checking your planΓÇª" />
     return (
       <Shell>
         <div className="flex flex-col items-center text-center">

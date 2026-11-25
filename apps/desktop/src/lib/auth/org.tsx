@@ -260,3 +260,22 @@ export function useOrg(): OrgContextValue {
   if (!ctx) throw new Error("useOrg must be used inside OrgProvider")
   return ctx
 }
+
+/** Context for the offline desktop build, where no Clerk/cloud org exists. */
+export function LocalOrgProvider({ children }: { children: React.ReactNode }) {
+  const shop: Shop = { id: "local", name: "This computer", role: "owner" }
+  return (
+    <OrgContext.Provider
+      value={{
+        shop,
+        loading: false,
+        error: null,
+        needsShop: false,
+        createShop: async () => {},
+        retry: () => {},
+      }}
+    >
+      {children}
+    </OrgContext.Provider>
+  )
+}

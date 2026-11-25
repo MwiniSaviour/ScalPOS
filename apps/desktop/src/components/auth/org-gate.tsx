@@ -1,10 +1,10 @@
 "use client"
 
 import { useSyncExternalStore, useState } from "react"
-import { useClerk } from "@clerk/clerk-react"
+import { useAuth, useClerk } from "@clerk/clerk-react"
 import { Pill, Scissors, ShieldAlert, Store, RefreshCw, Plus, UtensilsCrossed, type LucideIcon } from "lucide-react"
 import { useOrg } from "@/lib/auth/org"
-import { desktopLocalMode } from "@/lib/auth/offline-gate"
+import { hasLocalShop } from "@/lib/offline/local-data"
 import type { BusinessType } from "@/lib/types"
 
 const voidSubscribe = () => () => {}
@@ -32,13 +32,14 @@ function Shell({ children }: { children: React.ReactNode }) {
 export function OrgGate({ children }: { children: React.ReactNode }) {
   const { shop, loading, error, needsShop, createShop, retry } = useOrg()
   const { signOut } = useClerk()
+  const { isSignedIn } = useAuth()
   const [businessType, setBusinessType] = useState<BusinessType>("retail")
   const hasLocal = useSyncExternalStore(
     voidSubscribe,
-    () => desktopLocalMode(),
+    () => hasLocalShop(),
     () => false,
   )
-  const localOffline = hasLocal
+  const localOffline = hasLocal && !isSignedIn
 
   if (localOffline || shop) return <>{children}</>
 
@@ -52,7 +53,7 @@ export function OrgGate({ children }: { children: React.ReactNode }) {
           <h1 className="text-xl font-semibold text-foreground">Set up your shop</h1>
           <p className="mt-2 text-sm text-muted">
             This account isn&apos;t linked to a shop yet. Pick your shop type, create it,
-            and start your 7-day free trial — everything works right here on the desktop,
+            and start your 7-day free trial ΓÇö everything works right here on the desktop,
             and you can connect the ScalPOS app on your phone later with the same account.
           </p>
           <div className="mt-5 grid w-full grid-cols-2 gap-2">
@@ -84,7 +85,7 @@ export function OrgGate({ children }: { children: React.ReactNode }) {
             className="btn-primary mt-5 w-full"
           >
             <Plus size={16} />
-            {loading ? "Creating shop…" : "Create my shop"}
+            {loading ? "Creating shopΓÇª" : "Create my shop"}
           </button>
           <button onClick={retry} className="btn-ghost mt-2 w-full text-xs">
             I already have an invite
@@ -119,7 +120,7 @@ export function OrgGate({ children }: { children: React.ReactNode }) {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <div className="h-9 w-9 animate-spin rounded-full border-2 border-border border-t-primary" />
-        <p className="text-sm text-muted">Opening your shop…</p>
+        <p className="text-sm text-muted">Opening your shopΓÇª</p>
       </div>
     </div>
   )

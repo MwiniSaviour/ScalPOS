@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next"
-import { Providers } from "@/components/providers"
+import { Providers as WebProviders } from "@/components/providers"
+import { Providers as OfflineProviders } from "@/components/providers-offline"
+const Providers = process.env.NEXT_PUBLIC_OFFLINE_DESKTOP === "1" ? OfflineProviders : WebProviders
 import { AffiliateRefCapture } from "@/components/affiliate-ref-capture"
 import { LegacyServiceWorkerCleanup } from "@/components/legacy-sw-cleanup"
 import { Geist, Geist_Mono } from "next/font/google"

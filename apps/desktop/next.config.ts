@@ -1,7 +1,10 @@
 import type { NextConfig } from "next"
 import path from "node:path"
 
+const offlineDesktop = process.env.NEXT_PUBLIC_OFFLINE_DESKTOP === "1"
+
 const nextConfig: NextConfig = {
+  env: { NEXT_PUBLIC_OFFLINE_DESKTOP: offlineDesktop ? "1" : "0" },
   outputFileTracingRoot: __dirname.replace(/[\\/]apps[\\/]desktop$/, ""),
   webpack(config) {
     config.resolve = config.resolve ?? {}
