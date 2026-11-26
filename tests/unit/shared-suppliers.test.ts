@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { poTotal, applyReceipt } from "../../lib/suppliers.ts";
-import type { PurchaseOrder, Product, StockMove } from "../../lib/types.ts";
+import type { PurchaseOrder, Product } from "../../lib/types.ts";
 
 const po: PurchaseOrder = {
   id: "po1",
