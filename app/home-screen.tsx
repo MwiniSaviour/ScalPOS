@@ -13,6 +13,7 @@ import { cn } from "@/lib/ui";
 import { useCurrentStaff } from "@/lib/staff";
 import { StaffAvatar } from "./account-screen";
 import NotificationWatcher from "@/components/shell/notification-watcher";
+import { FinanceHome } from "@/components/finance/finance-home";
 import { countUnread, listNotifications } from "@/lib/api/notifications";
 import { readConnection } from "@/lib/api/bootstrap";
 import Link from "next/link";
@@ -101,6 +102,8 @@ export default function HomeScreen() {
     return () => clearInterval(t);
   }, [refreshNotifs]);
   const unread = notifs ? notifs.count : 0;
+
+  if (settings.businessType === "personal") return <FinanceHome />;
 
   return (
     <div className="anim-fade overflow-x-hidden px-5 pt-4">

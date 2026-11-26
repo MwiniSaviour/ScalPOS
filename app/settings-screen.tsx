@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ReceiptPreview } from "@/components/receipt/receipt-preview";
 import { Segmented } from "@/components/ui/segmented";
 import { useSettings, usePos } from "@/lib/store";
-import { ChevronLeft, ChevronRight, Cloud, CloudUpload, Lock, Moon, Store, Sun } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleUserRound, Cloud, CloudUpload, Lock, Moon, Store, Sun } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -21,6 +21,7 @@ export default function SettingsScreen() {
   const settings = useSettings();
   const updateSettings = usePos((s) => s.updateSettings);
   const toast = usePos((s) => s.toast);
+  const personal = settings.businessType === "personal";
 
   return (
     <div className="anim-fade px-5 pt-4">
@@ -66,17 +67,19 @@ export default function SettingsScreen() {
 
       {/* business */}
       <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <h2 className="text-[15px] font-medium text-ink2">{personal ? "Account" : "Business"}</h2>
         <Card inset className="mt-2.5">
           <Link
             href="/settings/shop"
             className="press flex items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
           >
             <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
-              <Store className="size-[18px]" />
+              {personal ? <CircleUserRound className="size-[18px]" /> : <Store className="size-[18px]" />}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[17px] font-semibold text-ink">Shop details</span>
+              <span className="block text-[17px] font-semibold text-ink">
+                {personal ? "Personal details" : "Shop details"}
+              </span>
               <span className="block truncate text-[14px] text-ink3">
                 {settings.shopName} · {settings.phone || "No phone"}
               </span>
@@ -117,6 +120,7 @@ export default function SettingsScreen() {
       </section>
 
       {/* receipt — read-only echo, edited in Shop details */}
+      {!personal && (
       <section className="mt-6">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-[15px] font-medium text-ink2">Receipt</h2>
@@ -139,8 +143,10 @@ export default function SettingsScreen() {
           </p>
         </Card>
       </section>
+      )}
 
       {/* payments */}
+      {!personal && (
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">MoMo payments</h2>
         <Card className="mt-2.5 p-4">
@@ -169,12 +175,15 @@ export default function SettingsScreen() {
           </p>
         </Card>
       </section>
+      )}
 
       {/* tax */}
+      {!personal && (
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Tax</h2>
         <TaxCard />
       </section>
+      )}
 
       {/* currency */}
       <section className="mt-6 pb-32">

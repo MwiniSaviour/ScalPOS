@@ -1,18 +1,44 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { House, Package, Plus, ReceiptText, ScanLine, Users, type LucideIcon } from "lucide-react";
+import {
+  ArrowDownLeft,
+  House,
+  Package,
+  Plus,
+  ReceiptText,
+  ScanLine,
+  Users,
+  Wallet,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/ui";
 import { useTerms } from "@/lib/terms";
-/** bottom tab chrome exists only on the tab destinations */
-const TAB_ROUTES = ["/home", "/orders", "/inventory", "/customers", "/more"];
+import { usePos } from "@/lib/store";
 
-const tabs: { href: string; icon: LucideIcon }[] = [
+const SHOP_TABS: { href: string; icon: LucideIcon }[] = [
   { href: "/home", icon: House },
   { href: "/orders", icon: ReceiptText },
   { href: "/inventory", icon: Package },
   { href: "/customers", icon: Users },
+];
+
+const FINANCE_TABS: { href: string; icon: LucideIcon }[] = [
+  { href: "/home", icon: House },
+  { href: "/activities", icon: ReceiptText },
+  { href: "/budgets", icon: Wallet },
+  { href: "/more", icon: Users },
+];
+
+const TAB_ROUTES = [
+  "/home",
+  "/orders",
+  "/inventory",
+  "/customers",
+  "/activities",
+  "/budgets",
+  "/more",
 ];
 
 function normalize(p: string): string {
@@ -23,14 +49,22 @@ function normalize(p: string): string {
 export function TabBar() {
   const pathname = usePathname();
   const terms = useTerms();
-  const labels: Record<string, string> = {
-    "/home": "Home",
-    "/orders": terms.orders,
-    "/inventory": "Inventory",
-    "/customers": terms.customers,
-  };
+  const personal = usePos((s) => s.settings.businessType === "personal");
+  const tabs = personal ? FINANCE_TABS : SHOP_TABS;
+  const labels: Record<string, string> = personal
+    ? {
+        "/home": "Home",
+        "/activities": "Activities",
+        "/budgets": "Budgets",
+        "/more": "More",
+      }
+    : {
+        "/home": "Home",
+        "/orders": terms.orders,
+        "/inventory": "Inventory",
+        "/customers": terms.customers,
+      };
 
-  // drill-in & flow screens own their chrome — no tab bar
   if (!TAB_ROUTES.includes(normalize(pathname))) return null;
 
   return (
@@ -38,19 +72,25 @@ export function TabBar() {
       <div className="mx-auto max-w-[420px] px-4 pb-2">
         <div className="flex h-[52px] overflow-hidden rounded-lg bg-accent text-accentink">
           <Link
-            href="/sell"
-            aria-label="Start a new sale"
+            href={personal ? "/expense" : "/sell"}
+            aria-label={personal ? "Add a new expense" : "Start a new sale"}
             className="press flex flex-1 items-center justify-center gap-2"
           >
             <Plus className="size-[19px]" />
-            <span className="text-[16px] font-semibold">New sale</span>
+            <span className="text-[16px] font-semibold">
+              {personal ? "New expense" : "New sale"}
+            </span>
           </Link>
           <Link
-            href="/sell?scan=1"
-            aria-label="Scan a barcode to add a product"
+            href={personal ? "/funds" : "/sell?scan=1"}
+            aria-label={personal ? "Add funds" : "Scan a barcode to add a product"}
             className="press flex w-[64px] items-center justify-center border-l border-accentink/20"
           >
-            <ScanLine className="size-[22px]" />
+            {personal ? (
+              <ArrowDownLeft className="size-[21px]" />
+            ) : (
+              <ScanLine className="size-[22px]" />
+            )}
           </Link>
         </div>
       </div>
@@ -70,14 +110,14 @@ export function TabBar() {
                 )}
               >
                 <Icon className="size-[21px]" />
-                <span className={cn("text-[11px] font-medium", active && "font-semibold")}>{labels[t.href]}</span>
+                <span className={cn("text-[11px] font-medium", active && "font-semibold")}>
+                  {labels[t.href]}
+                </span>
               </Link>
             );
           })}
         </div>
       </div>
-      {/* gesture/button strip: painted so page content never shows through,
-          kept just tall enough beneath the labels — no stray dark band */}
       <div
         className="bg-surface"
         style={{ height: "max(calc(var(--nova-sab) - 28px), 8px)" }}

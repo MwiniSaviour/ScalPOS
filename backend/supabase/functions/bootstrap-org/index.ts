@@ -99,7 +99,7 @@ Deno.serve(async (req: Request) => {
   const businessType = body?.business_type;
   const chosenType =
     typeof businessType === "string" &&
-    ["retail", "pharmacy", "restaurant", "salon"].includes(businessType)
+    ["retail", "personal", "pharmacy", "restaurant", "salon"].includes(businessType)
       ? businessType
       : "retail";
   const { data: org, error: orgErr } = await admin

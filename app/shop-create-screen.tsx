@@ -36,6 +36,7 @@ export default function ShopCreateScreen() {
   const onboarded = useHasOnboarded();
   const [email, setEmail] = useState("");
 
+  const personal = businessType === "personal";
   const shopNameOk = shopName.trim().length > 0;
   const ownerNameOk = ownerName.trim().length > 0;
   const pinOk = pin.trim().length >= 4 && pin === confirm;
@@ -53,7 +54,11 @@ export default function ShopCreateScreen() {
 
   async function submit() {
     if (!shopNameOk || !ownerNameOk || !pinOk) {
-      setError("Shop name, owner name and a 4+ digit PIN (confirmed) are required.");
+      setError(
+        personal
+          ? "A name, owner name and a 4+ digit PIN (confirmed) are required."
+          : "Shop name, owner name and a 4+ digit PIN (confirmed) are required.",
+      );
       return;
     }
     if (emailTrim && !emailOk) {
@@ -86,7 +91,11 @@ export default function ShopCreateScreen() {
 
       // 4. Unlock this session; the PIN prompt returns on later launches.
       setSessionUnlocked(true);
-      toast("Shop created — protected with your PIN");
+      toast(
+        personal
+          ? "Finance space created — protected with your PIN"
+          : "Shop created — protected with your PIN",
+      );
 
       if (emailTrim) {
         // The code screen owns sign-up creation and sends the single
@@ -119,7 +128,7 @@ export default function ShopCreateScreen() {
           <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
         </IconButton>
         <h1 className="min-w-0 flex-1 truncate text-[26px]/7 font-bold tracking-[-0.02em] text-ink">
-          Create your shop
+          {personal ? "Set up your finances" : "Create your shop"}
         </h1>
       </header>
       <p className="mt-0.5 text-[15px] text-ink3">
@@ -129,11 +138,11 @@ export default function ShopCreateScreen() {
       <Card className="mt-6 px-4 py-4">
         <div className="flex flex-col gap-4">
           <Input
-            label="Shop name"
+            label={personal ? "Name" : "Shop name"}
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}
-            placeholder="e.g. Community mini mart"
-            error={!shopNameOk ? "Shop name is required" : undefined}
+            placeholder={personal ? "e.g. Ama's finances" : "e.g. Community mini mart"}
+            error={!shopNameOk ? (personal ? "Name is required" : "Shop name is required") : undefined}
             leading={<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/10"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg></span>}
           />
           <div>
@@ -174,14 +183,14 @@ export default function ShopCreateScreen() {
             onChange={(e) => setPhone(e.target.value)}
             placeholder="024 000 0000"
             inputMode="tel"
-            hint="Shown on receipts and for MoMo"
+            hint={personal ? "Kept with your finance data on this device" : "Shown on receipts and for MoMo"}
           />
           <Input
-            label="Owner name"
+            label={personal ? "Your name" : "Owner name"}
             value={ownerName}
             onChange={(e) => setOwnerName(e.target.value)}
             placeholder="e.g. Ama Serwaa"
-            error={!ownerNameOk ? "Owner name is required" : undefined}
+            error={!ownerNameOk ? (personal ? "Your name is required" : "Owner name is required") : undefined}
           />
           <Input
             label="Email (optional)"
@@ -261,7 +270,7 @@ export default function ShopCreateScreen() {
             disabled={!shopNameOk || !ownerNameOk || !pinOk || busy}
             onClick={submit}
           >
-            Create shop
+            {personal ? "Start tracking" : "Create shop"}
           </Button>
         </div>
         {error && <p className="mt-2 text-[14px] text-danger">{error}</p>}

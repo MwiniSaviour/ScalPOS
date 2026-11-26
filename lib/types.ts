@@ -264,7 +264,40 @@ export type StockReason =
   | "opening"
   | "expiry";
 
-export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon"] as const;
+export type FinanceEntryKind = "expense" | "funds";
+
+export type FinanceMethod = "cash" | "momo" | "bank" | "other";
+
+export type FinanceCategory = {
+  id: string;
+  name: string;
+  color: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type FinanceEntry = {
+  id: string;
+  kind: FinanceEntryKind;
+  amount: number;
+  categoryId: string | null;
+  source: string;
+  note: string;
+  method: FinanceMethod;
+  t: number;
+  createdAt: number;
+};
+
+export type FinanceBudget = {
+  id: string;
+  categoryId: string;
+  amount: number;
+  month: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export const BUSINESS_TYPES = ["retail", "pharmacy", "restaurant", "salon", "personal"] as const;
 
 export type BusinessType = (typeof BUSINESS_TYPES)[number];
 
