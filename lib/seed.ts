@@ -51,6 +51,9 @@ export type DemoState = {
   staff: Staff[];
   appointments: Appointment[];
   packages: Package[];
+  financeCategories: [];
+  financeEntries: [];
+  financeBudgets: [];
   cart: [];
   cartCustomerId: null;
   cartDiscount: number;
@@ -82,6 +85,9 @@ export function demoData(businessType: BusinessType = "retail"): DemoState {
   const bundle = build(now);
   return {
     ...bundle,
+    financeCategories: [],
+    financeEntries: [],
+    financeBudgets: [],
     cart: [],
     cartCustomerId: null,
     cartDiscount: 0,
