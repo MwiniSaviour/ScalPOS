@@ -23,6 +23,7 @@ import {
   recipeDraw,
 } from "./restaurant";
 import { id, orderId, startOfDay } from "./format";
+import { defaultFinanceCategories, monthKey } from "./finance";
 import {
   commissionOf,
   creditAwareUnitPrices,
@@ -48,6 +49,10 @@ import type {
   Category,
   CartLine,
   Customer,
+  FinanceBudget,
+  FinanceCategory,
+  FinanceEntry,
+  FinanceMethod,
   Order,
   OrderItem,
   Package,
@@ -229,6 +234,10 @@ type PosState = {
   /* purchasing */
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
+  /* personal finance */
+  financeCategories: FinanceCategory[];
+  financeEntries: FinanceEntry[];
+  financeBudgets: FinanceBudget[];
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -348,6 +357,21 @@ type PosState = {
   deletePurchaseOrder: (poId: string) => void;
   receivePurchaseOrder: (poId: string) => void;
 
+  /* personal finance */
+  saveFinanceEntry: (input: {
+    id?: string;
+    kind: FinanceEntry["kind"];
+    amount: number;
+    categoryId?: string | null;
+    source?: string;
+    note?: string;
+    method?: FinanceMethod;
+    t?: number;
+  }) => FinanceEntry | null;
+  deleteFinanceEntry: (entryId: string) => void;
+  upsertFinanceCategory: (input: Partial<FinanceCategory> & { name: string }) => FinanceCategory;
+  setFinanceBudget: (categoryId: string, amount: number, at?: number) => void;
+
   /* settings */
   updateSettings: (patch: Partial<Settings>) => void;
 
@@ -374,6 +398,9 @@ export const usePos = create<PosState>()(
       packages: [],
       suppliers: [],
       purchaseOrders: [],
+      financeCategories: [],
+      financeEntries: [],
+      financeBudgets: [],
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -406,6 +433,9 @@ export const usePos = create<PosState>()(
         const s = get();
         if (!s.settings.businessType) {
           set({ settings: { ...s.settings, businessType: "retail" } });
+        }
+        if (s.settings.businessType === "personal" && s.financeCategories.length === 0) {
+          set({ financeCategories: defaultFinanceCategories() });
         }
         if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
           set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
@@ -1457,8 +1487,89 @@ export const usePos = create<PosState>()(
         return creditsOf(s.customers.find((c) => c.id === customerId) ?? null, packageId);
       },
 
+      saveFinanceEntry: (input) => {
+        const amount = Number(input.amount);
+        if (!Number.isFinite(amount) || amount <= 0) return null;
+        const now = Date.now();
+        const s = get();
+        const existing = input.id
+          ? s.financeEntries.find((entry) => entry.id === input.id)
+          : undefined;
+        const entry: FinanceEntry = {
+          id: existing?.id ?? input.id ?? id("fin_"),
+          kind: input.kind,
+          amount: round2(amount),
+          categoryId: input.kind === "expense" ? input.categoryId ?? null : null,
+          source: input.kind === "funds" ? input.source?.trim() || "Funds" : "",
+          note: input.note?.trim() ?? "",
+          method: input.method ?? "cash",
+          t: input.t && input.t > 0 ? input.t : existing?.t ?? now,
+          createdAt: existing?.createdAt ?? now,
+        };
+        set({
+          financeEntries: existing
+            ? s.financeEntries.map((row) => (row.id === entry.id ? entry : row))
+            : [entry, ...s.financeEntries],
+        });
+        return entry;
+      },
+
+      deleteFinanceEntry: (entryId) =>
+        set((s) => ({ financeEntries: s.financeEntries.filter((entry) => entry.id !== entryId) })),
+
+      upsertFinanceCategory: (input) => {
+        const now = Date.now();
+        const s = get();
+        const existing = input.id
+          ? s.financeCategories.find((category) => category.id === input.id)
+          : undefined;
+        const row: FinanceCategory = {
+          id: existing?.id ?? input.id ?? id("fin_cat_"),
+          name: input.name.trim() || "Untitled",
+          color: input.color ?? existing?.color ?? "#94a3b8",
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        set({
+          financeCategories: existing
+            ? s.financeCategories.map((category) => (category.id === row.id ? row : category))
+            : [...s.financeCategories, row],
+        });
+        return row;
+      },
+
+      setFinanceBudget: (categoryId, amount, at = Date.now()) => {
+        const month = monthKey(at);
+        const s = get();
+        const existing = s.financeBudgets.find(
+          (budget) => budget.categoryId === categoryId && budget.month === month,
+        );
+        if (!Number.isFinite(amount) || amount <= 0) {
+          if (existing) {
+            set({ financeBudgets: s.financeBudgets.filter((budget) => budget.id !== existing.id) });
+          }
+          return;
+        }
+        const row: FinanceBudget = {
+          id: existing?.id ?? id("fin_bud_"),
+          categoryId,
+          amount: round2(amount),
+          month,
+          createdAt: existing?.createdAt ?? Date.now(),
+          updatedAt: Date.now(),
+        };
+        set({
+          financeBudgets: existing
+            ? s.financeBudgets.map((budget) => (budget.id === row.id ? row : budget))
+            : [...s.financeBudgets, row],
+        });
+      },
+
       updateSettings: (patch) => {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
+        if (patch.businessType === "personal" && get().financeCategories.length === 0) {
+          set({ financeCategories: defaultFinanceCategories() });
+        }
         if (patch.theme) {
           if (typeof document !== "undefined") {
             document.documentElement.dataset.theme = patch.theme;
@@ -1550,6 +1661,9 @@ export const usePos = create<PosState>()(
         packages: s.packages,
         suppliers: s.suppliers,
         purchaseOrders: s.purchaseOrders,
+        financeCategories: s.financeCategories,
+        financeEntries: s.financeEntries,
+        financeBudgets: s.financeBudgets,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,

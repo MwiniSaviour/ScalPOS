@@ -2,7 +2,7 @@ import type { BusinessType } from "./types";
 
 export type Feature =
   | "core-pos" | "inventory" | "customers" | "reports" | "staff"
-  | "momo" | "tax" | "backup"
+  | "momo" | "tax" | "backup" | "finance"
   | "batches" | "expiry" | "rx" | "suppliers-po"
   | "tables" | "order-types" | "kitchen" | "modifiers" | "recipes" | "daily-availability"
   | "appointments" | "services" | "packages" | "commissions";
@@ -15,6 +15,7 @@ const SETS: Record<BusinessType, Feature[]> = {
                "tables", "order-types", "kitchen", "modifiers", "recipes", "daily-availability"],
   salon:      ["core-pos", "inventory", "customers", "reports", "staff", "momo", "tax", "backup",
                "appointments", "services", "packages", "commissions"],
+  personal:   ["finance", "backup"],
 };
 
 export function featuresOf(bt: BusinessType): Feature[] { return SETS[bt] ?? SETS.retail; }

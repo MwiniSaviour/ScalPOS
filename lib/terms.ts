@@ -15,6 +15,9 @@ const TABLES: Record<BusinessType, Terms> = {
     order: "Ticket", orders: "Tickets" },
   salon: { ...RETAIL, customer: "Client", customers: "Clients",
     product: "Service/Product", products: "Services/Products" },
+  personal: { ...RETAIL, customer: "Contact", customers: "Contacts",
+    product: "Category", products: "Categories", inventory: "Budgets",
+    order: "Activity", orders: "Activities", sale: "Expense" },
 };
 export function termsOf(bt: BusinessType): Terms { return TABLES[bt] ?? RETAIL; }
 export function useTerms(): Terms { return termsOf(usePos((s) => s.settings.businessType)); }

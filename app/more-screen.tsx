@@ -37,6 +37,7 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
+  ArrowDownLeft,
   Bluetooth,
   CalendarDays,
   ChefHat,
@@ -47,6 +48,8 @@ import {
   Gift,
   LogOut,
   PieChart,
+  Plus,
+  ReceiptText,
   RefreshCcw,
   ScrollText,
   Settings,
@@ -54,6 +57,7 @@ import {
   Ticket,
   Users,
   UsersRound,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 import Link from "next/link";
@@ -80,6 +84,7 @@ export default function MoreScreen() {
   const [codeDraft, setCodeDraft] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   const terms = useTerms();
+  const personal = settings.businessType === "personal";
 
   useEffect(() => {
     let cancelled = false;
@@ -178,72 +183,104 @@ export default function MoreScreen() {
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Browse</h2>
         <Card inset className="mt-2.5">
-          <RowLink
-            href="/reports"
-            tone="accent"
-            icon={<PieChart className="size-[18px]" />}
-            label="Reports"
-            sub="Sales, payments and top products"
-          />
-          <RowLink
-            href="/stock"
-            icon={<Warehouse className="size-[18px]" />}
-            label="Stock"
-            sub="Stock levels and movements"
-          />
-          {hasFeature(settings.businessType, "kitchen") && (
-            <RowLink
-              href="/kitchen"
-              icon={<ChefHat className="size-[18px]" />}
-              label="Kitchen"
-              sub="Tickets through the kitchen"
-            />
+          {personal ? (
+            <>
+              <RowLink
+                href="/expense"
+                tone="accent"
+                icon={<Plus className="size-[18px]" />}
+                label="New expense"
+                sub="Record money you spent"
+              />
+              <RowLink
+                href="/funds"
+                icon={<ArrowDownLeft className="size-[18px]" />}
+                label="Add funds"
+                sub="Allowance, salary or gift"
+              />
+              <RowLink
+                href="/activities"
+                icon={<ReceiptText className="size-[18px]" />}
+                label="Activities"
+                sub="Every expense and top-up"
+              />
+              <RowLink
+                href="/budgets"
+                icon={<Wallet className="size-[18px]" />}
+                label="Budgets"
+                sub="Monthly spending limits"
+              />
+            </>
+          ) : (
+            <>
+              <RowLink
+                href="/reports"
+                tone="accent"
+                icon={<PieChart className="size-[18px]" />}
+                label="Reports"
+                sub="Sales, payments and top products"
+              />
+              <RowLink
+                href="/stock"
+                icon={<Warehouse className="size-[18px]" />}
+                label="Stock"
+                sub="Stock levels and movements"
+              />
+              {hasFeature(settings.businessType, "kitchen") && (
+                <RowLink
+                  href="/kitchen"
+                  icon={<ChefHat className="size-[18px]" />}
+                  label="Kitchen"
+                  sub="Tickets through the kitchen"
+                />
+              )}
+              {hasFeature(settings.businessType, "appointments") && (
+                <RowLink
+                  href="/appointments"
+                  icon={<CalendarDays className="size-[18px]" />}
+                  label="Appointments"
+                  sub="The book of visits"
+                />
+              )}
+              {hasFeature(settings.businessType, "packages") && (
+                <RowLink
+                  href="/packages"
+                  icon={<Ticket className="size-[18px]" />}
+                  label="Packages"
+                  sub="Service packages and credits"
+                />
+              )}
+              <RowLink
+                href="/customers"
+                icon={<Users className="size-[18px]" />}
+                label={terms.customers}
+                sub="Credit and contact details"
+              />
+              <RowLink
+                href="/categories"
+                icon={<Store className="size-[18px]" />}
+                label="Categories"
+                sub="Group your products"
+              />
+              <button
+                onClick={() => setBtOpen(true)}
+                className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
+                  <Bluetooth className="size-[18px]" />
+                </span>
+                <span className="min-w-0 flex-1 text-left">
+                  <span className="block truncate text-[17px] font-semibold text-ink">
+                    Bluetooth scanner
+                  </span>
+                  <span className="block truncate text-[14px] text-ink3">
+                    Type barcodes into a paired computer
+                  </span>
+                </span>
+                <ChevronRight className="size-4 shrink-0 text-ink3" />
+              </button>
+            </>
           )}
-          {hasFeature(settings.businessType, "appointments") && (
-            <RowLink
-              href="/appointments"
-              icon={<CalendarDays className="size-[18px]" />}
-              label="Appointments"
-              sub="The book of visits"
-            />
-          )}
-          {hasFeature(settings.businessType, "packages") && (
-            <RowLink
-              href="/packages"
-              icon={<Ticket className="size-[18px]" />}
-              label="Packages"
-              sub="Service packages and credits"
-            />
-          )}
-          <RowLink
-            href="/customers"
-            icon={<Users className="size-[18px]" />}
-            label={terms.customers}
-            sub="Credit and contact details"
-          />
-          <RowLink
-            href="/categories"
-            icon={<Store className="size-[18px]" />}
-            label="Categories"
-            sub="Group your products"
-          />
-          <button
-            onClick={() => setBtOpen(true)}
-            className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
-          >
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
-              <Bluetooth className="size-[18px]" />
-            </span>
-            <span className="min-w-0 flex-1 text-left">
-              <span className="block truncate text-[17px] font-semibold text-ink">
-                Bluetooth scanner
-              </span>
-              <span className="block truncate text-[14px] text-ink3">
-                Type barcodes into a paired computer
-              </span>
-            </span>
-            <ChevronRight className="size-4 shrink-0 text-ink3" />
-          </button>
         </Card>
       </section>
 
@@ -259,11 +296,11 @@ export default function MoreScreen() {
           />
           <RowLink
             href="/settings/shop"
-            icon={<Store className="size-[18px]" />}
-            label="Shop details"
-            sub="Name, address, phone"
+            icon={personal ? <CircleUserRound className="size-[18px]" /> : <Store className="size-[18px]" />}
+            label={personal ? "Personal details" : "Shop details"}
+            sub={personal ? "Name, contact and address" : "Name, address, phone"}
           />
-          {conflictCount > 0 && (
+          {!personal && conflictCount > 0 && (
             <RowLink
               href="/conflicts"
               icon={<AlertTriangle className="size-[18px]" />}
@@ -275,7 +312,7 @@ export default function MoreScreen() {
             href="/settings"
             icon={<Settings className="size-[18px]" />}
             label="Settings"
-            sub="Theme, receipts, MoMo"
+            sub={personal ? "Theme, PIN and app preferences" : "Theme, receipts, MoMo"}
           />
           <RowLink
             href="/billing"
@@ -297,7 +334,7 @@ export default function MoreScreen() {
         </Card>
       </section>
 
-      {enterprise && (
+      {enterprise && !personal && (
         <section className="mt-6">
           <h2 className="text-[15px] font-medium text-ink2">Team</h2>
           <Card inset className="mt-2.5">

@@ -5,6 +5,7 @@ import {
   Scissors,
   Store,
   UtensilsCrossed,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -15,6 +16,12 @@ export const BUSINESS_TYPE_OPTIONS: Array<{
   icon: LucideIcon;
 }> = [
   { value: "retail", label: "Retail", example: "Sell goods over the counter", icon: Store },
+  {
+    value: "personal",
+    label: "Personal finance",
+    example: "Track funds, spending and budgets",
+    icon: Wallet,
+  },
   {
     value: "pharmacy",
     label: "Pharmacy",

@@ -36,6 +36,7 @@ export default function ShopSettingsScreen() {
   const [nameError, setNameError] = useState("");
   const [typeOpen, setTypeOpen] = useState(false);
   const [pendingType, setPendingType] = useState<BusinessType | null>(null);
+  const personal = settings.businessType === "personal";
 
   function chooseType(next: BusinessType) {
     setTypeOpen(false);
@@ -71,7 +72,7 @@ export default function ShopSettingsScreen() {
       address: address.trim(),
       receiptFooter: footer.trim(),
     });
-    toast("Shop details saved");
+    toast(personal ? "Details saved" : "Shop details saved");
     router.back();
   }
 
@@ -82,37 +83,41 @@ export default function ShopSettingsScreen() {
           <ChevronLeft className="size-[24px]" strokeWidth={2.2} />
         </IconButton>
         <h1 className="min-w-0 flex-1 truncate text-[26px]/7 font-bold tracking-[-0.02em] text-ink">
-          Shop details
+          {personal ? "Personal details" : "Shop details"}
         </h1>
       </header>
-      <p className="mt-0.5 text-[15px] text-ink3">Appears on every receipt</p>
+      <p className="mt-0.5 text-[15px] text-ink3">
+        {personal ? "Your finance profile" : "Appears on every receipt"}
+      </p>
 
       {/* receipt preview */}
-      <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Receipt preview</h2>
-        <Card className="mt-2.5 p-4">
-          <ReceiptPreview
-            shopName={shopName.trim()}
-            address={address.trim()}
-            phone={phone.trim()}
-            footer={footer.trim()}
-          />
-        </Card>
-      </section>
+      {!personal && (
+        <section className="mt-6">
+          <h2 className="text-[15px] font-medium text-ink2">Receipt preview</h2>
+          <Card className="mt-2.5 p-4">
+            <ReceiptPreview
+              shopName={shopName.trim()}
+              address={address.trim()}
+              phone={phone.trim()}
+              footer={footer.trim()}
+            />
+          </Card>
+        </section>
+      )}
 
       {/* details */}
       <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Details</h2>
+        <h2 className="text-[15px] font-medium text-ink2">{personal ? "Profile" : "Details"}</h2>
         <Card className="mt-2.5 px-4 py-4">
           <div className="flex flex-col gap-3.5">
             <Input
-              label="Shop name"
+              label={personal ? "Name" : "Shop name"}
               value={shopName}
               onChange={(e) => {
                 setShopName(e.target.value);
                 if (nameError) setNameError("");
               }}
-              placeholder="e.g. Community mini mart"
+              placeholder={personal ? "e.g. Ama's finances" : "e.g. Community mini mart"}
               error={nameError || undefined}
             />
             <Input
@@ -121,7 +126,11 @@ export default function ShopSettingsScreen() {
               onChange={(e) => setPhone(e.target.value)}
               placeholder="024 000 0000"
               inputMode="tel"
-              hint={`Shown on receipts with the ${CURRENCY_SYMBOL} totals and MoMo number`}
+              hint={
+                personal
+                  ? "Kept on this device with the rest of your finance data"
+                  : `Shown on receipts with the ${CURRENCY_SYMBOL} totals and MoMo number`
+              }
             />
             <TextArea
               label="Address"
@@ -130,14 +139,16 @@ export default function ShopSettingsScreen() {
               placeholder="Street, area, city"
               className="[&_textarea]:min-h-[88px]"
             />
-            <TextArea
-              label="Receipt footer"
-              value={footer}
-              onChange={(e) => setFooter(e.target.value)}
-              placeholder="Thanks for shopping with us!"
-              hint="Printed at the bottom of every receipt."
-              className="[&_textarea]:min-h-[72px]"
-            />
+            {!personal && (
+              <TextArea
+                label="Receipt footer"
+                value={footer}
+                onChange={(e) => setFooter(e.target.value)}
+                placeholder="Thanks for shopping with us!"
+                hint="Printed at the bottom of every receipt."
+                className="[&_textarea]:min-h-[72px]"
+              />
+            )}
           </div>
         </Card>
       </section>
@@ -155,7 +166,9 @@ export default function ShopSettingsScreen() {
               <Store className="size-[18px]" />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[17px] font-semibold text-ink">Business type</span>
+              <span className="block text-[17px] font-semibold text-ink">
+                {personal ? "Type" : "Business type"}
+              </span>
               <span className="block truncate text-[14px] text-ink3">
                 {businessTypeLabel(settings.businessType)} · sets wording and tools
               </span>
@@ -204,7 +217,11 @@ export default function ShopSettingsScreen() {
         onClose={() => setPendingType(null)}
         onConfirm={confirmTypeChange}
         title={pendingType ? `Switch to ${businessTypeLabel(pendingType)}?` : "Change business type?"}
-        body="Specialized pages for this type will unlock and terminology across the app will change. Your existing products, customers and orders stay exactly as they are."
+        body={
+          pendingType === "personal"
+            ? "The finance dashboard, activities and budgets will unlock, and your existing data stays exactly as it is."
+            : "Specialized pages for this type will unlock and terminology across the app will change. Your existing products, customers and orders stay exactly as they are."
+        }
         confirmLabel="Change type"
       />
 
