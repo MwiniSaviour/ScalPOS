@@ -4,11 +4,12 @@
  * Resolves a stored image reference to a renderable src on the desktop client.
  * - "sb-product-images:<path>" -> private storage bucket via the user session,
  *   downloaded to an object URL (cached, never revoked on unmount)
- * - everything else (https://, data:, plain paths) is passed through unchanged,
- *   "idb:" refs are local-device-only and resolve to null here.
+ * - "idb:<uuid>" -> blob in the local IndexedDB image store (offline photos)
+ * - everything else (https://, data:, plain paths) is passed through unchanged.
  */
 import { useEffect, useState } from "react"
 import { getSupabase } from "@/lib/supabase/client"
+import { getImageBlob, isLocalImageRef } from "@pos/image-store"
 
 const CLOUD_IMAGE_PREFIX = "sb-product-images:"
 const BUCKET = "product-images"
@@ -27,8 +28,30 @@ function trimCache() {
 
 export function useImageSrc(ref: string | null | undefined): string | null {
   const isCloud = ref?.startsWith(CLOUD_IMAGE_PREFIX) ?? false
+  const isLocal = isLocalImageRef(ref)
   const preview = ref ? cache.get(ref) ?? null : null
   const [resolved, setResolved] = useState<{ ref: string; url: string } | null>(null)
+
+  useEffect(() => {
+    if (!ref || !isLocal) return
+    if (cache.has(ref)) return
+    let alive = true
+    void (async () => {
+      try {
+        const blob = await getImageBlob(ref)
+        if (!alive || !blob) return
+        const url = URL.createObjectURL(blob)
+        cache.set(ref, url)
+        trimCache()
+        setResolved({ ref, url })
+      } catch {
+        /* leave the fallback art in place */
+      }
+    })()
+    return () => {
+      alive = false
+    }
+  }, [ref, isLocal, preview])
 
   useEffect(() => {
     if (!ref || !isCloud) return
@@ -54,10 +77,9 @@ export function useImageSrc(ref: string | null | undefined): string | null {
   }, [ref, isCloud, preview])
 
   if (!ref) return null
-  // Only private-bucket refs need resolving; plain paths ("/products/rice.jpg")
-  // and absolute links are already usable as an <img src>.
-  if (!isCloud) return ref
-  return resolved?.ref === ref ? resolved.url : preview
+  if (isLocal || isCloud) return resolved?.ref === ref ? resolved.url : preview
+  // Plain paths ("/products/rice.jpg") and absolute links are already usable.
+  return ref
 }
 
 const MAX_EDGE = 1024

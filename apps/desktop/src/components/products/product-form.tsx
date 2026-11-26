@@ -114,14 +114,19 @@ export function ProductForm({ product, orgId, onSave, onClose }: ProductFormProp
   }
 
   async function handlePhoto(file: File) {
-    if (!orgId) {
-      setFormError("Cannot upload images yet — try again after syncing.")
-      return
-    }
     setFormError("")
     setUploading(true)
     try {
-      setImage(await uploadProductImage(file, orgId))
+      if (process.env.NEXT_PUBLIC_OFFLINE_DESKTOP === "1") {
+        const { saveImageBlob } = await import("@pos/image-store")
+        setImage(await saveImageBlob(file))
+      } else {
+        if (!orgId) {
+          setFormError("Cannot upload images yet — try again after syncing.")
+          return
+        }
+        setImage(await uploadProductImage(file, orgId))
+      }
     } catch (e) {
       setFormError(e instanceof Error ? e.message : "Image upload failed")
     } finally {

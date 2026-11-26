@@ -375,7 +375,7 @@ export default function ProductsPage() {
       {showForm && (
         <ProductForm
           product={editing}
-          orgId={getOrgId()}
+          orgId={process.env.NEXT_PUBLIC_OFFLINE_DESKTOP === "1" ? undefined : getOrgId()}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null) }}
         />
