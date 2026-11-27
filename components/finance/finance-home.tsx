@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDownLeft, CalendarDays, CircleUserRound, Plus, Wallet } from "lucide-react";
+import { ArrowDownLeft, CalendarDays, CircleUserRound, Wallet } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { StaffAvatar } from "@/app/account-screen";
 import { BudgetBar } from "./budget-bar";
@@ -116,19 +116,12 @@ export function FinanceHome() {
         </div>
       </section>
 
-      <section className="mt-3 flex flex-col gap-2" aria-label="Quick actions">
-        <Link
-          href="/expense"
-          className="press flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-accent px-4 text-[16px] font-semibold text-accentink"
-        >
-          <Plus className="size-[19px]" />
-          Add expense
-        </Link>
+      <section className="mt-3" aria-label="Quick action">
         <Link
           href="/funds"
-          className="press flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-line2 bg-surface2 px-4 text-[15px] font-semibold text-ink"
+          className="press flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-accent px-4 text-[16px] font-semibold text-accentink"
         >
-          <ArrowDownLeft className="size-[18px]" />
+          <ArrowDownLeft className="size-[19px]" />
           Add funds
         </Link>
       </section>

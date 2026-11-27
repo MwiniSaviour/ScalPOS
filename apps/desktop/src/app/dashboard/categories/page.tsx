@@ -14,25 +14,9 @@ import {
   type CategoryInput,
 } from "@/lib/api/data"
 import type { Category, Product } from "@/lib/types"
+import { TOKEN_COLORS } from "@pos/ui"
 
-const CATEGORY_COLORS: { hex: string; name: string }[] = [
-  { hex: "#34d399", name: "Green" },
-  { hex: "#4c8dff", name: "Blue" },
-  { hex: "#a78bfa", name: "Violet" },
-  { hex: "#f5a524", name: "Amber" },
-  { hex: "#f4586e", name: "Rose" },
-  { hex: "#f6c453", name: "Gold" },
-  { hex: "#14b8a6", name: "Teal" },
-  { hex: "#06b6d4", name: "Cyan" },
-  { hex: "#6366f1", name: "Indigo" },
-  { hex: "#f97316", name: "Orange" },
-  { hex: "#ec4899", name: "Pink" },
-  { hex: "#84cc16", name: "Lime" },
-  { hex: "#0ea5e9", name: "Sky" },
-  { hex: "#c026d3", name: "Fuchsia" },
-  { hex: "#ef4444", name: "Red" },
-  { hex: "#eab308", name: "Yellow" },
-]
+const CATEGORY_COLORS = TOKEN_COLORS
 
 function CategoryViewModal({
   category,
@@ -203,7 +187,7 @@ function CategoryModal({
                   onClick={() => setColor(c.hex)}
                   title={c.name}
                   className="h-8 w-8 rounded-full border-2 transition-all"
-                  style={{ backgroundColor: c.hex, borderColor: color === c.hex ? "#1F2937" : "transparent" }}
+                  style={{ backgroundColor: c.hex, borderColor: color === c.hex ? "#1F2937" : "#cbd5e1" }}
                   aria-label={`Set color ${c.name}`}
                 />
               ))}
