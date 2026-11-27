@@ -1,6 +1,9 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
+import { usePathname } from "next/navigation"
+import { crumbsForPath } from "@/lib/breadcrumbs"
+import { Breadcrumbs } from "./breadcrumbs"
 import { Sidebar } from "./sidebar"
 import { Header } from "./header"
 import { PWASetup } from "../scanner/pwa-setup"
@@ -8,6 +11,7 @@ import { NewSaleFab } from "./new-sale-fab"
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const pathname = usePathname()
 
   return (
     <div className="flex min-h-screen">
@@ -15,7 +19,10 @@ export function DashboardLayout({ children }: { children: ReactNode }) {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col lg:ml-64">
         <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
-        <main className="flex-1 p-4 md:p-6 lg:p-8">{children}</main>
+        <main className="flex-1 p-4 md:p-6 lg:p-8">
+          <Breadcrumbs items={crumbsForPath(pathname ?? "/dashboard")} className="mb-4" />
+          {children}
+        </main>
       </div>
       <NewSaleFab />
     </div>
