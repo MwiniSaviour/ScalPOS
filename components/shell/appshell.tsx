@@ -4,10 +4,8 @@ import { usePathname } from "next/navigation";
 import { TabBar, willHaveTabBar } from "./tabbar";
 import { SyncStatus } from "@/components/ui/syncstatus";
 import { Toaster } from "@/components/ui/toaster";
-import { Button } from "@/components/ui/button";
 import { usePos } from "@/lib/store";
 import { Capacitor } from "@capacitor/core";
-import { Smartphone } from "lucide-react";
 import { useEffect, useSyncExternalStore } from "react";
 import { cn } from "@/lib/ui";
 import { initDeepLinking } from "@/lib/deep-link";
@@ -70,43 +68,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return <div className="min-h-dvh w-full" />;
   }
 
-  if (native === false) {
-    return <BrowserBlock />;
-  }
-
   return (
     <div className={cn("mx-auto min-h-dvh max-w-[440px] sm:border-x sm:border-line", hasTabBar && "pb-[calc(var(--nova-sab)+136px)]")}>
       <SubscriptionGate>
         <PinGate>{children}</PinGate>
         <ChromeGate isLanding={false} />
       </SubscriptionGate>
-    </div>
-  );
-}
-
-function BrowserBlock() {
-  return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-surface px-8 text-center">
-      <div className="flex size-16 items-center justify-center rounded-2xl bg-accent/10 text-accent">
-        <Smartphone className="size-7" />
-      </div>
-      <h1 className="mt-5 text-[22px] font-semibold tracking-[-0.02em] text-ink">
-        ScalPOS lives on your phone
-      </h1>
-      <p className="mt-2 max-w-[300px] text-[15px]/6 text-ink3">
-        The mobile app has the full register — sales, stock, customers and
-        receipts. A browser version is on the way.
-      </p>
-      <a
-        href="https://pos.scalmint.com"
-        target="_blank"
-        rel="noreferrer"
-        className="mt-7 w-full max-w-[300px]"
-      >
-        <Button variant="secondary" size="lg" block>
-          Visit pos.scalmint.com
-        </Button>
-      </a>
     </div>
   );
 }

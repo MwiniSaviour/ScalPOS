@@ -3,8 +3,10 @@
 import { IconButton } from "@/components/ui/button";
 import { cn } from "@/lib/ui";
 import { ChevronLeft } from "lucide-react";
-import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
+import { useRouter, usePathname } from "next/navigation";
+import { useMemo, type ReactNode } from "react";
+import { crumbsForPath, type Crumb } from "@/lib/breadcrumbs";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 export function ScreenHeader({
   title,
@@ -13,6 +15,8 @@ export function ScreenHeader({
   subtitle,
   largeTitle = false,
   className,
+  crumbs,
+  showBreadcrumbs = true,
 }: {
   title: ReactNode;
   onBack?: boolean | (() => void);
@@ -20,11 +24,21 @@ export function ScreenHeader({
   subtitle?: ReactNode;
   largeTitle?: boolean;
   className?: string;
+  crumbs?: Crumb[];
+  showBreadcrumbs?: boolean;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const derived = useMemo(() => crumbsForPath(pathname ?? "/"), [pathname]);
+  const items = crumbs ?? derived;
   return (
     <header className={cn("sticky top-0 z-40 border-b border-line2 bg-bg", className)}>
       <div className="safe-t" />
+      {showBreadcrumbs && (
+        <div className="px-4 pb-1 pt-1">
+          <Breadcrumbs items={items} />
+        </div>
+      )}
       <div className={cn("flex items-center gap-2 px-2 pb-2", largeTitle ? "h-14" : "h-13")}>
         {onBack && (
           <IconButton
