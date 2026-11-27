@@ -53,37 +53,6 @@ export default function HomeScreen() {
   const me = useCurrentStaff();
   const attention = kpis.pending > 0 || kpis.lowStock > 0;
   const recent = orders.slice(0, 3);
-  const kpiCards = [
-    {
-      label: "Today's sales",
-      value: fmtMoney(kpis.sales),
-      hint: `${kpis.txn} sale${kpis.txn === 1 ? "" : "s"}`,
-      href: "/reports",
-      tone: "text-ink",
-    },
-    {
-      label: "Collected",
-      value: fmtMoney(kpis.collected),
-      hint: "paid today",
-      href: "/reports",
-      tone: "text-ink",
-    },
-    {
-      label: "Unpaid",
-      value: fmtMoney(kpis.unpaid),
-      hint: "still due",
-      href: "/orders?filter=pending",
-      tone: kpis.unpaid > 0 ? "text-warn" : "text-ink",
-    },
-    {
-      label: "Low stock",
-      value: String(kpis.lowStock),
-      hint: "items to restock",
-      href: "/inventory?filter=low",
-      tone: kpis.lowStock > 0 ? "text-warn" : "text-ink",
-    },
-  ];
-
   const [notifs, setNotifs] = useState<{ count: number } | null>(null);
   const refreshNotifs = useCallback(() => {
     const conn = readConnection();
@@ -106,13 +75,13 @@ export default function HomeScreen() {
   if (settings.businessType === "personal") return <FinanceHome />;
 
   return (
-    <div className="anim-fade overflow-x-hidden px-5 pt-4">
+    <div className="anim-fade px-5 pt-4">
       <NotificationWatcher />
       <div className="safe-t" />
       {/* header — shop name, date, owner avatar */}
       <header className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h1 className="break-words text-[22px]/7 font-bold tracking-[-0.02em] text-ink sm:text-[26px]/8">
+          <h1 className="text-[26px]/7 font-bold tracking-[-0.02em] break-words text-ink">
             {settings.shopName}
           </h1>
           <p className="mt-0.5 text-[15px] text-ink3">{now > 0 ? dateLong(now) : ""}</p>
@@ -177,32 +146,32 @@ export default function HomeScreen() {
         </div>
       )}
 
-      {/* KPI grid */}
-      <section className="mt-5" aria-label="Key figures">
-        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-          {kpiCards.map((card) => (
-            <Link
-              key={card.label}
-              href={card.href}
-              className="press min-w-0 rounded-2xl border border-line2 bg-surface px-3.5 py-3"
-            >
-              <p className="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-ink3">
-                {card.label}
+      {/* today's sales */}
+      <Link href="/reports" className="press mt-5 block">
+        <Card>
+          <div className="flex items-center justify-between px-4 pt-3.5">
+            <span className="text-[15px] font-semibold text-ink">Today&rsquo;s sales</span>
+            <span className="text-[14px] text-ink3">
+              {kpis.txn} sale{kpis.txn === 1 ? "" : "s"}
+            </span>
+          </div>
+          <p className="tabnum px-4 pt-1 pb-4 text-[34px] font-extrabold leading-[44px] tracking-[-0.03em] text-ink">
+            {fmtMoney(kpis.sales)}
+          </p>
+          <div className="grid grid-cols-2 border-t border-line">
+            <div className="border-r border-line px-4 py-3">
+              <p className="text-[14px] text-ink2">Collected</p>
+              <p className="tabnum text-[16px] font-medium text-ink">{fmtMoney(kpis.collected)}</p>
+            </div>
+            <div className="px-4 py-3">
+              <p className="text-[14px] text-ink2">Unpaid</p>
+              <p className={cn("tabnum text-[16px] font-medium", kpis.unpaid > 0 ? "text-warn" : "text-ink")}>
+                {fmtMoney(kpis.unpaid)}
               </p>
-              <p
-                className={cn(
-                  "tabnum mt-2 break-words text-[clamp(19px,5.2vw,27px)] font-bold leading-[1.08] tracking-[-0.02em]",
-                  card.value.length > 12 && "text-[19px] leading-[1.15]",
-                  card.tone,
-                )}
-              >
-                {card.value}
-              </p>
-              <p className="mt-1.5 truncate text-[12px] text-ink3">{card.hint}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
+            </div>
+          </div>
+        </Card>
+      </Link>
 
       {/* needs attention */}
       {attention && (

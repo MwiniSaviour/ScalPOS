@@ -145,7 +145,7 @@ export default function OrderDetailPage() {
         </div>
 
         {/* money summary */}
-        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-border p-4">
             <p className="text-xs font-medium text-muted">Total</p>
             <p className="mt-1 text-xl font-bold text-foreground">{formatCurrency(sale.total)}</p>

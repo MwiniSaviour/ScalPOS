@@ -53,6 +53,7 @@ import {
   RefreshCcw,
   ScrollText,
   Settings,
+  Shapes,
   Store,
   UsersRound,
 } from "lucide-react";
@@ -273,6 +274,20 @@ export default function MoreScreen() {
           />
         </Card>
       </section>
+
+      {!personal && (
+        <section className="mt-6">
+          <h2 className="text-[15px] font-medium text-ink2">Manage</h2>
+          <Card inset className="mt-2.5">
+            <RowLink
+              href="/categories"
+              icon={<Shapes className="size-[18px]" />}
+              label="Categories"
+              sub="Group products, rename and recolour"
+            />
+          </Card>
+        </section>
+      )}
 
       {/* business */}
       <section className="mt-6">
