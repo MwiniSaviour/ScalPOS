@@ -305,11 +305,11 @@ export default function CategoriesPage() {
       )}
 
       {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Total Categories</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{totalCategories}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{totalCategories}</p>
             <p className="mt-1 text-xs text-muted">All categories</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -319,7 +319,7 @@ export default function CategoriesPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Active Categories</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{activeCategories}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{activeCategories}</p>
             <p className="mt-1 text-xs text-muted">100% active rate</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -329,7 +329,7 @@ export default function CategoriesPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Products Tagged</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{productsTotal}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{productsTotal}</p>
             <p className="mt-1 text-xs text-muted">Across all categories</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -339,7 +339,7 @@ export default function CategoriesPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Unused Categories</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{unusedCategories}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{unusedCategories}</p>
             <p className="mt-1 text-xs text-muted">No products assigned</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">

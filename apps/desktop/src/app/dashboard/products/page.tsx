@@ -183,11 +183,11 @@ export default function ProductsPage() {
       </div>
 
       {/* Stat Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Total Products</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{totalProducts}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{totalProducts}</p>
             <p className="mt-1 text-xs text-muted">All products</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -197,7 +197,7 @@ export default function ProductsPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Active Products</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{activeProducts}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{activeProducts}</p>
             <p className="mt-1 text-xs text-muted">{totalProducts > 0 ? Math.round((activeProducts / totalProducts) * 100) : 0}% active rate</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -207,7 +207,7 @@ export default function ProductsPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Low Stock</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{lowStockProducts}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{lowStockProducts}</p>
             <p className="mt-1 text-xs text-muted">Need restocking</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -217,7 +217,7 @@ export default function ProductsPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Total Value</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{formatCurrency(totalValue)}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{formatCurrency(totalValue)}</p>
             <p className="mt-1 text-xs text-muted">Inventory value</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">

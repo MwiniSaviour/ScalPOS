@@ -126,11 +126,11 @@ export default function CustomersPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Total Customers</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{totalCustomers}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{totalCustomers}</p>
             <p className="mt-1 text-xs text-muted">{newThisMonth} new this month</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -140,7 +140,7 @@ export default function CustomersPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Active Customers</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{activeCustomers}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{activeCustomers}</p>
             <p className="mt-1 text-xs text-muted">{totalCustomers > 0 ? Math.round((activeCustomers / totalCustomers) * 100) : 0}% active rate</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -150,7 +150,7 @@ export default function CustomersPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">New This Month</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{newThisMonth}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{newThisMonth}</p>
             <p className="mt-1 text-xs text-muted">{totalCustomers > 0 ? Math.round((newThisMonth / totalCustomers) * 100) : 0}% growth</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">
@@ -160,7 +160,7 @@ export default function CustomersPage() {
         <div className="stat-card flex items-start justify-between">
           <div>
             <p className="text-sm font-medium text-muted">Avg. Order Value</p>
-            <p className="mt-2 text-3xl font-bold text-foreground">{formatCurrency(avgOrderValue)}</p>
+            <p className="mt-2 text-2xl font-bold text-foreground sm:text-3xl">{formatCurrency(avgOrderValue)}</p>
             <p className="mt-1 text-xs text-muted">Per order</p>
           </div>
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-hover">

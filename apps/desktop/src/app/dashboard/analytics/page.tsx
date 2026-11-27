@@ -327,7 +327,7 @@ export default function AnalyticsPage() {
       ) : (
         <>
           {/* KPI cards */}
-          <div className="grid gap-6 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-6 sm:grid-cols-3">
             <div className="stat-card min-w-0">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
