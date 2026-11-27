@@ -5,8 +5,8 @@ import { useState } from "react";
 import { ChevronLeft, Trash2 } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Chip } from "@/components/ui/chip";
 import { Confirm } from "@/components/ui/confirm";
+import { Select } from "@/components/ui/select";
 import { Input, TextArea } from "@/components/ui/input";
 import { NumberPad } from "@/components/ui/numberpad";
 import { useNow } from "@/lib/now";
@@ -198,23 +198,24 @@ function EntryForm({
 
       {kind === "expense" ? (
         <section className="mt-5">
-          <h2 className="text-[15px] font-medium text-ink2">Category</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {categories.map((row) => (
-              <Chip
-                key={row.id}
-                active={categoryId === row.id}
-                color={row.color}
-                onClick={() => setCategoryId(row.id)}
-              >
+          <Select
+            label="Category"
+            leading={
+              category ? (
                 <span
-                  className="size-2 rounded-full"
-                  style={{ background: categoryId === row.id ? "currentColor" : row.color }}
+                  className="block size-2.5 shrink-0 rounded-full"
+                  style={{ background: category.color }}
                 />
-                {row.name}
-              </Chip>
-            ))}
-          </div>
+              ) : undefined
+            }
+            value={categoryId ?? ""}
+            onChange={(next) => setCategoryId(next || null)}
+            options={[
+              { value: "", label: "Select a category" },
+              ...categories.map((row) => ({ value: row.id, label: row.name, color: row.color })),
+            ]}
+            hint={category ? undefined : "Choose where this money went"}
+          />
           {category && (
             <p
               className={cn(
@@ -232,26 +233,25 @@ function EntryForm({
         </section>
       ) : (
         <section className="mt-5">
-          <h2 className="text-[15px] font-medium text-ink2">Source</h2>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {FUNDING_SOURCES.map((row) => (
-              <Chip key={row} active={source === row} onClick={() => setSource(row)}>
-                {row}
-              </Chip>
-            ))}
-          </div>
+          <Select
+            label="Source"
+            value={source}
+            onChange={setSource}
+            options={FUNDING_SOURCES.map((row) => ({ value: row, label: row }))}
+          />
         </section>
       )}
 
       <section className="mt-5">
-        <h2 className="text-[15px] font-medium text-ink2">Payment method</h2>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {(Object.keys(FINANCE_METHOD_LABELS) as FinanceMethod[]).map((row) => (
-            <Chip key={row} active={method === row} onClick={() => setMethod(row)}>
-              {FINANCE_METHOD_LABELS[row]}
-            </Chip>
-          ))}
-        </div>
+        <Select
+          label="Payment method"
+            value={method}
+            onChange={(next) => setMethod(next as FinanceMethod)}
+            options={(Object.keys(FINANCE_METHOD_LABELS) as FinanceMethod[]).map((row) => ({
+            value: row,
+            label: FINANCE_METHOD_LABELS[row],
+          }))}
+        />
       </section>
 
       <section className="mt-5">
