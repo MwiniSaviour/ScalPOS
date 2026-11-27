@@ -38,7 +38,7 @@ import {
   AlertTriangle,
   AppWindow,
   ArrowDownLeft,
-  Banknote,
+  PiggyBank,
   Bluetooth,
   CalendarDays,
   ChefHat,
@@ -194,10 +194,10 @@ export default function MoreScreen() {
                 sub="Record money you spent"
               />
               <RowLink
-                href="/expenses"
-                icon={<Banknote className="size-[18px]" />}
-                label="Expense tracking"
-                sub="Spending reports and history"
+                href="/savings"
+                icon={<PiggyBank className="size-[18px]" />}
+                label="Savings"
+                sub="Goals, investing and planning"
               />
               <RowLink
                 href="/funds"

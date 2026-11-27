@@ -18,15 +18,14 @@ import { useNow } from "@/lib/now";
 import { usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
 
-type Period = "today" | "week" | "7d" | "30d";
+type Period = "today" | "week" | "30d";
 type Kind = "all" | "expense" | "funds";
 
-const PERIOD_DAYS: Record<Period, number> = { today: 1, week: 7, "7d": 7, "30d": 30 };
+const PERIOD_DAYS: Record<Period, number> = { today: 1, week: 7, "30d": 30 };
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "week", label: "This week" },
-  { value: "7d", label: "7 days" },
   { value: "30d", label: "30 days" },
 ];
 
