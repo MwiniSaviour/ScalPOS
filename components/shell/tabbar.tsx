@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import {
   ArrowDownLeft,
+  Banknote,
   House,
   Package,
   Plus,
@@ -26,9 +27,9 @@ const SHOP_TABS: { href: string; icon: LucideIcon }[] = [
 
 const FINANCE_TABS: { href: string; icon: LucideIcon }[] = [
   { href: "/home", icon: House },
-  { href: "/activities", icon: ReceiptText },
   { href: "/budgets", icon: Wallet },
-  { href: "/more", icon: Users },
+  { href: "/activities", icon: ReceiptText },
+  { href: "/expenses", icon: Banknote },
 ];
 
 const TAB_ROUTES = [
@@ -38,7 +39,7 @@ const TAB_ROUTES = [
   "/customers",
   "/activities",
   "/budgets",
-  "/more",
+  "/expenses",
 ];
 
 function normalize(p: string): string {
@@ -54,9 +55,9 @@ export function TabBar() {
   const labels: Record<string, string> = personal
     ? {
         "/home": "Home",
+        "/budgets": "Budget",
         "/activities": "Activities",
-        "/budgets": "Budgets",
-        "/more": "More",
+        "/expenses": "Expense",
       }
     : {
         "/home": "Home",
