@@ -14,13 +14,18 @@ export function Segmented<T extends string>({
   className?: string;
 }) {
   return (
-    <div className={cn("flex gap-1 rounded-xl bg-surface2 p-1", className)}>
+    <div
+      className={cn(
+        "no-scrollbar flex gap-1 overflow-x-auto rounded-xl bg-surface2 p-1",
+        className,
+      )}
+    >
       {options.map((o) => (
         <button
           key={o.value}
           onClick={() => onChange(o.value)}
           className={cn(
-            "press h-10 flex-1 rounded-lg text-[13px] font-medium transition-colors",
+            "press h-10 shrink-0 whitespace-nowrap rounded-lg px-3 text-[13px] font-medium transition-colors",
             value === o.value ? "bg-surface text-ink ring-1 ring-line2" : "text-ink3",
           )}
         >

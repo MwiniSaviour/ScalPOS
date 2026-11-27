@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { Segmented } from "@/components/ui/segmented";
 import { FinanceEntryRow } from "@/components/finance/finance-entry-row";
+import { DailyBarChart } from "@/components/finance/daily-bar-chart";
 import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
 import { useNow } from "@/lib/now";
@@ -102,11 +103,7 @@ export default function ActivitiesScreen() {
         today: i === info.days - 1,
       });
     }
-    const step = info.days > 14 ? 5 : 1;
-    return daily.map((row, i) => ({
-      ...row,
-      label: i % step === 0 || i === info.days - 1 ? row.label : null,
-    }));
+    return daily;
   }, [entries, info, kind]);
 
   const maxBars = Math.max(1, ...chart.map((row) => Math.max(row.spent, row.funds)));
@@ -213,40 +210,7 @@ export default function ActivitiesScreen() {
               <span className="ml-1 size-2 rounded-[3px] bg-accent" /> Money in
             </span>
           </div>
-          <div className="mt-3 flex h-28 items-end gap-1 border-b border-line pb-px">
-            {chart.map((row, i) => (
-              <div
-                key={i}
-                className="flex h-full min-w-0 flex-1 items-end justify-center gap-[2px]"
-                aria-label={`${row.label ?? "Day"}: ${fmtMoney(row.spent)} spent, ${fmtMoney(row.funds)} in`}
-              >
-                <div className="relative h-full w-1/2 max-w-3.5">
-                  <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
-                  <div
-                    className="absolute inset-x-0 bottom-0 rounded-t-[4px] bg-[var(--chart-bar)]"
-                    style={{ height: row.spent > 0 ? `${(row.spent / maxBars) * 100}%` : 0 }}
-                  />
-                </div>
-                <div className="relative h-full w-1/2 max-w-3.5">
-                  <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
-                  <div
-                    className={cn(
-                      "absolute inset-x-0 bottom-0 rounded-t-[4px] bg-accent/70",
-                      row.today && "bg-accent",
-                    )}
-                    style={{ height: row.funds > 0 ? `${(row.funds / maxBars) * 100}%` : 0 }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
-            {chart.map((row, i) => (
-              <span key={i} className="min-w-0 flex-1 truncate">
-                {row.label ?? ""}
-              </span>
-            ))}
-          </div>
+          <DailyBarChart rows={chart} max={maxBars} dual />
           <p className="mt-2 text-[12px] text-ink3">Each day: spent bar beside money-in bar</p>
         </Card>
       </section>

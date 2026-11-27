@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { Segmented } from "@/components/ui/segmented";
 import { FinanceEntryRow } from "@/components/finance/finance-entry-row";
+import { DailyBarChart } from "@/components/finance/daily-bar-chart";
 import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
 import { useNow } from "@/lib/now";
@@ -73,11 +74,7 @@ export default function ExpensesScreen() {
             : String(d.getDate()).padStart(2, "0");
       daily.push({ label, spent, today: i === info.days - 1 });
     }
-    const step = info.days > 14 ? 5 : 1;
-    return daily.map((row, i) => ({
-      ...row,
-      label: i % step === 0 || i === info.days - 1 ? row.label : null,
-    }));
+    return daily;
   }, [entries, info]);
 
   const maxBars = Math.max(1, ...chart.map((row) => row.spent));
@@ -169,29 +166,7 @@ export default function ExpensesScreen() {
       <section className="mt-6">
         <Card className="p-4">
           <div className="text-[15px] font-medium text-ink2">Daily spending</div>
-          <div className="mt-3 flex h-28 items-end gap-1 border-b border-line pb-px">
-            {chart.map((row, i) => (
-              <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-                <div className="relative mx-auto h-full w-full max-w-7">
-                  <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
-                  <div
-                    className={cn(
-                      "absolute inset-x-0 bottom-0 rounded-t-[4px] bg-[var(--chart-bar)]",
-                      row.today && "bg-accent",
-                    )}
-                    style={{ height: row.spent > 0 ? `${(row.spent / maxBars) * 100}%` : 0 }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
-            {chart.map((row, i) => (
-              <span key={i} className="min-w-0 flex-1 truncate">
-                {row.label ?? ""}
-              </span>
-            ))}
-          </div>
+          <DailyBarChart rows={chart} max={maxBars} />
         </Card>
       </section>
 
