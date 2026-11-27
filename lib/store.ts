@@ -52,6 +52,7 @@ import type {
   FinanceBudget,
   FinanceCategory,
   FinanceEntry,
+  FinanceGoal,
   FinanceMethod,
   Order,
   OrderItem,
@@ -238,6 +239,7 @@ type PosState = {
   financeCategories: FinanceCategory[];
   financeEntries: FinanceEntry[];
   financeBudgets: FinanceBudget[];
+  financeGoals: FinanceGoal[];
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -363,6 +365,7 @@ type PosState = {
     kind: FinanceEntry["kind"];
     amount: number;
     categoryId?: string | null;
+    goalId?: string | null;
     source?: string;
     note?: string;
     method?: FinanceMethod;
@@ -371,6 +374,8 @@ type PosState = {
   deleteFinanceEntry: (entryId: string) => void;
   upsertFinanceCategory: (input: Partial<FinanceCategory> & { name: string }) => FinanceCategory;
   setFinanceBudget: (categoryId: string, amount: number, at?: number) => void;
+  upsertFinanceGoal: (input: Partial<FinanceGoal> & { name: string }) => FinanceGoal;
+  deleteFinanceGoal: (goalId: string) => void;
 
   /* settings */
   updateSettings: (patch: Partial<Settings>) => void;
@@ -401,6 +406,7 @@ export const usePos = create<PosState>()(
       financeCategories: [],
       financeEntries: [],
       financeBudgets: [],
+      financeGoals: [],
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -1500,6 +1506,7 @@ export const usePos = create<PosState>()(
           kind: input.kind,
           amount: round2(amount),
           categoryId: input.kind === "expense" ? input.categoryId ?? null : null,
+          goalId: input.kind === "funds" ? input.goalId ?? null : null,
           source: input.kind === "funds" ? input.source?.trim() || "Funds" : "",
           note: input.note?.trim() ?? "",
           method: input.method ?? "cash",
@@ -1564,6 +1571,37 @@ export const usePos = create<PosState>()(
             : [...s.financeBudgets, row],
         });
       },
+
+      upsertFinanceGoal: (input) => {
+        const now = Date.now();
+        const s = get();
+        const existing = input.id
+          ? s.financeGoals.find((goal) => goal.id === input.id)
+          : undefined;
+        const row: FinanceGoal = {
+          id: existing?.id ?? input.id ?? id("fin_goal_"),
+          name: input.name.trim() || "Untitled goal",
+          target: Number.isFinite(input.target ?? 0) ? Math.max(0, round2(input.target ?? 0)) : 0,
+          color: input.color ?? existing?.color ?? "#4c8dff",
+          balance: input.balance ?? existing?.balance ?? 0,
+          createdAt: existing?.createdAt ?? now,
+          updatedAt: now,
+        };
+        set({
+          financeGoals: existing
+            ? s.financeGoals.map((goal) => (goal.id === row.id ? row : goal))
+            : [...s.financeGoals, row],
+        });
+        return row;
+      },
+
+      deleteFinanceGoal: (goalId) =>
+        set((s) => ({
+          financeGoals: s.financeGoals.filter((goal) => goal.id !== goalId),
+          financeEntries: s.financeEntries.map((entry) =>
+            entry.goalId === goalId ? { ...entry, goalId: null } : entry,
+          ),
+        })),
 
       updateSettings: (patch) => {
         set((s) => ({ settings: { ...s.settings, ...patch } }));
@@ -1664,6 +1702,7 @@ export const usePos = create<PosState>()(
         financeCategories: s.financeCategories,
         financeEntries: s.financeEntries,
         financeBudgets: s.financeBudgets,
+        financeGoals: s.financeGoals,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,

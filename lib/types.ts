@@ -281,6 +281,7 @@ export type FinanceEntry = {
   kind: FinanceEntryKind;
   amount: number;
   categoryId: string | null;
+  goalId: string | null;
   source: string;
   note: string;
   method: FinanceMethod;
@@ -293,6 +294,16 @@ export type FinanceBudget = {
   categoryId: string;
   amount: number;
   month: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type FinanceGoal = {
+  id: string;
+  name: string;
+  target: number;
+  color: string;
+  balance: number;
   createdAt: number;
   updatedAt: number;
 };
