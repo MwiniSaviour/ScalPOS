@@ -78,7 +78,7 @@ export function TabBar() {
             className="press flex flex-1 items-center justify-center gap-2"
           >
             <Plus className="size-[19px]" />
-            <span className="text-[16px] font-semibold">
+            <span className="whitespace-nowrap text-[16px] font-semibold">
               {personal ? "New expense" : "New sale"}
             </span>
           </Link>

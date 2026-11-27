@@ -116,19 +116,19 @@ export function FinanceHome() {
         </div>
       </section>
 
-      <section className="mt-3 grid grid-cols-2 gap-2.5" aria-label="Quick actions">
+      <section className="mt-3 flex flex-col gap-2" aria-label="Quick actions">
         <Link
           href="/expense"
-          className="press flex h-14 items-center justify-center gap-2 rounded-2xl bg-accent px-4 text-[16px] font-semibold text-accentink"
+          className="press flex h-14 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-accent px-4 text-[16px] font-semibold text-accentink"
         >
           <Plus className="size-[19px]" />
           Add expense
         </Link>
         <Link
           href="/funds"
-          className="press flex h-14 items-center justify-center gap-2 rounded-2xl border border-line2 bg-surface2 px-4 text-[16px] font-semibold text-ink"
+          className="press flex h-12 w-full items-center justify-center gap-2 whitespace-nowrap rounded-2xl border border-line2 bg-surface2 px-4 text-[15px] font-semibold text-ink"
         >
-          <ArrowDownLeft className="size-[19px]" />
+          <ArrowDownLeft className="size-[18px]" />
           Add funds
         </Link>
       </section>
