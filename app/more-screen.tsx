@@ -193,11 +193,11 @@ export default function MoreScreen() {
         <p className="mt-0.5 text-[15px] text-ink3">{settings.shopName}</p>
       </header>
 
-      {/* switch business — isolated apps under one account */}
+      {/* switch business — each app has its own account, billing and data */}
       <section className="mt-6">
         <h2 className="text-[15px] font-medium text-ink2">Switch Business</h2>
         <p className="mt-1 text-[13px] text-ink3">
-          One account, many businesses. Each app keeps its own data and subscription.
+          Add other businesses or manage your personal finance.
         </p>
         <Card inset className="mt-2.5">
           {businesses.map((business) => {
@@ -263,7 +263,7 @@ export default function MoreScreen() {
             tone="accent"
             icon={<Plus className="size-[18px]" />}
             label="Add app"
-            sub="Add another business under this account"
+            sub="Separate data and billing for each business"
             onClick={() => {
               setAppName("");
               setAppType("retail");
@@ -509,8 +509,8 @@ export default function MoreScreen() {
             </div>
           )}
           <p className="text-[12px] text-ink3">
-            Each app keeps its own products, orders, customers and settings — nothing is shared
-            between businesses. Every app has its own subscription.
+            Each app has its own email, subscription and data — nothing is shared when you
+            switch between them.
           </p>
         </div>
       </Sheet>
