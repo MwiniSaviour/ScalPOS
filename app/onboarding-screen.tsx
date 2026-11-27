@@ -5,12 +5,19 @@ import { markOnboarded } from "@/lib/first-run";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-const SLIDES: { title: string; body: string; src: string; alt: string }[] = [
+const SLIDES: {
+  title: string;
+  body: string;
+  src: string;
+  alt: string;
+  spotlight?: boolean;
+}[] = [
   {
     title: "Your personal life",
     body: "Allowances, hostel fees and everyday spending — all in one calm place.",
     src: "/onboarding/personal-life.webp",
     alt: "Phone showing spending charts, a wallet and savings",
+    spotlight: true,
   },
   {
     title: "Your business",
@@ -46,59 +53,74 @@ export default function OnboardingScreen() {
   const slide = SLIDES[index];
 
   return (
-    <div className="anim-fade flex h-dvh flex-col overflow-hidden bg-bg px-5 pt-6">
+    <div className="anim-fade relative flex h-dvh flex-col overflow-hidden bg-bg px-5">
       <div className="safe-t shrink-0" />
+
+      <div className="flex shrink-0 justify-end pb-1 pt-4">
+        <div
+          className="h-1 w-11 overflow-hidden rounded-full bg-ink4/30"
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={SLIDES.length}
+          aria-valuenow={index + 1}
+          aria-label={`Onboarding step ${index + 1} of ${SLIDES.length}`}
+        >
+          <div
+            className="h-full rounded-full bg-ink/85 transition-[width] duration-300"
+            style={{ width: `${((index + 1) / SLIDES.length) * 100}%` }}
+          />
+        </div>
+      </div>
 
       <section key={index} className="flex min-h-0 flex-1 flex-col">
         <div
-          className={`mx-auto flex min-h-0 w-full max-w-[360px] flex-1 items-center justify-center overflow-hidden rounded-2xl bg-surface3 onboard-art-${direction}`}
+          className={`relative mx-auto flex min-h-0 w-full max-w-[380px] flex-1 items-center justify-center onboard-art-${direction}`}
         >
+          {slide.spotlight && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-1/2 top-[58%] size-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+              style={{
+                background:
+                  "radial-gradient(circle, color-mix(in srgb, var(--accent) 28%, transparent), transparent 68%)",
+              }}
+            />
+          )}
           <img
             src={slide.src}
             alt={slide.alt}
-            className="size-full object-contain"
+            className="relative max-h-[46vh] w-full max-w-[92vw] object-contain"
             draggable={false}
           />
         </div>
 
-        <div className="onboard-copy mx-auto mt-4 w-full max-w-[420px] rounded-2xl border border-line bg-surface p-5 text-center">
-          <h1 className="text-[20px] font-bold tracking-[-0.01em] text-ink">{slide.title}</h1>
-          <p className="mt-1.5 text-[14px] leading-snug text-ink3">{slide.body}</p>
-          <Button
-            block
-            size="lg"
-            className="mt-4 h-12 rounded-full"
-            onClick={() => (index < SLIDES.length - 1 ? goTo(index + 1) : finish())}
-          >
-            {index < SLIDES.length - 1 ? "Next" : "Get started"}
-          </Button>
-          <button
-            type="button"
-            onClick={finish}
-            className="press mt-2.5 w-full text-center text-[14px] font-semibold text-accent"
-          >
-            Skip
-          </button>
+        <div className="onboard-copy mx-auto w-full max-w-[340px] pb-5 text-center">
+          <h1 className="text-[24px]/7 font-semibold tracking-[-0.02em] text-ink">
+            {slide.title}
+          </h1>
+          <p className="mx-auto mt-2 max-w-[320px] text-[14px]/6 text-ink3">{slide.body}</p>
         </div>
       </section>
 
-      <div className="flex shrink-0 items-center justify-center gap-0 py-1">
-        {SLIDES.map((s, dot) => (
-          <button
-            key={s.title}
-            type="button"
-            aria-label={`Go to slide ${dot + 1}`}
-            aria-current={dot === index ? "step" : undefined}
-            onClick={() => goTo(dot)}
-            className="press flex size-11 items-center justify-center"
-          >
-            <span
-              className={`block h-1.5 rounded-full transition-all duration-300 ${
-                dot === index ? "w-5 bg-accent" : "w-1.5 bg-ink4/40"
-              }`}
-            />
-          </button>
-        ))}
+      <div className="shrink-0 pb-[calc(var(--nova-sab)+16px)]">
+        <p className="mb-3 text-center text-[15px] font-semibold tracking-[-0.01em] text-ink/85">
+          ScalPOS
+        </p>
+        <Button
+          block
+          size="lg"
+          className="h-14 rounded-full text-[16px]"
+          onClick={() => (index < SLIDES.length - 1 ? goTo(index + 1) : finish())}
+        >
+          {index < SLIDES.length - 1 ? "Continue" : "Get started"}
+        </Button>
+        <button
+          type="button"
+          onClick={finish}
+          className="press mt-2 w-full text-center text-[13px] font-medium text-ink3"
+        >
+          Skip
+        </button>
       </div>
     </div>
   );
