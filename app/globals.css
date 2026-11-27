@@ -84,6 +84,14 @@
   --hue-slate: #94a3b8;
   --hue-mauve: #d68fb7;
   --hue-sage: #a7c4a9;
+  --hue-white: #ffffff;
+  --hue-black: #000000;
+  --hue-navy: #60a5fa;
+  --hue-brown: #d6a77a;
+  --hue-mint: #5eead4;
+  --hue-coral: #fb7185;
+  --hue-lavender: #c4b5fd;
+  --hue-charcoal: #cbd5e1;
   --hue-on-solid: #06281a;
   --hue-green-soft: #34d39924;
   --hue-blue-soft: #4c8dff24;
@@ -105,6 +113,14 @@
   --hue-slate-soft: #94a3b824;
   --hue-mauve-soft: #d68fb724;
   --hue-sage-soft: #a7c4a924;
+  --hue-white-soft: #ffffff1f;
+  --hue-black-soft: #ffffff14;
+  --hue-navy-soft: #60a5fa1f;
+  --hue-brown-soft: #d6a77a1f;
+  --hue-mint-soft: #5eead41f;
+  --hue-coral-soft: #fb71851f;
+  --hue-lavender-soft: #c4b5fd1f;
+  --hue-charcoal-soft: #cbd5e11f;
 
   /* surfaces & chrome that are theme-aware */
   --scrim: rgb(0 0 0 / 0.55);
@@ -168,6 +184,14 @@
   --hue-slate: #475569;
   --hue-mauve: #93365f;
   --hue-sage: #4d6b50;
+  --hue-white: #ffffff;
+  --hue-black: #000000;
+  --hue-navy: #1e3a8a;
+  --hue-brown: #92400e;
+  --hue-mint: #0f766e;
+  --hue-coral: #e11d48;
+  --hue-lavender: #7c3aed;
+  --hue-charcoal: #334155;
   --hue-on-solid: #ffffff;
   --hue-green-soft: #0478571f;
   --hue-blue-soft: #1d4ed81f;
@@ -189,6 +213,14 @@
   --hue-slate-soft: #4755691f;
   --hue-mauve-soft: #93365f1f;
   --hue-sage-soft: #4d6b501f;
+  --hue-white-soft: #f1f5f9;
+  --hue-black-soft: #0f172a1f;
+  --hue-navy-soft: #1e3a8a1f;
+  --hue-brown-soft: #92400e1f;
+  --hue-mint-soft: #0f766e1f;
+  --hue-coral-soft: #e11d481f;
+  --hue-lavender-soft: #7c3aed1f;
+  --hue-charcoal-soft: #3341551f;
 
   /* surfaces & chrome that are theme-aware */
   --scrim: rgb(15 23 42 / 0.34);

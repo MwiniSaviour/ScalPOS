@@ -45,6 +45,14 @@ export const TOKEN_COLORS = [
   { hex: "#94a3b8", name: "Slate" },
   { hex: "#b0668f", name: "Mauve" },
   { hex: "#94b394", name: "Sage" },
+  { hex: "#ffffff", name: "White" },
+  { hex: "#000000", name: "Black" },
+  { hex: "#1e3a8a", name: "Navy" },
+  { hex: "#92400e", name: "Brown" },
+  { hex: "#5eead4", name: "Mint" },
+  { hex: "#fb7185", name: "Coral" },
+  { hex: "#c4b5fd", name: "Lavender" },
+  { hex: "#334155", name: "Charcoal" },
 ] as const;
 
 /**
@@ -144,6 +152,25 @@ const HUE_VARS: Record<string, { c: string; s: string }> = {
   "#94b394": { c: "var(--hue-sage)", s: "var(--hue-sage)-soft" },
   "#a7c4a9": { c: "var(--hue-sage)", s: "var(--hue-sage)-soft" },
   "#4d6b50": { c: "var(--hue-sage)", s: "var(--hue-sage)-soft" },
+  // white
+  "#ffffff": { c: "var(--hue-white)", s: "var(--hue-white)-soft" },
+  // black
+  "#000000": { c: "var(--hue-black)", s: "var(--hue-black)-soft" },
+  // navy
+  "#1e3a8a": { c: "var(--hue-navy)", s: "var(--hue-navy)-soft" },
+  "#60a5fa": { c: "var(--hue-navy)", s: "var(--hue-navy)-soft" },
+  // brown
+  "#92400e": { c: "var(--hue-brown)", s: "var(--hue-brown)-soft" },
+  "#d6a77a": { c: "var(--hue-brown)", s: "var(--hue-brown)-soft" },
+  // mint
+  "#5eead4": { c: "var(--hue-mint)", s: "var(--hue-mint)-soft" },
+  // coral
+  "#fb7185": { c: "var(--hue-coral)", s: "var(--hue-coral)-soft" },
+  // lavender
+  "#c4b5fd": { c: "var(--hue-lavender)", s: "var(--hue-lavender)-soft" },
+  // charcoal
+  "#334155": { c: "var(--hue-charcoal)", s: "var(--hue-charcoal)-soft" },
+  "#cbd5e1": { c: "var(--hue-charcoal)", s: "var(--hue-charcoal)-soft" },
 };
 
 /** The colour a category should paint with on the current theme. */
