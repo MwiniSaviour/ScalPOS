@@ -1,9 +1,9 @@
 import { isDemoMode } from "../demo";
 import type { Op, Conflict } from "./types";
 import { computeRanks } from "./deps";
-import { businessKey } from "../businesses";
+import { dbKey } from "../businesses";
 
-const DB_NAME = () => businessKey("nova-pos-outbox-v1");
+const DB_NAME = () => dbKey("nova-pos-outbox-v1");
 const DB_VERSION = 1;
 const STORE = "ops";
 
@@ -168,7 +168,7 @@ export async function drain(
   return { applied, failed };
 }
 
-const CONFLICT_DB = "nova-pos-conflicts-v1";
+const CONFLICT_DB = () => dbKey("nova-pos-conflicts-v1");
 const CONFLICT_STORE = "conflicts";
 
 function openConflictDb(): Promise<IDBDatabase | null> {
@@ -176,7 +176,7 @@ function openConflictDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let req: IDBOpenDBRequest;
     try {
-      req = indexedDB.open(CONFLICT_DB, 1);
+      req = indexedDB.open(CONFLICT_DB(), 1);
     } catch {
       resolve(null);
       return;

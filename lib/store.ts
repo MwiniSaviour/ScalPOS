@@ -462,6 +462,9 @@ export const usePos = create<PosState>()(
         if (s.financeSources.length === 0) {
           set({ financeSources: [...FUNDING_SOURCES] });
         }
+        if (typeof document !== "undefined" && s.settings.theme) {
+          document.documentElement.dataset.theme = s.settings.theme;
+        }
         if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
           set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
         }

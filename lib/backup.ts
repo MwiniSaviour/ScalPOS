@@ -15,7 +15,7 @@ import { IMAGE_PREFIX, getImageBlob, isLocalImageRef, listImageRefs } from "./im
  */
 
 /* localStorage keys (outside the store blob) */
-import { businessKey } from "./businesses";
+import { businessKey, dbKey } from "./businesses";
 
 export const STORE_KEY = () => businessKey("nova-pos-v1");
 export const LAST_BACKUP_KEY = "nova-pos-last-backup";
@@ -31,7 +31,7 @@ export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
 /* mirror of lib/image-store.ts module-private constants */
-const IMG_DB_NAME = () => businessKey("nova-pos-images");
+const IMG_DB_NAME = () => dbKey("nova-pos-images");
 const IMG_DB_VERSION = 1;
 const IMG_STORE = "images";
 

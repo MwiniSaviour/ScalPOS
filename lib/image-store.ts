@@ -1,5 +1,5 @@
 "use client";
-import { businessKey } from "./businesses";
+import { dbKey } from "./businesses";
 
 /**
  * Product image storage.
@@ -15,7 +15,7 @@ import {
   writeImageMap,
 } from "./image-refs";
 
-const DB_NAME = () => businessKey("nova-pos-images");
+const DB_NAME = () => dbKey("nova-pos-images");
 const DB_VERSION = 1;
 const STORE = "images";
 export const IMAGE_PREFIX = "idb:";

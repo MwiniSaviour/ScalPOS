@@ -1,6 +1,5 @@
 "use client";
 
-import { defaultSettings } from "./seed";
 import type { BusinessType } from "./types";
 
 export const DEFAULT_BUSINESS_ID = "primary";
@@ -35,6 +34,9 @@ const MANAGED_KEYS = [
   "nova-pos-idmap-v1",
   "nova-pos-first-push-v1",
   "nova-pos-last-pull",
+  "nova-pos-demo-v1",
+  "nova-pos-demo-backup-v1",
+  "nova-pos-theme",
 ] as const;
 
 function parse<T>(raw: string | null): T | null {
@@ -69,7 +71,21 @@ export function readRegistry(): BusinessRegistry {
     };
   }
   const existing = parse<BusinessRegistry>(window.localStorage.getItem(REGISTRY_KEY));
-  if (existing?.activeId && existing.businesses?.length) return existing;
+  if (existing?.activeId && existing.businesses?.length) {
+    const primary = existing.businesses.find((row) => row.id === DEFAULT_BUSINESS_ID);
+    const canonicalIsPrimary = existing.activeId === DEFAULT_BUSINESS_ID;
+    for (const key of MANAGED_KEYS) {
+      const snapshot = snapshotKey(key, DEFAULT_BUSINESS_ID);
+      if (window.localStorage.getItem(snapshot) !== null) continue;
+      const canonical = window.localStorage.getItem(key);
+      if (canonical !== null && canonicalIsPrimary) {
+        window.localStorage.setItem(snapshot, canonical);
+      } else if (key === "nova-pos-v1" && primary) {
+        window.localStorage.setItem(snapshot, emptyData(primary.name, primary.businessType));
+      }
+    }
+    return existing;
+  }
   const info = settingsFromStore();
   const initial: BusinessRegistry = {
     activeId: DEFAULT_BUSINESS_ID,
@@ -85,6 +101,10 @@ export function readRegistry(): BusinessRegistry {
       },
     ],
   };
+  for (const key of MANAGED_KEYS) {
+    const canonical = window.localStorage.getItem(key);
+    if (canonical !== null) window.localStorage.setItem(snapshotKey(key, DEFAULT_BUSINESS_ID), canonical);
+  }
   window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(initial));
   return initial;
 }
@@ -97,9 +117,18 @@ export function activeId(): string {
   }
 }
 
-export function businessKey(key: string, id = activeId()): string {
-  if (typeof window === "undefined" || id === DEFAULT_BUSINESS_ID) return key;
+export function businessKey(key: string, id?: string): string {
+  if (typeof window === "undefined" || !id) return key;
   return `${key}:${id}`;
+}
+
+function snapshotKey(key: string, id: string): string {
+  return `${key}:${id}`;
+}
+
+export function dbKey(base: string): string {
+  const id = activeId();
+  return id === DEFAULT_BUSINESS_ID ? base : `${base}:${id}`;
 }
 
 export function listBusinesses(): BusinessProfile[] {
@@ -114,12 +143,51 @@ function writeRegistry(registry: BusinessRegistry): void {
   window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(registry));
 }
 
-function copyKey(base: string, from: string, to: string): void {
-  const source = businessKey(base, from);
-  const target = businessKey(base, to);
-  const value = window.localStorage.getItem(source);
-  if (value === null) window.localStorage.removeItem(target);
-  else window.localStorage.setItem(target, value);
+function install(id: string): void {
+  for (const key of MANAGED_KEYS) {
+    const value = window.localStorage.getItem(snapshotKey(key, id));
+    if (value === null) {
+      if (key === "nova-pos-v1") {
+        const profile = getBusiness(id);
+        window.localStorage.setItem(
+          key,
+          emptyData(profile?.name ?? "My Business", profile?.businessType ?? "retail"),
+        );
+      } else {
+        window.localStorage.removeItem(key);
+      }
+    } else {
+      window.localStorage.setItem(key, value);
+    }
+  }
+}
+
+function preserve(id: string): void {
+  for (const key of MANAGED_KEYS) {
+    const value = window.localStorage.getItem(key);
+    const snapshot = snapshotKey(key, id);
+    if (value !== null) window.localStorage.setItem(snapshot, value);
+    else if (key !== "nova-pos-v1") window.localStorage.removeItem(snapshot);
+  }
+}
+
+function defaultSettings(businessType: BusinessType) {
+  const now = Date.now();
+  return {
+    businessType,
+    shopName: "My Shop",
+    address: "",
+    phone: "",
+    ownerId: "Owner",
+    momoNumber: "",
+    momoNetwork: "",
+    taxInclusive: true,
+    taxRate: 0,
+    receiptFooter: "",
+    theme: "dark",
+    nextOrderNo: 1,
+    createdAt: now,
+  };
 }
 
 function emptyData(name: string, businessType: BusinessType): string {
@@ -158,14 +226,6 @@ function emptyData(name: string, businessType: BusinessType): string {
   });
 }
 
-function install(id: string): void {
-  for (const key of MANAGED_KEYS) copyKey(key, id, DEFAULT_BUSINESS_ID);
-}
-
-function preserve(id: string): void {
-  for (const key of MANAGED_KEYS) copyKey(key, DEFAULT_BUSINESS_ID, id);
-}
-
 export function createBusiness(input: {
   name: string;
   businessType: BusinessType;
@@ -183,9 +243,9 @@ export function createBusiness(input: {
     createdAt: Date.now(),
     subscription: { status: "trialing", plan: null, expiresAt: null },
   };
-  window.localStorage.setItem(businessKey("nova-pos-v1", id), emptyData(business.name, business.businessType));
+  window.localStorage.setItem(snapshotKey("nova-pos-v1", id), emptyData(business.name, business.businessType));
   window.localStorage.setItem(
-    businessKey("nova-pos-trial-start", id),
+    snapshotKey("nova-pos-trial-start", id),
     String(Date.now()),
   );
   writeRegistry({ activeId: id, businesses: [...registry.businesses, business] });
@@ -211,16 +271,14 @@ export function updateBusinessEmail(id: string, email: string): void {
       row.id === id ? { ...row, email: email.trim() } : row,
     ),
   });
-  if (id === registry.activeId) {
-    const conn = parse<Record<string, unknown>>(
-      window.localStorage.getItem("nova-pos-sync-v1"),
-    );
-    if (conn) {
-      window.localStorage.setItem(
-        "nova-pos-sync-v1",
-        JSON.stringify({ ...conn, email: email.trim() }),
-      );
-    }
+  const snapshotRaw = window.localStorage.getItem(snapshotKey("nova-pos-sync-v1", id));
+  const conn = parse<Record<string, unknown>>(
+    snapshotRaw ?? (id === registry.activeId ? window.localStorage.getItem("nova-pos-sync-v1") : null),
+  );
+  if (conn) {
+    const updated = JSON.stringify({ ...conn, email: email.trim() });
+    window.localStorage.setItem(snapshotKey("nova-pos-sync-v1", id), updated);
+    if (id === registry.activeId) window.localStorage.setItem("nova-pos-sync-v1", updated);
   }
 }
 
@@ -238,7 +296,7 @@ export function removeBusiness(id: string): void {
   const registry = readRegistry();
   if (registry.businesses.length < 2 || id === DEFAULT_BUSINESS_ID) return;
   const next = registry.businesses.filter((row) => row.id !== id);
-  for (const key of MANAGED_KEYS) window.localStorage.removeItem(businessKey(key, id));
+  for (const key of MANAGED_KEYS) window.localStorage.removeItem(snapshotKey(key, id));
   writeRegistry({
     activeId: registry.activeId === id ? DEFAULT_BUSINESS_ID : registry.activeId,
     businesses: next,
