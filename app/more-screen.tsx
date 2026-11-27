@@ -5,23 +5,28 @@ import { Card } from "@/components/ui/card";
 import { Confirm } from "@/components/ui/confirm";
 import { Input } from "@/components/ui/input";
 import { Sheet } from "@/components/ui/sheet";
+import { Segmented } from "@/components/ui/segmented";
 import { BluetoothScannerSheet } from "@/components/scanner/bluetooth-scanner";
+import { BusinessTypePicker, businessTypeLabel } from "@/components/ui/business-type-picker";
+import {
+  activeId,
+  createBusiness,
+  listBusinesses,
+  switchBusiness,
+  updateBusinessEmail,
+  updateBusinessSubscription,
+  type BusinessProfile,
+} from "@/lib/businesses";
+import type { BusinessType } from "@/lib/types";
 import {
   readConnection,
   writeConnection,
   type SyncConnection,
 } from "@/lib/api/bootstrap";
 import { useSettings, usePos } from "@/lib/store";
-import { useTerms } from "@/lib/terms";
-import { hasFeature } from "@/lib/features";
 import { useEntitlement, planAllowsEnterprise } from "@/lib/entitlement";
 import { isDemoMode, enableDemo, exitDemo } from "@/lib/demo";
 import { demoBusinessTypes } from "@/lib/seed";
-import {
-  BusinessTypePicker,
-  businessTypeLabel,
-} from "@/components/ui/business-type-picker";
-import type { BusinessType } from "@/lib/types";
 import { listConflicts } from "@/lib/sync/outbox";
 import {
   affiliateShareUrl,
@@ -37,29 +42,19 @@ import { useAuth } from "@clerk/clerk-react";
 import {
   AlertTriangle,
   AppWindow,
-  ArrowDownLeft,
   PiggyBank,
-  Bluetooth,
-  CalendarDays,
-  ChefHat,
   ChevronRight,
   CircleUserRound,
   CreditCard,
   Download,
   Gift,
   LogOut,
-  PieChart,
   Plus,
-  ReceiptText,
   RefreshCcw,
   ScrollText,
   Settings,
   Store,
-  Ticket,
-  Users,
   UsersRound,
-  Wallet,
-  Warehouse,
 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
@@ -81,11 +76,28 @@ export default function MoreScreen() {
   const [conn, setConn] = useState<SyncConnection | null>(() => readConnection());
   const [referralOpen, setReferralOpen] = useState(false);
   const [btOpen, setBtOpen] = useState(false);
+  const [businesses, setBusinesses] = useState<BusinessProfile[]>([]);
+  const [addAppOpen, setAddAppOpen] = useState(false);
+  const [appName, setAppName] = useState("");
+  const [appType, setAppType] = useState<BusinessType>("retail");
+  const [appCategory, setAppCategory] = useState<"business" | "personal">("business");
+  const [appEmail, setAppEmail] = useState("");
+  const [emailFor, setEmailFor] = useState<BusinessProfile | null>(null);
+  const [emailDraft, setEmailDraft] = useState("");
   const [affiliateCode, setAffiliateCode] = useState("");
   const [codeDraft, setCodeDraft] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
-  const terms = useTerms();
   const personal = settings.businessType === "personal";
+
+  useEffect(() => {
+    updateBusinessSubscription(activeId(), {
+      status: status === "unknown" ? "none" : status,
+      plan,
+      expiresAt: null,
+    });
+    const timer = window.setTimeout(() => setBusinesses(listBusinesses()), 0);
+    return () => window.clearTimeout(timer);
+  }, [status, plan, settings.businessType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -180,114 +192,85 @@ export default function MoreScreen() {
         <p className="mt-0.5 text-[15px] text-ink3">{settings.shopName}</p>
       </header>
 
-      {/* browse — nav-adjacent shortcuts */}
+      {/* switch business — isolated apps under one account */}
       <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Browse</h2>
+        <h2 className="text-[15px] font-medium text-ink2">Switch Business</h2>
+        <p className="mt-1 text-[13px] text-ink3">
+          One account, many businesses. Each app keeps its own data and subscription.
+        </p>
         <Card inset className="mt-2.5">
-          {personal ? (
-            <>
-              <RowLink
-                href="/expense"
-                tone="accent"
-                icon={<Plus className="size-[18px]" />}
-                label="New expense"
-                sub="Record money you spent"
-              />
-              <RowLink
-                href="/savings"
-                icon={<PiggyBank className="size-[18px]" />}
-                label="Savings"
-                sub="Goals, investing and planning"
-              />
-              <RowLink
-                href="/funds"
-                icon={<ArrowDownLeft className="size-[18px]" />}
-                label="Add funds"
-                sub="Allowance, salary or gift"
-              />
-              <RowLink
-                href="/activities"
-                icon={<ReceiptText className="size-[18px]" />}
-                label="Activities"
-                sub="Every expense and top-up"
-              />
-              <RowLink
-                href="/budgets"
-                icon={<Wallet className="size-[18px]" />}
-                label="Budgets"
-                sub="Monthly spending limits"
-              />
-            </>
-          ) : (
-            <>
-              <RowLink
-                href="/reports"
-                tone="accent"
-                icon={<PieChart className="size-[18px]" />}
-                label="Reports"
-                sub="Sales, payments and top products"
-              />
-              <RowLink
-                href="/stock"
-                icon={<Warehouse className="size-[18px]" />}
-                label="Stock"
-                sub="Stock levels and movements"
-              />
-              {hasFeature(settings.businessType, "kitchen") && (
-                <RowLink
-                  href="/kitchen"
-                  icon={<ChefHat className="size-[18px]" />}
-                  label="Kitchen"
-                  sub="Tickets through the kitchen"
+          {businesses.map((business) => {
+            const active = business.id === activeId();
+            const locked = business.subscription?.status === "locked";
+            return (
+              <div key={business.id}>
+                <RowAction
+                  tone={active ? "accent" : "neutral"}
+                  icon={
+                    business.businessType === "personal" ? (
+                      <PiggyBank className="size-[18px]" />
+                    ) : (
+                      <Store className="size-[18px]" />
+                    )
+                  }
+                  label={business.name}
+                  sub={`${businessTypeLabel(business.businessType)} · ${business.email || "No email added"}`}
+                  onClick={() => {
+                    if (active) return;
+                    if (locked) {
+                      toast("This app's subscription has ended — renew it first", "warn");
+                      return;
+                    }
+                    switchBusiness(business.id);
+                  }}
                 />
-              )}
-              {hasFeature(settings.businessType, "appointments") && (
-                <RowLink
-                  href="/appointments"
-                  icon={<CalendarDays className="size-[18px]" />}
-                  label="Appointments"
-                  sub="The book of visits"
-                />
-              )}
-              {hasFeature(settings.businessType, "packages") && (
-                <RowLink
-                  href="/packages"
-                  icon={<Ticket className="size-[18px]" />}
-                  label="Packages"
-                  sub="Service packages and credits"
-                />
-              )}
-              <RowLink
-                href="/customers"
-                icon={<Users className="size-[18px]" />}
-                label={terms.customers}
-                sub="Credit and contact details"
-              />
-              <RowLink
-                href="/categories"
-                icon={<Store className="size-[18px]" />}
-                label="Categories"
-                sub="Group your products"
-              />
-              <button
-                onClick={() => setBtOpen(true)}
-                className="press flex w-full items-center gap-3 px-4 py-3.5 hover:bg-surface2/50"
-              >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-surface2 text-ink2">
-                  <Bluetooth className="size-[18px]" />
-                </span>
-                <span className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[17px] font-semibold text-ink">
-                    Bluetooth scanner
+                <div className="flex items-center gap-3 px-4 pb-3 pl-[68px]">
+                  <span
+                    className={cn(
+                      "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      active ? "bg-accentsoft text-accent" : "bg-surface2 text-ink3",
+                    )}
+                  >
+                    {active ? "Active" : "Switch to"}
                   </span>
-                  <span className="block truncate text-[14px] text-ink3">
-                    Type barcodes into a paired computer
+                  <span
+                    className={cn(
+                      "text-[11px] font-medium",
+                      locked ? "text-danger" : "text-ink3",
+                    )}
+                  >
+                    {locked
+                      ? "Subscription ended"
+                      : business.subscription?.status === "active"
+                        ? `${business.subscription.plan ?? "Active"} plan`
+                        : "Device trial"}
                   </span>
-                </span>
-                <ChevronRight className="size-4 shrink-0 text-ink3" />
-              </button>
-            </>
-          )}
+                  <button
+                    onClick={() => {
+                      setEmailFor(business);
+                      setEmailDraft(business.email);
+                    }}
+                    className="press ml-auto text-[12px] font-semibold text-accent"
+                  >
+                    {business.email ? "Edit email" : "Add email"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          <RowAction
+            tone="accent"
+            icon={<Plus className="size-[18px]" />}
+            label="Add app"
+            sub="Add another business under this account"
+            onClick={() => {
+              setAppName("");
+              setAppType("retail");
+              setAppCategory("business");
+              setAppEmail("");
+              setAddAppOpen(true);
+            }}
+          />
         </Card>
       </section>
 
@@ -432,6 +415,144 @@ export default function MoreScreen() {
       </section>
 
       <BluetoothScannerSheet open={btOpen} onClose={() => setBtOpen(false)} />
+
+      <Sheet
+        open={addAppOpen}
+        onClose={() => setAddAppOpen(false)}
+        title="Add app"
+        height="tall"
+        footer={
+          <Button
+            block
+            onClick={() => {
+              if (!appName.trim()) {
+                toast("Give this business a name", "warn");
+                return;
+              }
+              createBusiness({
+                name: appName,
+                businessType: appCategory === "personal" ? "personal" : appType,
+                email: appEmail,
+              });
+            }}
+          >
+            Create app
+          </Button>
+        }
+      >
+        <div className="space-y-4 pt-1">
+          <div>
+            <p className="mb-1.5 text-[13px] font-medium text-ink2">What are you adding?</p>
+            <Segmented
+              value={appCategory}
+              onChange={setAppCategory}
+              options={[
+                { value: "business", label: "Business app" },
+                { value: "personal", label: "Personal finance manager" },
+              ]}
+            />
+          </div>
+          <Input
+            label={appCategory === "personal" ? "Finance name" : "Business name"}
+            value={appName}
+            onChange={(event) => setAppName(event.target.value)}
+            placeholder="e.g. My Retail Shop"
+          />
+          {appCategory === "business" ? (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium text-ink2">Business type</p>
+              <BusinessTypePicker value={appType} onChange={setAppType} showHeading={false} />
+            </div>
+          ) : (
+            <p className="rounded-xl bg-surface2 px-3.5 py-3 text-[13px] text-ink3">
+              Tracks funds, expenses, budgets and savings goals — separate from your business apps.
+            </p>
+          )}
+          <Input
+            label="Email for this app"
+            value={appEmail}
+            onChange={(event) => setAppEmail(event.target.value)}
+            placeholder="you@example.com"
+            hint="Optional — you can add it later to unlock cloud sync."
+          />
+          {businesses.some((business) => business.email) && (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium text-ink2">Reuse a saved email</p>
+              <div className="flex flex-wrap gap-2">
+                {[...new Set(businesses.map((business) => business.email).filter(Boolean))].map(
+                  (email) => (
+                    <button
+                      key={email}
+                      onClick={() => setAppEmail(email)}
+                      className="press rounded-full border border-line2 bg-surface2 px-3 py-1.5 text-[13px] text-ink2"
+                    >
+                      {email}
+                    </button>
+                  ),
+                )}
+              </div>
+            </div>
+          )}
+          <p className="text-[12px] text-ink3">
+            Each app keeps its own products, orders, customers and settings — nothing is shared
+            between businesses. Every app has its own subscription.
+          </p>
+        </div>
+      </Sheet>
+
+      <Sheet
+        open={emailFor !== null}
+        onClose={() => setEmailFor(null)}
+        title={`Email for ${emailFor?.name ?? "app"}`}
+        height="auto"
+        footer={
+          <Button
+            block
+            onClick={() => {
+              if (emailFor) {
+                updateBusinessEmail(emailFor.id, emailDraft);
+                setBusinesses(listBusinesses());
+                toast("Email saved for this app", "ok");
+              }
+              setEmailFor(null);
+            }}
+          >
+            Save email
+          </Button>
+        }
+      >
+        <div className="space-y-4 pt-1">
+          <Input
+            label="Email"
+            value={emailDraft}
+            onChange={(event) => setEmailDraft(event.target.value)}
+            placeholder="you@example.com"
+          />
+          {businesses.some((business) => business.email && business.id !== emailFor?.id) && (
+            <div>
+              <p className="mb-1.5 text-[13px] font-medium text-ink2">Reuse a saved email</p>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  ...new Set(
+                    businesses
+                      .filter((business) => business.id !== emailFor?.id)
+                      .map((business) => business.email)
+                      .filter(Boolean),
+                  ),
+                ].map((email) => (
+                  <button
+                    key={email}
+                    onClick={() => setEmailDraft(email)}
+                    className="press rounded-full border border-line2 bg-surface2 px-3 py-1.5 text-[13px] text-ink2"
+                  >
+                    {email}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </Sheet>
 
       <Sheet
         open={referralOpen}

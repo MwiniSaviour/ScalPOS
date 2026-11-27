@@ -42,10 +42,11 @@ import { CLOUD_IMAGE_PREFIX, rememberCloudImage } from "../image-refs";
 import { getImageBlob, isLocalImageRef } from "../image-store";
 import type { Op } from "./types";
 import { pullSettings } from "./settings";
+import { businessKey } from "../businesses";
 
-const IDMAP_KEY = "nova-pos-idmap-v1";
-const FIRST_PUSH_KEY = "nova-pos-first-push-v1";
-const LAST_PULL_KEY = "nova-pos-last-pull";
+const IDMAP_KEY = () => businessKey("nova-pos-idmap-v1");
+const FIRST_PUSH_KEY = () => businessKey("nova-pos-first-push-v1");
+const LAST_PULL_KEY = () => businessKey("nova-pos-last-pull");
 
 const PULL_INTERVAL = 30_000;
 
@@ -81,7 +82,7 @@ function readMap(): IdMap {
   try {
     return {
       ...emptyMap(),
-      ...(JSON.parse(window.localStorage.getItem(IDMAP_KEY) ?? "{}") as Partial<IdMap>),
+      ...(JSON.parse(window.localStorage.getItem(IDMAP_KEY()) ?? "{}") as Partial<IdMap>),
     } as IdMap;
   } catch {
     return emptyMap();
@@ -90,7 +91,7 @@ function readMap(): IdMap {
 
 function writeMap(map: IdMap) {
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(IDMAP_KEY, JSON.stringify(map));
+  window.localStorage.setItem(IDMAP_KEY(), JSON.stringify(map));
 }
 
 const n = (v: unknown, d = 0) => {
@@ -1385,7 +1386,7 @@ export async function pullAll(conn: SyncConnection): Promise<number> {
       .then((m) => m.warmCloudImages(imageRefs))
       .catch(() => {});
 
-    window.localStorage.setItem(LAST_PULL_KEY, String(Date.now()));
+    window.localStorage.setItem(LAST_PULL_KEY(), String(Date.now()));
 
     // Shop settings are a one-row-per-shop document, not a synced table.
     try {
@@ -1671,7 +1672,7 @@ export async function armSync(conn: SyncConnection) {
 
   // 1. one-shot per org: queue every row already stored on this device
   try {
-    const pushed = (JSON.parse(window.localStorage.getItem(FIRST_PUSH_KEY) ?? "{}") as Record<string, boolean>)[conn.org_id];
+    const pushed = (JSON.parse(window.localStorage.getItem(FIRST_PUSH_KEY()) ?? "{}") as Record<string, boolean>)[conn.org_id];
     if (!pushed) {
       const s = await store();
       const { enqueue } = await import("./outbox");
@@ -1701,9 +1702,9 @@ export async function armSync(conn: SyncConnection) {
           created_at: Date.now(),
         } as unknown as Op);
       }
-      const raw = JSON.parse(window.localStorage.getItem(FIRST_PUSH_KEY) ?? "{}") as Record<string, boolean>;
+      const raw = JSON.parse(window.localStorage.getItem(FIRST_PUSH_KEY()) ?? "{}") as Record<string, boolean>;
       raw[conn.org_id] = true;
-      window.localStorage.setItem(FIRST_PUSH_KEY, JSON.stringify(raw));
+      window.localStorage.setItem(FIRST_PUSH_KEY(), JSON.stringify(raw));
     }
   } catch (e) {
     console.warn("sync: first push queue", e);
@@ -1908,5 +1909,5 @@ async function requeueMissing(): Promise<number> {
 
 export function lastPullAt(): number {
   if (typeof window === "undefined") return 0;
-  return Number(window.localStorage.getItem(LAST_PULL_KEY) ?? 0);
+  return Number(window.localStorage.getItem(LAST_PULL_KEY()) ?? 0);
 }

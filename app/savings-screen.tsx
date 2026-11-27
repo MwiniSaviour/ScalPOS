@@ -29,6 +29,9 @@ function percent(value: number, total: number): number {
 
 export default function SavingsScreen() {
   const goals = usePos((s) => s.financeGoals);
+  const financeSources = usePos((s) => s.financeSources);
+  const upsertFinanceSource = usePos((s) => s.upsertFinanceSource);
+  const deleteFinanceSource = usePos((s) => s.deleteFinanceSource);
   const entries = usePos((s) => s.financeEntries);
   const upsertFinanceGoal = usePos((s) => s.upsertFinanceGoal);
   const deleteFinanceGoal = usePos((s) => s.deleteFinanceGoal);
@@ -218,7 +221,7 @@ export default function SavingsScreen() {
                   onClick={() => {
                     setPayFor(goal);
                     setAmount("");
-                    setSource("Allowance");
+                    setSource(financeSources[0] ?? "Allowance");
                   }}
                   className="press w-full rounded-xl px-4 py-3 text-left hover:bg-surface2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
@@ -397,10 +400,20 @@ export default function SavingsScreen() {
             label="Source"
             value={source}
             onChange={setSource}
-            options={["Allowance", "Salary", "Gift", "Other"].map((row) => ({
-              value: row,
-              label: row,
-            }))}
+            editable
+            options={financeSources.map((row) => ({ value: row, label: row }))}
+            onAddOption={(name) => {
+              upsertFinanceSource(name);
+              toast(`${name} added`, "ok");
+            }}
+            onRenameOption={(current, name) => {
+              upsertFinanceSource(name, current);
+              toast("Source updated", "ok");
+            }}
+            onDeleteOption={(name) => {
+              deleteFinanceSource(name);
+              toast(`${name} removed`, "warn");
+            }}
           />
           {payFor && (
             <p className="text-[13px] text-ink3">

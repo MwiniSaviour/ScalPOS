@@ -3,10 +3,13 @@ import assert from "node:assert/strict";
 import {
   appendMoneyKey,
   budgetFor,
+  budgetKey,
+  budgetRange,
   budgetTotal,
   financeSummary,
   monthKey,
   spentByCategory,
+  spentInRange,
 } from "../../lib/finance.ts";
 import type { FinanceBudget, FinanceEntry } from "../../lib/types.ts";
 
@@ -74,4 +77,27 @@ test("appendMoneyKey builds two-decimal amounts safely", () => {
   assert.equal(appendMoneyKey("5.2", "5"), "5.25");
   assert.equal(appendMoneyKey("5.25", "9"), "5.25");
   assert.equal(appendMoneyKey("5.2", "."), "5.2");
+});
+
+test("budget periods resolve distinct windows", () => {
+  const week = new Date(2026, 0, 15, 12).getTime();
+  assert.ok(budgetKey("week", week).startsWith("week:"));
+  assert.equal(budgetKey("month", week), "2026-01");
+  assert.equal(budgetKey("year", week), "2026");
+  const custom: FinanceBudget = {
+    id: "b4", categoryId: "food", amount: 100, month: budgetKey("custom", week, 100, 200),
+    period: "custom", from: 100, to: 200, createdAt: 1, updatedAt: 1,
+  };
+  assert.deepEqual(budgetRange(custom, week), { from: 100, to: 200 });
+  assert.equal(budgetFor([custom], "food", week)?.amount, 100);
+  assert.equal(budgetTotal([custom], week, "month"), 0);
+});
+
+test("spentInRange counts only expenses in the window", () => {
+  const entries = [
+    entry({ kind: "expense", amount: 50, categoryId: "food", t: now }),
+    entry({ kind: "expense", amount: 20, categoryId: "food", t: new Date(2025, 11, 30, 12).getTime() }),
+    entry({ kind: "funds", amount: 100, t: now }),
+  ];
+  assert.equal(spentInRange(entries, new Date(2026, 0, 1).getTime(), new Date(2026, 1, 1).getTime(), "food"), 50);
 });

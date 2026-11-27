@@ -15,7 +15,9 @@ import { IMAGE_PREFIX, getImageBlob, isLocalImageRef, listImageRefs } from "./im
  */
 
 /* localStorage keys (outside the store blob) */
-export const STORE_KEY = "nova-pos-v1";
+import { businessKey } from "./businesses";
+
+export const STORE_KEY = () => businessKey("nova-pos-v1");
 export const LAST_BACKUP_KEY = "nova-pos-last-backup";
 export const GSI_CLIENT_KEY = "nova-pos-gsi-clientid";
 export const DRIVE_TOKEN_KEY = "nova-pos-drive-token";
@@ -29,7 +31,7 @@ export const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const GSI_SRC = "https://accounts.google.com/gsi/client";
 
 /* mirror of lib/image-store.ts module-private constants */
-const IMG_DB_NAME = "nova-pos-images";
+const IMG_DB_NAME = () => businessKey("nova-pos-images");
 const IMG_DB_VERSION = 1;
 const IMG_STORE = "images";
 
@@ -61,7 +63,7 @@ export function readPersisted(): PersistedPos | null {
   if (typeof window === "undefined") return null;
   let raw: string | null = null;
   try {
-    raw = window.localStorage.getItem(STORE_KEY);
+    raw = window.localStorage.getItem(STORE_KEY());
   } catch {
     return null;
   }
@@ -136,7 +138,7 @@ export function localImageRefs(state: unknown): string[] {
 /* ----------------------------------- build ---------------------------------- */
 
 export async function buildBackup(includePhotos = true): Promise<{ json: string; skipped: boolean }> {
-  const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORE_KEY) : null;
+  const raw = typeof window !== "undefined" ? window.localStorage.getItem(STORE_KEY()) : null;
   if (!raw) throw new Error("There is nothing to back up on this device yet");
   let blob: PersistedPos;
   try {
@@ -214,7 +216,7 @@ function openImageDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let req: IDBOpenDBRequest;
     try {
-      req = indexedDB.open(IMG_DB_NAME, IMG_DB_VERSION);
+      req = indexedDB.open(IMG_DB_NAME(), IMG_DB_VERSION);
     } catch {
       resolve(null);
       return;
@@ -294,7 +296,7 @@ export async function importImages(images: BackupImage[]): Promise<number> {
 export async function applyRestore(preview: BackupPreview): Promise<void> {
   if (preview.imagesIncluded) await importImages(preview.imagePayloads);
   if (typeof window === "undefined") return;
-  window.localStorage.setItem(STORE_KEY, JSON.stringify(preview.data));
+  window.localStorage.setItem(STORE_KEY(), JSON.stringify(preview.data));
   window.location.reload();
 }
 

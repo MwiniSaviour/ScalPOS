@@ -16,8 +16,8 @@ import { cn } from "@/lib/ui";
 import {
   appendMoneyKey,
   budgetFor,
+  budgetRange,
   FINANCE_METHOD_LABELS,
-  FUNDING_SOURCES,
   inMonth,
 } from "@/lib/finance";
 import type { FinanceEntry, FinanceMethod } from "@/lib/types";
@@ -72,13 +72,16 @@ function EntryForm({
   const entries = usePos((s) => s.financeEntries);
   const categories = usePos((s) => s.financeCategories);
   const budgets = usePos((s) => s.financeBudgets);
+  const financeSources = usePos((s) => s.financeSources);
+  const upsertFinanceSource = usePos((s) => s.upsertFinanceSource);
+  const deleteFinanceSource = usePos((s) => s.deleteFinanceSource);
   const saveFinanceEntry = usePos((s) => s.saveFinanceEntry);
   const deleteFinanceEntry = usePos((s) => s.deleteFinanceEntry);
   const toast = usePos((s) => s.toast);
 
   const [raw, setRaw] = useState(() => (entry ? amountInput(entry.amount) : ""));
   const [categoryId, setCategoryId] = useState<string | null>(entry?.categoryId ?? null);
-  const [source, setSource] = useState(entry?.source || FUNDING_SOURCES[0]);
+  const [source, setSource] = useState(entry?.source || financeSources[0] || "Allowance");
   const [note, setNote] = useState(entry?.note ?? "");
   const [method, setMethod] = useState<FinanceMethod>(entry?.method ?? "cash");
   const [date, setDate] = useState(() =>
@@ -91,13 +94,13 @@ function EntryForm({
   const budget = categoryId ? budgetFor(budgets, categoryId, now) : null;
   const spentBefore = categoryId
     ? entries
-        .filter(
-          (row) =>
-            row.kind === "expense" &&
-            row.categoryId === categoryId &&
-            row.id !== entry?.id &&
-            inMonth(row.t, now),
-        )
+        .filter((row) => {
+          if (row.kind !== "expense" || row.categoryId !== categoryId || row.id === entry?.id) {
+            return false;
+          }
+          const window = budget ? budgetRange(budget, now) : null;
+          return window ? row.t >= window.from && row.t < window.to : inMonth(row.t, now);
+        })
         .reduce((sum, row) => sum + row.amount, 0)
     : 0;
   const remaining = budget ? budget.amount - spentBefore - amount : null;
@@ -237,7 +240,20 @@ function EntryForm({
             label="Source"
             value={source}
             onChange={setSource}
-            options={FUNDING_SOURCES.map((row) => ({ value: row, label: row }))}
+            editable
+            options={financeSources.map((row) => ({ value: row, label: row }))}
+            onAddOption={(name) => {
+              upsertFinanceSource(name);
+              toast(`${name} added`, "ok");
+            }}
+            onRenameOption={(current, name) => {
+              upsertFinanceSource(name, current);
+              toast("Source updated", "ok");
+            }}
+            onDeleteOption={(name) => {
+              deleteFinanceSource(name);
+              toast(`${name} removed`, "warn");
+            }}
           />
         </section>
       )}

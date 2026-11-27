@@ -6,10 +6,11 @@ import { getSubscription, type SubscriptionState } from "./api/billing";
 import { hasOnboarded } from "./first-run";
 import { ensureTrialStart, readTrialStart, TRIAL_MS } from "./trial";
 import { insideOfflineGrace, OFFLINE_GRACE_MS } from "./entitlement-grace";
+import { businessKey } from "./businesses";
 
 export { OFFLINE_GRACE_MS };
 
-const CACHE_KEY = "nova-pos-entitlement-v1";
+const CACHE_KEY = () => businessKey("nova-pos-entitlement-v1");
 const ONBOARD_KEY = "nova-pos-onboarded";
 const REFRESH_MS = 10 * 60 * 1000;
 
@@ -37,7 +38,7 @@ type EntitlementState = {
 function readCache(): CachedSubscription | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
+    const raw = window.localStorage.getItem(CACHE_KEY());
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<CachedSubscription> | null;
     if (!parsed || typeof parsed.status !== "string") return null;
@@ -55,7 +56,7 @@ function readCache(): CachedSubscription | null {
 
 function writeCache(state: CachedSubscription): void {
   try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(CACHE_KEY(), JSON.stringify(state));
   } catch {
     /* storage unavailable */
   }

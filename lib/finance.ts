@@ -1,4 +1,5 @@
 import type {
+  BudgetPeriod,
   FinanceBudget,
   FinanceCategory,
   FinanceEntry,
@@ -106,20 +107,89 @@ export function spentByCategory(entries: FinanceEntry[], now: number): Record<st
   return out;
 }
 
+export function budgetKey(period: BudgetPeriod, now: number, from?: number, to?: number): string {
+  if (period === "custom") return `custom:${from ?? 0}:${to ?? 0}`;
+  if (period === "year") return String(new Date(now).getFullYear());
+  if (period === "week") {
+    const d = new Date(now);
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+    return `week:${monday.getTime()}`;
+  }
+  return monthKey(now);
+}
+
+export function budgetRange(budget: FinanceBudget, now: number): { from: number; to: number } {
+  const period = budget.period ?? "month";
+  if (period === "custom") {
+    return {
+      from: budget.from ?? -Infinity,
+      to: budget.to ?? Infinity,
+    };
+  }
+  if (period === "year") {
+    const year = new Date(now).getFullYear();
+    return {
+      from: new Date(year, 0, 1).getTime(),
+      to: new Date(year + 1, 0, 1).getTime(),
+    };
+  }
+  if (period === "week") {
+    const d = new Date(now);
+    const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7));
+    return {
+      from: monday.getTime(),
+      to: new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + 7).getTime(),
+    };
+  }
+  return { from: monthStart(now), to: nextMonthStart(now) };
+}
+
 export function budgetFor(
   budgets: FinanceBudget[],
   categoryId: string,
   now: number,
+  period?: BudgetPeriod,
 ): FinanceBudget | null {
-  const key = monthKey(now);
-  return budgets.find((budget) => budget.categoryId === categoryId && budget.month === key) ?? null;
+  return (
+    budgets.find(
+      (budget) =>
+        budget.categoryId === categoryId &&
+        (period ? (budget.period ?? "month") === period : true) &&
+        budget.month === budgetKey(budget.period ?? "month", now, budget.from, budget.to),
+    ) ?? null
+  );
 }
 
-export function budgetTotal(budgets: FinanceBudget[], now: number): number {
-  const key = monthKey(now);
+export function budgetTotal(
+  budgets: FinanceBudget[],
+  now: number,
+  period?: BudgetPeriod,
+): number {
   return budgets
-    .filter((budget) => budget.month === key)
+    .filter(
+      (budget) =>
+        (period ? (budget.period ?? "month") === period : true) &&
+        budget.month === budgetKey(budget.period ?? "month", now, budget.from, budget.to),
+    )
     .reduce((sum, budget) => sum + budget.amount, 0);
+}
+
+export function spentInRange(
+  entries: FinanceEntry[],
+  from: number,
+  to: number,
+  categoryId?: string,
+): number {
+  return entries.reduce(
+    (sum, entry) =>
+      entry.kind === "expense" &&
+      entry.t >= from &&
+      entry.t < to &&
+      (!categoryId || entry.categoryId === categoryId)
+        ? sum + entry.amount
+        : sum,
+    0,
+  );
 }
 
 export function appendMoneyKey(current: string, key: string): string {

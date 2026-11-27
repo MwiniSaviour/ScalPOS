@@ -1,8 +1,9 @@
 import { isDemoMode } from "../demo";
 import type { Op, Conflict } from "./types";
 import { computeRanks } from "./deps";
+import { businessKey } from "../businesses";
 
-const DB_NAME = "nova-pos-outbox-v1";
+const DB_NAME = () => businessKey("nova-pos-outbox-v1");
 const DB_VERSION = 1;
 const STORE = "ops";
 
@@ -22,7 +23,7 @@ function openDb(): Promise<IDBDatabase | null> {
   return new Promise((resolve) => {
     let req: IDBOpenDBRequest;
     try {
-      req = indexedDB.open(DB_NAME, DB_VERSION);
+      req = indexedDB.open(DB_NAME(), DB_VERSION);
     } catch {
       resolve(null);
       return;
