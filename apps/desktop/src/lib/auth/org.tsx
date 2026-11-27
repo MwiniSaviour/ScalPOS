@@ -12,6 +12,10 @@ import {
 import { useAuth } from "@clerk/clerk-react"
 import { createClient } from "@supabase/supabase-js"
 import { bootstrapOrg } from "@/lib/supabase/client"
+import { readConnection, writeConnection } from "@pos/api/bootstrap"
+import { shopForConnection } from "./linked-shop"
+
+export const CONNECTION_CHANGE_EVENT = "nova-pos-connection-change"
 
 export type Shop = {
   id: string
@@ -71,8 +75,11 @@ export function clearDemoOrg(userId: string) {
 
 export function getOrgId(): string {
   if (demoOrgId) return demoOrgId
-  if (!activeShop) throw new Error("No shop connected")
-  return activeShop.id
+  if (activeShop && activeShop.id !== "local") return activeShop.id
+  const conn = readConnection()
+  if (conn?.org_id) return conn.org_id
+  if (activeShop) return activeShop.id
+  throw new Error("No shop connected")
 }
 
 /**
@@ -197,6 +204,13 @@ export function OrgProvider({ children }: { children: React.ReactNode }) {
         setNeedsShop(false)
         setError(null)
         writeCache(userId, next)
+        writeConnection({
+          org_id: res.orgId,
+          user_id: userId,
+          access_token: token,
+          org_name: next.name,
+        })
+        window.dispatchEvent(new Event(CONNECTION_CHANGE_EVENT))
       } catch (e) {
         setError(e instanceof Error ? e.message : "Could not connect to your shop.")
       } finally {
@@ -261,9 +275,19 @@ export function useOrg(): OrgContextValue {
   return ctx
 }
 
-/** Context for the offline desktop build, where no Clerk/cloud org exists. */
+/** Context for the offline desktop build; uses the linked cloud org when present. */
 export function LocalOrgProvider({ children }: { children: React.ReactNode }) {
-  const shop: Shop = { id: "local", name: "This computer", role: "owner" }
+  const [conn, setConn] = useState(() => readConnection())
+  useEffect(() => {
+    const update = () => setConn(readConnection())
+    window.addEventListener(CONNECTION_CHANGE_EVENT, update)
+    window.addEventListener("storage", update)
+    return () => {
+      window.removeEventListener(CONNECTION_CHANGE_EVENT, update)
+      window.removeEventListener("storage", update)
+    }
+  }, [])
+  const shop: Shop = shopForConnection(conn)
   return (
     <OrgContext.Provider
       value={{

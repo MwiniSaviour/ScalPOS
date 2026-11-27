@@ -4,8 +4,9 @@ import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from "
 import { ClerkProvider, useAuth } from "@clerk/clerk-react"
 import { usePathname, useRouter } from "next/navigation"
 import { registerTokenProvider } from "@pos/api/session"
-import { readConnection } from "@pos/api/bootstrap"
-import { LocalOrgProvider } from "@/lib/auth/org"
+import { readConnection, writeConnection } from "@pos/api/bootstrap"
+import { bootstrapOrg } from "@/lib/supabase/client"
+import { LocalOrgProvider, CONNECTION_CHANGE_EVENT } from "@/lib/auth/org"
 import { desktopCanBootLocally } from "@/lib/auth/offline-gate"
 import { SyncBridge } from "@/components/sync-bridge"
 import PinGate from "@/components/pin-gate"
@@ -15,20 +16,39 @@ import { migrateLegacyDesktop } from "@/lib/offline/migrate-legacy"
 const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? ""
 
 function TokenBridge() {
-  const { isSignedIn, getToken } = useAuth()
+  const { isLoaded, isSignedIn, getToken, userId } = useAuth()
   useEffect(() => {
     if (!isSignedIn) {
       registerTokenProvider(null)
+      writeConnection(null)
+      window.dispatchEvent(new Event(CONNECTION_CHANGE_EVENT))
       return
     }
-    registerTokenProvider(async () => {
+    const provider = async () => {
       try {
         return (await getToken({ template: "supabase" })) ?? null
       } catch {
         return null
       }
-    })
-  }, [isSignedIn, getToken])
+    }
+    registerTokenProvider(provider)
+    if (!isLoaded || !userId) return
+    void (async () => {
+      const token = await provider()
+      if (!token) return
+      const res = await bootstrapOrg(false, token)
+      if (res.status !== "ok") return
+      const existing = readConnection()
+      if (existing?.org_id === res.orgId) return
+      writeConnection({
+        org_id: res.orgId,
+        user_id: userId,
+        access_token: token,
+        org_name: existing?.org_name,
+      })
+      window.dispatchEvent(new Event(CONNECTION_CHANGE_EVENT))
+    })().catch(() => {})
+  }, [isLoaded, isSignedIn, getToken, userId])
   return <SyncBridge signedIn={Boolean(isSignedIn)} />
 }
 

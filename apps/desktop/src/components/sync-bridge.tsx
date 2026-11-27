@@ -1,19 +1,30 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { useNet } from "@pos/net"
 import { readConnection } from "@pos/api/bootstrap"
+import { CONNECTION_CHANGE_EVENT } from "@/lib/auth/org"
 import { armSync, disarmSync, drainOutbox, pullAll } from "@pos/sync/engine"
 import { planAllowsEnterprise, useEntitlement } from "@pos/entitlement"
 
 export function SyncBridge({ signedIn }: { signedIn: boolean }) {
   const { online } = useNet()
   const refresh = useEntitlement((s) => s.refresh)
+  const [conn, setConn] = useState(() => readConnection())
+
+  useEffect(() => {
+    const update = () => setConn(readConnection())
+    window.addEventListener(CONNECTION_CHANGE_EVENT, update)
+    window.addEventListener("storage", update)
+    return () => {
+      window.removeEventListener(CONNECTION_CHANGE_EVENT, update)
+      window.removeEventListener("storage", update)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      const conn = readConnection()
       if (!conn?.org_id || !online) {
         await disarmSync()
         return
@@ -34,7 +45,7 @@ export function SyncBridge({ signedIn }: { signedIn: boolean }) {
       }
     })().catch((e) => console.warn("desktop sync boot", e))
     return () => { cancelled = true }
-  }, [signedIn, online, refresh])
+  }, [signedIn, online, refresh, conn])
 
   return null
 }
