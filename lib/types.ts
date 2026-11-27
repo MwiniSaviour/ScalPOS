@@ -304,6 +304,9 @@ export type FinanceGoal = {
   target: number;
   color: string;
   balance: number;
+  note: string;
+  startDate: number | null;
+  endDate: number | null;
   createdAt: number;
   updatedAt: number;
 };

@@ -1584,6 +1584,13 @@ export const usePos = create<PosState>()(
           target: Number.isFinite(input.target ?? 0) ? Math.max(0, round2(input.target ?? 0)) : 0,
           color: input.color ?? existing?.color ?? "#4c8dff",
           balance: input.balance ?? existing?.balance ?? 0,
+          note: Object.prototype.hasOwnProperty.call(input, "note") ? input.note ?? "" : existing?.note ?? "",
+          startDate: Object.prototype.hasOwnProperty.call(input, "startDate")
+            ? input.startDate ?? null
+            : existing?.startDate ?? null,
+          endDate: Object.prototype.hasOwnProperty.call(input, "endDate")
+            ? input.endDate ?? null
+            : existing?.endDate ?? null,
           createdAt: existing?.createdAt ?? now,
           updatedAt: now,
         };

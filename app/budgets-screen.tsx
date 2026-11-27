@@ -237,7 +237,7 @@ export default function BudgetsScreen() {
                   onClick={() => setNewColor(color.hex)}
                   className={cn(
                     "press size-9 rounded-full border-2",
-                    newColor === color.hex ? "border-ink" : "border-transparent",
+                    newColor === color.hex ? "border-ink" : "border-line2",
                   )}
                   style={{ background: color.hex }}
                 />

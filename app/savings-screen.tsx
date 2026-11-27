@@ -15,17 +15,100 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { Confirm } from "@/components/ui/confirm";
-import { Input } from "@/components/ui/input";
+import { Input, TextArea } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Sheet } from "@/components/ui/sheet";
+import { dateShort, startOfDay } from "@/lib/format";
 import { fmtMoney } from "@/lib/money";
+import { useNow } from "@/lib/now";
 import { usePos } from "@/lib/store";
 import { cn, hueColor, hueSoft, TOKEN_COLORS } from "@/lib/ui";
 import type { FinanceGoal } from "@/lib/types";
 
+type GoalTone = "accent" | "warn" | "danger" | "neutral";
+
 function percent(value: number, total: number): number {
   return total > 0 ? Math.round((value / total) * 100) : 0;
 }
+
+function toDateInput(value: number | null | undefined): string {
+  if (!value) return "";
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+function fromDateInput(value: string): number | null {
+  if (!value) return null;
+  const parsed = new Date(`${value}T12:00:00`);
+  return Number.isFinite(parsed.getTime()) ? parsed.getTime() : null;
+}
+
+function daysBetween(from: number, to: number): number {
+  return Math.round((startOfDay(to) - startOfDay(from)) / 86400000);
+}
+
+function goalStatus(goal: FinanceGoal, now: number): { label: string; line: string; tone: GoalTone } {
+  const shortfall = goal.target - goal.balance;
+  if (shortfall <= 0) {
+    const extra = Math.abs(shortfall);
+    return {
+      label: extra > 0 ? "Reached" : "Complete",
+      line: extra > 0 ? `Goal reached and exceeded by ${fmtMoney(extra)}` : "Goal reached",
+      tone: "accent",
+    };
+  }
+  if (!(now > 0) || !goal.endDate) {
+    return {
+      label: `${fmtMoney(shortfall)} to go`,
+      line: `${fmtMoney(shortfall)} left to reach this goal.`,
+      tone: "neutral",
+    };
+  }
+  const days = daysBetween(now, goal.endDate);
+  if (days < 0) {
+    const overdue = Math.abs(days);
+    return {
+      label: `Overdue ${overdue}d`,
+      line: `${fmtMoney(shortfall)} left — overdue by ${overdue} day${overdue === 1 ? "" : "s"}. Extend the date to keep this goal on track.`,
+      tone: "danger",
+    };
+  }
+  if (days === 0) {
+    return {
+      label: "Due today",
+      line: `${fmtMoney(shortfall)} left — the projected date is today.`,
+      tone: "warn",
+    };
+  }
+  if (days <= 7) {
+    return {
+      label: `Due in ${days}d`,
+      line: `${fmtMoney(shortfall)} left — due in ${days} day${days === 1 ? "" : "s"}.`,
+      tone: "warn",
+    };
+  }
+  return {
+    label: `Due ${dateShort(goal.endDate)}`,
+    line: `${fmtMoney(shortfall)} left to reach this goal by ${dateShort(goal.endDate)}.`,
+    tone: "neutral",
+  };
+}
+
+const TONE_CLASS: Record<GoalTone, string> = {
+  accent: "bg-accentsoft text-accent",
+  warn: "bg-warn/10 text-warn",
+  danger: "bg-danger/10 text-danger",
+  neutral: "bg-surface3 text-ink3",
+};
+
+const STATUS_LINE_CLASS: Record<GoalTone, string> = {
+  accent: "text-accent",
+  warn: "text-warn",
+  danger: "text-danger",
+  neutral: "text-ink3",
+};
 
 export default function SavingsScreen() {
   const goals = usePos((s) => s.financeGoals);
@@ -34,16 +117,21 @@ export default function SavingsScreen() {
   const deleteFinanceGoal = usePos((s) => s.deleteFinanceGoal);
   const saveFinanceEntry = usePos((s) => s.saveFinanceEntry);
   const toast = usePos((s) => s.toast);
+  const now = useNow();
 
   const [goalOpen, setGoalOpen] = useState(false);
   const [editing, setEditing] = useState<FinanceGoal | null>(null);
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
   const [color, setColor] = useState<string>(TOKEN_COLORS[0].hex);
+  const [goalNote, setGoalNote] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [payFor, setPayFor] = useState<FinanceGoal | null>(null);
   const [removing, setRemoving] = useState<FinanceGoal | null>(null);
   const [amount, setAmount] = useState("");
   const [source, setSource] = useState("Allowance");
+  const [contributionNote, setContributionNote] = useState("");
 
   const total = goals.reduce((sum, goal) => sum + goal.balance, 0);
   const targetTotal = goals.reduce((sum, goal) => sum + goal.target, 0);
@@ -54,8 +142,7 @@ export default function SavingsScreen() {
       const start = rows
         .slice(0, index)
         .reduce((sum, row) => sum + percent(row.balance, total), 0);
-      const share =
-        index === rows.length - 1 ? 100 - start : percent(goal.balance, total);
+      const share = index === rows.length - 1 ? 100 - start : percent(goal.balance, total);
       return { ...goal, start, share };
     });
   }, [goals, total]);
@@ -81,6 +168,9 @@ export default function SavingsScreen() {
     setName(goal?.name ?? "");
     setTarget(goal ? String(goal.target) : "");
     setColor(goal?.color ?? TOKEN_COLORS[0].hex);
+    setGoalNote(goal?.note ?? "");
+    setStartDate(toDateInput(goal?.startDate));
+    setEndDate(toDateInput(goal?.endDate));
     setGoalOpen(true);
   }
 
@@ -90,11 +180,20 @@ export default function SavingsScreen() {
       toast("Give the goal a name and a target", "warn");
       return;
     }
+    const start = fromDateInput(startDate);
+    const end = fromDateInput(endDate);
+    if (start && end && end < start) {
+      toast("The end date must be after the start date", "warn");
+      return;
+    }
     upsertFinanceGoal({
       id: editing?.id,
       name: name.trim(),
       target: value,
       color,
+      note: goalNote.trim(),
+      startDate: start,
+      endDate: end,
     });
     toast(editing ? "Goal updated" : "Savings goal created", "ok");
     setGoalOpen(false);
@@ -111,7 +210,7 @@ export default function SavingsScreen() {
       amount: value,
       goalId: payFor.id,
       source,
-      note: `Added to ${payFor.name}`,
+      note: contributionNote.trim() || `Added to ${payFor.name}`,
     });
     upsertFinanceGoal({
       id: payFor.id,
@@ -119,11 +218,17 @@ export default function SavingsScreen() {
       target: payFor.target,
       color: payFor.color,
       balance: payFor.balance + value,
+      note: payFor.note,
+      startDate: payFor.startDate,
+      endDate: payFor.endDate,
     });
     toast(`${fmtMoney(value)} added to ${payFor.name}`, "ok");
     setAmount("");
+    setContributionNote("");
     setPayFor(null);
   }
+
+  const payStatus = payFor ? goalStatus(payFor, now) : null;
 
   return (
     <div className="anim-fade overflow-x-hidden px-5 pt-4">
@@ -158,14 +263,12 @@ export default function SavingsScreen() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink3">
-                Total savings
+                Total saved
               </p>
               <p className="tabnum mt-1.5 break-words text-[clamp(20px,5.5vw,28px)] font-bold leading-[1.1] tracking-[-0.02em] text-ink">
                 {fmtMoney(total)}
               </p>
-              <p className="mt-1 text-[13px] text-ink3">
-                of {fmtMoney(targetTotal)} planned
-              </p>
+              <p className="mt-1 text-[13px] text-ink3">of {fmtMoney(targetTotal)} planned</p>
               <p className="mt-2 text-[12px] text-ink3">{goals.length} active goals</p>
             </div>
           </div>
@@ -212,6 +315,7 @@ export default function SavingsScreen() {
           <Card inset>
             {goals.map((goal) => {
               const progress = Math.min(100, percent(goal.balance, goal.target));
+              const status = goalStatus(goal, now);
               return (
                 <button
                   key={goal.id}
@@ -219,6 +323,7 @@ export default function SavingsScreen() {
                     setPayFor(goal);
                     setAmount("");
                     setSource("Allowance");
+                    setContributionNote("");
                   }}
                   className="press w-full rounded-xl px-4 py-3 text-left hover:bg-surface2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
@@ -234,12 +339,21 @@ export default function SavingsScreen() {
                         {goal.name}
                       </span>
                       <span className="tabnum mt-0.5 block text-[13px] text-ink3">
-                        USED {fmtMoney(goal.balance)} · LIMIT {fmtMoney(goal.target)}
+                        SAVED {fmtMoney(goal.balance)} · TARGET {fmtMoney(goal.target)}
                       </span>
+                      <span
+                        className={cn(
+                          "mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                          TONE_CLASS[status.tone],
+                        )}
+                      >
+                        {status.label}
+                      </span>
+                      {goal.note && (
+                        <span className="mt-1 block truncate text-[12px] text-ink3">{goal.note}</span>
+                      )}
                     </span>
-                    <span className="tabnum shrink-0 text-[15px] font-bold text-ink">
-                      {progress}%
-                    </span>
+                    <span className="tabnum shrink-0 text-[15px] font-bold text-ink">{progress}%</span>
                     <ChevronRight className="size-4 shrink-0 text-ink3" />
                   </div>
                   <span className="mt-2.5 block h-1.5 overflow-hidden rounded-full bg-[var(--chart-track)]">
@@ -280,9 +394,7 @@ export default function SavingsScreen() {
                   <ArrowDownLeft className="size-[17px]" />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-ink">
-                    {entry.source}
-                  </span>
+                  <span className="block truncate text-[15px] font-semibold text-ink">{entry.source}</span>
                   <span className="block truncate text-[12px] text-ink3">
                     {entry.note || "Added to savings"} · {new Date(entry.t).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
                   </span>
@@ -336,6 +448,26 @@ export default function SavingsScreen() {
             placeholder="0.00"
             money
           />
+          <Input
+            label="Start date (optional)"
+            type="date"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
+          <Input
+            label="Projected end date (optional)"
+            type="date"
+            value={endDate}
+            onChange={(event) => setEndDate(event.target.value)}
+            hint="We'll warn you when this date is close, due or overdue."
+          />
+          <TextArea
+            label="Note (optional)"
+            value={goalNote}
+            onChange={(event) => setGoalNote(event.target.value)}
+            placeholder="e.g. For my final year at school"
+            className="[&_textarea]:min-h-[72px]"
+          />
           <div>
             <p className="mb-1.5 text-[13px] font-medium text-ink2">Colour</p>
             <div className="flex flex-wrap gap-2">
@@ -347,7 +479,7 @@ export default function SavingsScreen() {
                   aria-pressed={color === token.hex}
                   className={cn(
                     "size-9 rounded-full border-2 transition-transform",
-                    color === token.hex ? "scale-110 border-ink" : "border-transparent",
+                    color === token.hex ? "scale-110 border-ink" : "border-line2",
                   )}
                   style={{ background: token.hex }}
                 />
@@ -384,6 +516,53 @@ export default function SavingsScreen() {
         }
       >
         <div className="space-y-4 pt-1">
+          {payFor && payStatus && (
+            <div className="rounded-xl border border-line2 bg-surface2 p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink3">
+                    Goal insight
+                  </p>
+                  <p className="mt-1 truncate text-[15px] font-semibold text-ink">{payFor.name}</p>
+                </div>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    TONE_CLASS[payStatus.tone],
+                  )}
+                >
+                  {payStatus.label}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <div className="min-w-0">
+                  <p className="text-[12px] text-ink3">Target</p>
+                  <p className="tabnum mt-0.5 truncate text-[16px] font-semibold text-ink">
+                    {fmtMoney(payFor.target)}
+                  </p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[12px] text-ink3">Saved so far</p>
+                  <p className="tabnum mt-0.5 truncate text-[16px] font-semibold text-accent">
+                    {fmtMoney(payFor.balance)}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-[var(--chart-track)]">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, percent(payFor.balance, payFor.target))}%`,
+                    background: hueColor(payFor.color),
+                  }}
+                />
+              </div>
+              <p className={cn("mt-2 text-[13px] leading-5", STATUS_LINE_CLASS[payStatus.tone])}>
+                {payStatus.line}
+              </p>
+              {payFor.note && <p className="mt-1 text-[12px] text-ink3">{payFor.note}</p>}
+            </div>
+          )}
           <Input
             label="Amount"
             type="number"
@@ -402,11 +581,13 @@ export default function SavingsScreen() {
               label: row,
             }))}
           />
-          {payFor && (
-            <p className="text-[13px] text-ink3">
-              {fmtMoney(payFor.target - payFor.balance)} left to reach this goal.
-            </p>
-          )}
+          <TextArea
+            label="Note (optional)"
+            value={contributionNote}
+            onChange={(event) => setContributionNote(event.target.value)}
+            placeholder="e.g. Allowance for the term"
+            className="[&_textarea]:min-h-[72px]"
+          />
         </div>
       </Sheet>
     </div>
