@@ -38,6 +38,7 @@ import {
   AlertTriangle,
   AppWindow,
   ArrowDownLeft,
+  Banknote,
   Bluetooth,
   CalendarDays,
   ChefHat,
@@ -193,6 +194,12 @@ export default function MoreScreen() {
                 sub="Record money you spent"
               />
               <RowLink
+                href="/expenses"
+                icon={<Banknote className="size-[18px]" />}
+                label="Expense tracking"
+                sub="Spending reports and history"
+              />
+              <RowLink
                 href="/funds"
                 icon={<ArrowDownLeft className="size-[18px]" />}
                 label="Add funds"
@@ -286,7 +293,7 @@ export default function MoreScreen() {
 
       {/* business */}
       <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <h2 className="text-[15px] font-medium text-ink2">Your setup</h2>
         <Card inset className="mt-2.5">
           <RowLink
             href="/account"
@@ -539,17 +546,15 @@ export default function MoreScreen() {
             </Button>
           }
         >
-          <p className="text-[13px] leading-5 text-ink3">
-            Pick the kind of shop you want to try. Demo products, customers and
-            sales are for trying the app and never sync to your cloud account.
-            Your real shop data is saved on this device first.
-          </p>
           <BusinessTypePicker
             value={demoType}
             onChange={setDemoType}
             values={demoTypes}
-            className="mt-4"
           />
+          <p className="mt-3 text-[13px] leading-5 text-ink3">
+            Demo data is for trying the app and never syncs to your cloud account.
+            Your real data is saved on this device first.
+          </p>
         </Sheet>
       )}
     </div>
