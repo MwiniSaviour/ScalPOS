@@ -55,6 +55,7 @@ export type DemoState = {
   financeEntries: [];
   financeBudgets: [];
   financeGoals: [];
+  financeSources: [];
   cart: [];
   cartCustomerId: null;
   cartDiscount: number;
@@ -90,6 +91,7 @@ export function demoData(businessType: BusinessType = "retail"): DemoState {
     financeEntries: [],
     financeBudgets: [],
     financeGoals: [],
+    financeSources: [],
     cart: [],
     cartCustomerId: null,
     cartDiscount: 0,

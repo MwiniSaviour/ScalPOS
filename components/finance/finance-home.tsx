@@ -36,7 +36,7 @@ export function FinanceHome() {
 
   const summary = financeSummary(entries, now);
   const spentMap = spentByCategory(entries, now);
-  const planned = budgetTotal(budgets, now);
+  const planned = budgetTotal(budgets, now, "month");
   const left = planned - summary.monthSpent;
   const daysLeft = daysLeftInMonth(now);
   const daily = planned > 0 ? Math.max(0, left) / daysLeft : 0;

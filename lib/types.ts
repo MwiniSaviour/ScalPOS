@@ -289,11 +289,16 @@ export type FinanceEntry = {
   createdAt: number;
 };
 
+export type BudgetPeriod = "week" | "month" | "year" | "custom";
+
 export type FinanceBudget = {
   id: string;
   categoryId: string;
   amount: number;
   month: string;
+  period?: BudgetPeriod;
+  from?: number;
+  to?: number;
   createdAt: number;
   updatedAt: number;
 };

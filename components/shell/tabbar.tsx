@@ -28,8 +28,8 @@ const SHOP_TABS: { href: string; icon: LucideIcon }[] = [
 const FINANCE_TABS: { href: string; icon: LucideIcon }[] = [
   { href: "/home", icon: House },
   { href: "/budgets", icon: Wallet },
-  { href: "/activities", icon: ReceiptText },
   { href: "/savings", icon: PiggyBank },
+  { href: "/activities", icon: ReceiptText },
 ];
 
 const TAB_ROUTES = [

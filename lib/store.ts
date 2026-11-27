@@ -5,6 +5,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { defaultSettings } from "./seed";
 import { hasFeature } from "./features";
 import { isDemoMode } from "./demo";
+import { businessKey } from "./businesses";
 import {
   batchesOf,
   batchStock,
@@ -23,7 +24,11 @@ import {
   recipeDraw,
 } from "./restaurant";
 import { id, orderId, startOfDay } from "./format";
-import { defaultFinanceCategories, monthKey } from "./finance";
+import {
+  budgetKey,
+  defaultFinanceCategories,
+  FUNDING_SOURCES,
+} from "./finance";
 import {
   commissionOf,
   creditAwareUnitPrices,
@@ -49,6 +54,7 @@ import type {
   Category,
   CartLine,
   Customer,
+  BudgetPeriod,
   FinanceBudget,
   FinanceCategory,
   FinanceEntry,
@@ -72,6 +78,8 @@ import type {
   TicketStatus,
 } from "./types";
 import { applyReceipt, poTotal } from "./suppliers";
+
+const PERSIST_KEY = () => businessKey("nova-pos-v1");
 
 /* ------------------------------ derived helpers ------------------------------ */
 
@@ -240,6 +248,7 @@ type PosState = {
   financeEntries: FinanceEntry[];
   financeBudgets: FinanceBudget[];
   financeGoals: FinanceGoal[];
+  financeSources: string[];
   settings: Settings;
   cart: CartLine[];
   cartUpdatedAt: number;
@@ -373,7 +382,13 @@ type PosState = {
   }) => FinanceEntry | null;
   deleteFinanceEntry: (entryId: string) => void;
   upsertFinanceCategory: (input: Partial<FinanceCategory> & { name: string }) => FinanceCategory;
-  setFinanceBudget: (categoryId: string, amount: number, at?: number) => void;
+  setFinanceBudget: (
+    categoryId: string,
+    amount: number,
+    options?: { period?: BudgetPeriod; from?: number; to?: number; at?: number },
+  ) => void;
+  upsertFinanceSource: (name: string, previous?: string) => void;
+  deleteFinanceSource: (name: string) => void;
   upsertFinanceGoal: (input: Partial<FinanceGoal> & { name: string }) => FinanceGoal;
   deleteFinanceGoal: (goalId: string) => void;
 
@@ -407,6 +422,7 @@ export const usePos = create<PosState>()(
       financeEntries: [],
       financeBudgets: [],
       financeGoals: [],
+      financeSources: [],
       settings: defaultSettings(),
       cart: [],
       cartUpdatedAt: 0,
@@ -421,7 +437,7 @@ export const usePos = create<PosState>()(
 
       rehydrate: () => {
         const persisted =
-          typeof window !== "undefined" ? window.localStorage.getItem("nova-pos-v1") : null;
+          typeof window !== "undefined" ? window.localStorage.getItem(PERSIST_KEY()) : null;
         set({ hydrated: true });
 
         // One-time migration off the pre-store staff keys. Reading the legacy
@@ -442,6 +458,9 @@ export const usePos = create<PosState>()(
         }
         if (s.settings.businessType === "personal" && s.financeCategories.length === 0) {
           set({ financeCategories: defaultFinanceCategories() });
+        }
+        if (s.financeSources.length === 0) {
+          set({ financeSources: [...FUNDING_SOURCES] });
         }
         if (s.cart.length > 0 && Date.now() - s.cartUpdatedAt > 12 * 60 * 60 * 1000) {
           set({ cart: [], cartCustomerId: null, cartDiscount: 0, cartUpdatedAt: 0 });
@@ -1545,16 +1564,18 @@ export const usePos = create<PosState>()(
         return row;
       },
 
-      setFinanceBudget: (categoryId, amount, at = Date.now()) => {
-        const month = monthKey(at);
+      setFinanceBudget: (categoryId, amount, options = {}) => {
+        const at = options.at ?? Date.now();
+        const period = options.period ?? "month";
+        const month = budgetKey(period, at, options.from, options.to);
         const s = get();
-        const existing = s.financeBudgets.find(
-          (budget) => budget.categoryId === categoryId && budget.month === month,
-        );
+        const matching = s.financeBudgets.filter((budget) => budget.categoryId === categoryId);
+        const existing =
+          matching.find((budget) => budget.month === month) ??
+          (period === "month" ? matching.find((budget) => !budget.period || budget.period === "month") : undefined);
         if (!Number.isFinite(amount) || amount <= 0) {
-          if (existing) {
-            set({ financeBudgets: s.financeBudgets.filter((budget) => budget.id !== existing.id) });
-          }
+          const removeIds = new Set(matching.map((budget) => budget.id));
+          set({ financeBudgets: s.financeBudgets.filter((budget) => !removeIds.has(budget.id)) });
           return;
         }
         const row: FinanceBudget = {
@@ -1562,6 +1583,9 @@ export const usePos = create<PosState>()(
           categoryId,
           amount: round2(amount),
           month,
+          period,
+          from: period === "custom" ? options.from : undefined,
+          to: period === "custom" ? options.to : undefined,
           createdAt: existing?.createdAt ?? Date.now(),
           updatedAt: Date.now(),
         };
@@ -1571,6 +1595,26 @@ export const usePos = create<PosState>()(
             : [...s.financeBudgets, row],
         });
       },
+
+      upsertFinanceSource: (name, previous) => {
+        const clean = name.trim();
+        if (!clean) return;
+        set((s) => ({
+          financeSources: s.financeSources.includes(clean)
+            ? s.financeSources
+            : previous && s.financeSources.includes(previous)
+              ? s.financeSources.map((source) => (source === previous ? clean : source))
+              : [...s.financeSources, clean],
+          financeEntries: previous
+            ? s.financeEntries.map((entry) =>
+                entry.source === previous ? { ...entry, source: clean } : entry,
+              )
+            : s.financeEntries,
+        }));
+      },
+
+      deleteFinanceSource: (name) =>
+        set((s) => ({ financeSources: s.financeSources.filter((source) => source !== name) })),
 
       upsertFinanceGoal: (input) => {
         const now = Date.now();
@@ -1607,6 +1651,9 @@ export const usePos = create<PosState>()(
         set((s) => ({ settings: { ...s.settings, ...patch } }));
         if (patch.businessType === "personal" && get().financeCategories.length === 0) {
           set({ financeCategories: defaultFinanceCategories() });
+        }
+        if (get().financeSources.length === 0) {
+          set({ financeSources: [...FUNDING_SOURCES] });
         }
         if (patch.theme) {
           if (typeof document !== "undefined") {
@@ -1682,7 +1729,7 @@ export const usePos = create<PosState>()(
       dismissToast: (tid) => set((s) => ({ toasts: s.toasts.filter((x) => x.id !== tid) })),
     }),
     {
-      name: "nova-pos-v1",
+      name: PERSIST_KEY(),
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({
         products: s.products,
@@ -1703,6 +1750,7 @@ export const usePos = create<PosState>()(
         financeEntries: s.financeEntries,
         financeBudgets: s.financeBudgets,
         financeGoals: s.financeGoals,
+        financeSources: s.financeSources,
         settings: s.settings,
         // an in-progress sale must survive a reload (a power cut must not lose it)
         cart: s.cart,

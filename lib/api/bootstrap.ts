@@ -1,7 +1,8 @@
 import { getSupabase } from "./supabase";
 import { readTrialStart } from "../trial";
+import { businessKey } from "../businesses";
 
-const STORAGE_KEY = "nova-pos-sync-v1";
+const STORAGE_KEY = () => businessKey("nova-pos-sync-v1");
 
 export interface SyncConnection {
   org_id: string;
@@ -27,7 +28,7 @@ export function readConnection(): SyncConnection | null {
   let raw: string | null = null;
   let unreadable = false;
   try {
-    raw = window.localStorage.getItem(STORAGE_KEY);
+    raw = window.localStorage.getItem(STORAGE_KEY());
   } catch {
     unreadable = true;
   }
@@ -50,8 +51,8 @@ export function readConnection(): SyncConnection | null {
 
 export function writeConnection(c: SyncConnection | null) {
   if (typeof window === "undefined") return;
-  if (!c) window.localStorage.removeItem(STORAGE_KEY);
-  else window.localStorage.setItem(STORAGE_KEY, JSON.stringify(c));
+  if (!c) window.localStorage.removeItem(STORAGE_KEY());
+  else window.localStorage.setItem(STORAGE_KEY(), JSON.stringify(c));
   connRawCache = undefined;
   connParsedCache = null;
 }

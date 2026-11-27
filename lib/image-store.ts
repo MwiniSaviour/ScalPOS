@@ -1,4 +1,5 @@
 "use client";
+import { businessKey } from "./businesses";
 
 /**
  * Product image storage.
@@ -14,7 +15,7 @@ import {
   writeImageMap,
 } from "./image-refs";
 
-const DB_NAME = "nova-pos-images";
+const DB_NAME = () => businessKey("nova-pos-images");
 const DB_VERSION = 1;
 const STORE = "images";
 export const IMAGE_PREFIX = "idb:";
@@ -36,7 +37,7 @@ function openDb(): Promise<IDBDatabase | null> {
   dbPromise = new Promise((resolve) => {
     let req: IDBOpenDBRequest;
     try {
-      req = indexedDB.open(DB_NAME, DB_VERSION);
+      req = indexedDB.open(DB_NAME(), DB_VERSION);
     } catch {
       resolve(null);
       return;

@@ -1,14 +1,15 @@
 import { demoData } from "./seed";
 import type { BusinessType } from "./types";
+import { businessKey } from "./businesses";
 
-export const DEMO_FLAG_KEY = "nova-pos-demo-v1";
-const DEMO_BACKUP_KEY = "nova-pos-demo-backup-v1";
-const PERSIST_KEY = "nova-pos-v1";
+export const DEMO_FLAG_KEY = () => businessKey("nova-pos-demo-v1");
+const DEMO_BACKUP_KEY = () => businessKey("nova-pos-demo-backup-v1");
+const PERSIST_KEY = () => businessKey("nova-pos-v1");
 
 export function isDemoMode(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return window.localStorage.getItem(DEMO_FLAG_KEY) === "1";
+    return window.localStorage.getItem(DEMO_FLAG_KEY()) === "1";
   } catch {
     return false;
   }
@@ -21,13 +22,13 @@ export function isDemoMode(): boolean {
 export function enableDemo(businessType: BusinessType = "retail"): void {
   if (typeof window === "undefined" || isDemoMode()) return;
   try {
-    const raw = window.localStorage.getItem(PERSIST_KEY);
-    window.localStorage.setItem(DEMO_BACKUP_KEY, JSON.stringify({ had: raw !== null, data: raw }));
-    window.localStorage.setItem(DEMO_FLAG_KEY, "1");
-    window.localStorage.setItem(PERSIST_KEY, JSON.stringify({ state: demoData(businessType), version: 0 }));
+    const raw = window.localStorage.getItem(PERSIST_KEY());
+    window.localStorage.setItem(DEMO_BACKUP_KEY(), JSON.stringify({ had: raw !== null, data: raw }));
+    window.localStorage.setItem(DEMO_FLAG_KEY(), "1");
+    window.localStorage.setItem(PERSIST_KEY(), JSON.stringify({ state: demoData(businessType), version: 0 }));
   } catch {
     try {
-      window.localStorage.removeItem(DEMO_FLAG_KEY);
+      window.localStorage.removeItem(DEMO_FLAG_KEY());
     } catch {
       /* storage unavailable */
     }
@@ -39,15 +40,15 @@ export function enableDemo(businessType: BusinessType = "retail"): void {
 export function exitDemo(): void {
   if (typeof window === "undefined") return;
   try {
-    const raw = window.localStorage.getItem(DEMO_BACKUP_KEY);
+    const raw = window.localStorage.getItem(DEMO_BACKUP_KEY());
     const backup = raw ? (JSON.parse(raw) as { had?: boolean; data?: string | null }) : null;
     if (backup?.had && typeof backup.data === "string") {
-      window.localStorage.setItem(PERSIST_KEY, backup.data);
+      window.localStorage.setItem(PERSIST_KEY(), backup.data);
     } else {
-      window.localStorage.removeItem(PERSIST_KEY);
+      window.localStorage.removeItem(PERSIST_KEY());
     }
-    window.localStorage.removeItem(DEMO_FLAG_KEY);
-    window.localStorage.removeItem(DEMO_BACKUP_KEY);
+    window.localStorage.removeItem(DEMO_FLAG_KEY());
+    window.localStorage.removeItem(DEMO_BACKUP_KEY());
   } catch {
     return;
   }
