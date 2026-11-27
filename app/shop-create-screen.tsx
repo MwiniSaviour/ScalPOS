@@ -6,24 +6,25 @@ import { useEffect, useState } from "react";
 import { Button, IconButton } from "@/components/ui/button";
 import { Input, TextArea } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
-import { BusinessTypePicker } from "@/components/ui/business-type-picker";
+import { businessTypeLabel } from "@/components/ui/business-type-picker";
 import { Segmented } from "@/components/ui/segmented";
-import { usePos } from "@/lib/store";
+import { usePos, useSettings } from "@/lib/store";
 import { restaurantSetupFor } from "@/lib/restaurant";
 import { createStaff, setCurrentStaff, upsertStaff } from "@/lib/staff";
 import { markOnboarded, useHasOnboarded } from "@/lib/first-run";
 import { savePin, setSessionUnlocked } from "@/lib/pin";
 import type { BusinessType } from "@/lib/types";
-import { ChevronLeft, Eye, EyeOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Eye, EyeOff } from "lucide-react";
 
 const SHOP_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ShopCreateScreen() {
   const router = useRouter();
+  const settings = useSettings();
   const toast = usePos((s) => s.toast);
   const updateSettings = usePos((s) => s.updateSettings);
   const [shopName, setShopName] = useState("");
-  const [businessType, setBusinessType] = useState<BusinessType>("retail");
+  const [businessType] = useState<BusinessType>(settings.businessType);
   const [foodVendor, setFoodVendor] = useState(false);
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,6 +33,7 @@ export default function ShopCreateScreen() {
   const [confirm, setConfirm] = useState("");
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const onboarded = useHasOnboarded();
   const [email, setEmail] = useState("");
@@ -43,16 +45,12 @@ export default function ShopCreateScreen() {
   const emailTrim = email.trim();
   const emailOk = emailTrim === "" || SHOP_EMAIL_RE.test(emailTrim);
 
-  function pickBusinessType(next: BusinessType) {
-    setBusinessType(next);
-    if (next !== "restaurant") setFoodVendor(false);
-  }
-
   function handleBack() {
     router.back();
   }
 
   async function submit() {
+    setAttempted(true);
     if (!shopNameOk || !ownerNameOk || !pinOk) {
       setError(
         personal
@@ -142,15 +140,26 @@ export default function ShopCreateScreen() {
             value={shopName}
             onChange={(e) => setShopName(e.target.value)}
             placeholder={personal ? "e.g. Ama's finances" : "e.g. Community mini mart"}
-            error={!shopNameOk ? (personal ? "Name is required" : "Shop name is required") : undefined}
+            error={attempted && !shopNameOk ? (personal ? "Name is required" : "Shop name is required") : undefined}
             leading={<span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-accent/10"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M3 12h18M3 6h18M3 18h18" /></svg></span>}
           />
           <div>
-            <p className="mb-1.5 text-[13px] font-medium text-ink2">Business type</p>
-            <p className="mb-2 text-[13px] text-ink3">
-              Sets the wording and tools across the app.
+            <p className="mb-1.5 text-[13px] font-medium text-ink2">
+              What you&apos;ll use ScalPOS for
             </p>
-            <BusinessTypePicker value={businessType} onChange={pickBusinessType} />
+            <button
+              type="button"
+              onClick={() => router.push("/onboarding/use")}
+              className="press flex w-full items-center justify-between gap-3 rounded-xl border border-line2 bg-surface2 px-3.5 py-3 text-left"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[15px] font-semibold text-ink">
+                  {businessTypeLabel(businessType)}
+                </span>
+                <span className="block truncate text-[12px] text-ink3">Tap to change</span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 text-ink3" />
+            </button>
           </div>
           {businessType === "restaurant" && (
             <div>
@@ -190,7 +199,7 @@ export default function ShopCreateScreen() {
             value={ownerName}
             onChange={(e) => setOwnerName(e.target.value)}
             placeholder="e.g. Ama Serwaa"
-            error={!ownerNameOk ? (personal ? "Your name is required" : "Owner name is required") : undefined}
+            error={attempted && !ownerNameOk ? (personal ? "Your name is required" : "Owner name is required") : undefined}
           />
           <Input
             label="Email (optional)"
@@ -215,10 +224,8 @@ export default function ShopCreateScreen() {
                 maxLength={8}
                 type={show ? "text" : "password"}
                 error={
-                  pin !== confirm
-                    ? pin.length < 4
-                      ? "PIN must be 4+ digits"
-                      : undefined
+                  attempted && pin !== confirm && pin.length < 4
+                    ? "PIN must be 4+ digits"
                     : undefined
                 }
                 trailing={
@@ -241,7 +248,7 @@ export default function ShopCreateScreen() {
                 type={show ? "text" : "password"}
               />
             </div>
-            {pin !== confirm && pin.length > 0 && (
+            {attempted && pin !== confirm && pin.length > 0 && (
               <p className="mt-1 text-[12px] text-danger">PINs do not match</p>
             )}
           </div>
