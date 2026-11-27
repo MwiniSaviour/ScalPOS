@@ -67,7 +67,7 @@ export default function SettingsScreen() {
 
       {/* business */}
       <section className="mt-6">
-        <h2 className="text-[15px] font-medium text-ink2">{personal ? "Account" : "Business"}</h2>
+        <h2 className="text-[15px] font-medium text-ink2">Your setup</h2>
         <Card inset className="mt-2.5">
           <Link
             href="/settings/shop"

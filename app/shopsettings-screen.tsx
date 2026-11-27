@@ -43,7 +43,7 @@ export default function ShopSettingsScreen() {
     if (next === settings.businessType) return;
     if (next === "retail") {
       updateSettings({ businessType: next, restaurantConfig: undefined });
-      toast(`Business type changed to ${businessTypeLabel(next)}`);
+      toast(`Use case changed to ${businessTypeLabel(next)}`);
       return;
     }
     setPendingType(next);
@@ -57,7 +57,7 @@ export default function ShopSettingsScreen() {
         ? { restaurantConfig: restaurantSetup() }
         : { restaurantConfig: undefined }),
     });
-    toast(`Business type changed to ${businessTypeLabel(pendingType)}`);
+    toast(`Use case changed to ${businessTypeLabel(pendingType)}`);
     setPendingType(null);
   }
 
@@ -153,9 +153,9 @@ export default function ShopSettingsScreen() {
         </Card>
       </section>
 
-      {/* business type */}
+      {/* use case */}
       <section className="mt-6 pb-32">
-        <h2 className="text-[15px] font-medium text-ink2">Business</h2>
+        <h2 className="text-[15px] font-medium text-ink2">Your setup</h2>
         <Card inset className="mt-2.5">
           <button
             type="button"
@@ -167,10 +167,10 @@ export default function ShopSettingsScreen() {
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-[17px] font-semibold text-ink">
-                {personal ? "Type" : "Business type"}
+                What you use it for
               </span>
               <span className="block truncate text-[14px] text-ink3">
-                {businessTypeLabel(settings.businessType)} · sets wording and tools
+                {businessTypeLabel(settings.businessType)} · sets your words and tools
               </span>
             </span>
             <ChevronRight className="size-4 shrink-0 text-ink3" />
@@ -205,18 +205,25 @@ export default function ShopSettingsScreen() {
         )}
       </section>
 
-      <Sheet open={typeOpen} onClose={() => setTypeOpen(false)} height="auto" title="Business type">
-        <p className="mb-3 text-[14px] leading-5 text-ink3">
-          Sets the wording and tools across the app. Your data stays as it is.
-        </p>
-        <BusinessTypePicker value={settings.businessType} onChange={chooseType} className="pb-2" />
+      <Sheet
+        open={typeOpen}
+        onClose={() => setTypeOpen(false)}
+        height="auto"
+        title="What will you use ScalPOS for?"
+      >
+        <BusinessTypePicker
+          value={settings.businessType}
+          onChange={chooseType}
+          showHeading={false}
+          className="pb-2"
+        />
       </Sheet>
 
       <Confirm
         open={pendingType !== null}
         onClose={() => setPendingType(null)}
         onConfirm={confirmTypeChange}
-        title={pendingType ? `Switch to ${businessTypeLabel(pendingType)}?` : "Change business type?"}
+        title={pendingType ? `Switch to ${businessTypeLabel(pendingType)}?` : "Change use case?"}
         body={
           pendingType === "personal"
             ? "The finance dashboard, activities and budgets will unlock, and your existing data stays exactly as it is."
