@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+.next
+**/.next
+out
+**/out
+dist
+**/dist
+build
+**/build
+release
+**/release
+android
+coverage
+**/coverage
+*.log
+.DS_Store
