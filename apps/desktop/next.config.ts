@@ -2,19 +2,20 @@ import type { NextConfig } from "next"
 import path from "node:path"
 
 const offlineDesktop = process.env.NEXT_PUBLIC_OFFLINE_DESKTOP === "1"
+const desktopDir = process.cwd()
 
 const nextConfig: NextConfig = {
   env: { NEXT_PUBLIC_OFFLINE_DESKTOP: offlineDesktop ? "1" : "0" },
-  outputFileTracingRoot: __dirname.replace(/[\\/]apps[\\/]desktop$/, ""),
+  outputFileTracingRoot: path.resolve(desktopDir, "../.."),
   webpack(config) {
     config.resolve = config.resolve ?? {}
     config.resolve.alias = {
       ...(config.resolve.alias ?? {}),
-      "@pos": path.resolve(__dirname, "../../lib"),
+      "@pos": path.resolve(desktopDir, "../../lib"),
     }
     config.resolve.modules = [
       ...(config.resolve.modules ?? []),
-      path.resolve(__dirname, "node_modules"),
+      path.resolve(desktopDir, "node_modules"),
     ]
     return config
   },
