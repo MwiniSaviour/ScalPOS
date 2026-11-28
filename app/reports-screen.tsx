@@ -4,10 +4,20 @@ import { IconButton } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/emptystate";
 import { ProductArt } from "@/components/ui/productart";
+import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { DailyBarChart } from "@/components/finance/daily-bar-chart";
 import { daysToExpiry, expiryBucket } from "@/lib/batches";
 import { hasFeature } from "@/lib/features";
-import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
+import {
+  addDays,
+  dateInputTime,
+  dateInputValue,
+  dateLong,
+  dateShort,
+  pctDelta,
+  startOfDay,
+} from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
 import { orderTypeLabel } from "@/lib/restaurant";
 import { commissionReport } from "@/lib/salon";
@@ -17,10 +27,10 @@ import { cn } from "@/lib/ui";
 import { ArrowDownRight, ArrowUpRight, Banknote, ChevronLeft, CreditCard, HandCoins, Smartphone, TriangleAlert, Utensils, Wallet } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
-type Period = "today" | "7d" | "30d";
-const PERIOD_DAYS: Record<Period, number> = { today: 1, "7d": 7, "30d": 30 };
+type Period = "today" | "7d" | "30d" | "custom";
+const PERIOD_DAYS: Record<Period, number> = { today: 1, "7d": 7, "30d": 30, custom: 1 };
 
 /* expiry risk buckets, most urgent first — the order the section renders in */
 const EXPIRY_BUCKETS = [
@@ -38,18 +48,40 @@ export default function ReportsScreen() {
   const settings = useSettings();
   const now = useNow();
   const [period, setPeriod] = useState<Period>("today");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  useEffect(() => {
+    if (now <= 0) return;
+    const timer = window.setTimeout(() => {
+      setFrom((current) => current || dateInputValue(now));
+      setTo((current) => current || dateInputValue(now));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [now]);
 
   const showExpiry = hasFeature(settings.businessType, "expiry");
   const showMenuMix = hasFeature(settings.businessType, "order-types");
   const showCommissions = hasFeature(settings.businessType, "commissions");
 
   const periodInfo = useMemo(() => {
-    const days = PERIOD_DAYS[period];
-    const todayStart = startOfDay(now);
-    const curStart = startOfDay(addDays(todayStart, -(days - 1)));
+    let days: number;
+    let curStart: number;
+    let curEnd: number;
+    if (period === "custom") {
+      const startValue = dateInputTime(from);
+      const endValue = dateInputTime(to);
+      curStart = startOfDay(startValue ?? now);
+      curEnd = startOfDay(addDays(endValue ?? now, 1));
+      days = Math.max(1, Math.round((curEnd - curStart) / 86400000));
+    } else {
+      days = PERIOD_DAYS[period];
+      const todayStart = startOfDay(now);
+      curStart = startOfDay(addDays(todayStart, -(days - 1)));
+      curEnd = now;
+    }
     const prevStart = startOfDay(addDays(curStart, -days));
-    return { days, curStart, prevStart, curEnd: now, prevEnd: curStart };
-  }, [now, period]);
+    return { days, curStart, prevStart, curEnd, prevEnd: curStart };
+  }, [now, period, from, to]);
 
   const sold = useMemo(
     () => orders.filter((o) => o.status !== "refunded" && o.createdAt >= periodInfo.curStart && o.createdAt < periodInfo.curEnd),
@@ -70,10 +102,9 @@ export default function ReportsScreen() {
 
   const chart = useMemo(() => {
     const days = periodInfo.days;
-    const todayStart = startOfDay(now);
     const daily: { label: string; sum: number; today: boolean }[] = [];
     for (let i = 0; i < days; i++) {
-      const start = addDays(todayStart, i - (days - 1));
+      const start = addDays(periodInfo.curStart, i);
       const end = addDays(start, 1);
       const sum = orders
         .filter((o) => o.status !== "refunded" && o.createdAt >= start && o.createdAt < end)
@@ -87,13 +118,8 @@ export default function ReportsScreen() {
             : String(d.getDate()).padStart(2, "0");
       daily.push({ label, sum, today: i === days - 1 });
     }
-    let step = 1;
-    if (days > 14) step = 5;
-    return daily.map((d, i) => {
-      const showLabel = i % step === 0 || i === days - 1;
-      return { ...d, label: showLabel ? (d.label as string | null) : null };
-    });
-  }, [orders, now, periodInfo]);
+    return daily;
+  }, [orders, periodInfo]);
 
   const mix = useMemo(() => {
     const sums = { cash: 0, momo: 0, card: 0, credit: 0 };
@@ -252,15 +278,37 @@ export default function ReportsScreen() {
             { value: "today", label: "Today" },
             { value: "7d", label: "7 days" },
             { value: "30d", label: "30 days" },
+            { value: "custom", label: "Custom" },
           ]}
         />
+        {period === "custom" && (
+          <div className="mt-2 grid grid-cols-2 gap-2.5">
+            <Input
+              label="From"
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+            <Input
+              label="To"
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       {/* hero */}
       <section className="mt-6">
         <Card className="p-4">
           <div className="text-[15px] font-medium text-ink2">
-            Sales · {period === "today" ? "Today" : `Last ${periodInfo.days} days`}
+            Sales ·{" "}
+            {period === "today"
+              ? "Today"
+              : period === "custom"
+                ? `${dateShort(periodInfo.curStart)} – ${dateShort(periodInfo.curEnd - 86400000)}`
+                : `Last ${periodInfo.days} days`}
           </div>
           <div className="mt-1 flex items-end justify-between gap-2">
             <span className="tabnum text-[30px]/8 font-extrabold tracking-[-0.03em] text-ink">
@@ -287,29 +335,38 @@ export default function ReportsScreen() {
       <section className="mt-6">
         <Card className="p-4">
           <div className="text-[15px] font-medium text-ink2">Daily sales</div>
-          <div className="mt-3 flex h-28 items-end gap-1 border-b border-line pb-px">
-            {chart.map((b, i) => (
-              <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
-                <div className="relative mx-auto h-full w-full max-w-7">
-                  <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
-                  <div
-                    className={cn(
-                      "absolute inset-x-0 bottom-0 rounded-t-[4px]",
-                      b.today ? "bg-accent" : "bg-[var(--chart-bar)]",
-                    )}
-                    style={{ height: b.sum > 0 ? `${(b.sum / maxBars) * 100}%` : 0 }}
-                  />
-                </div>
+          {chart.length > 7 ? (
+            <DailyBarChart
+              rows={chart.map((b) => ({ label: b.label, spent: b.sum, today: b.today }))}
+              max={maxBars}
+            />
+          ) : (
+            <>
+              <div className="mt-3 flex h-28 items-end gap-1 border-b border-line pb-px">
+                {chart.map((b, i) => (
+                  <div key={i} className="flex h-full min-w-0 flex-1 flex-col justify-end">
+                    <div className="relative mx-auto h-full w-full max-w-7">
+                      <div className="absolute inset-0 rounded-[3px] bg-[var(--chart-track)]" />
+                      <div
+                        className={cn(
+                          "absolute inset-x-0 bottom-0 rounded-t-[4px]",
+                          b.today ? "bg-accent" : "bg-[var(--chart-bar)]",
+                        )}
+                        style={{ height: b.sum > 0 ? `${(b.sum / maxBars) * 100}%` : 0 }}
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
-            {chart.map((b, i) => (
-              <span key={i} className="min-w-0 flex-1 truncate">
-                {b.label ?? ""}
-              </span>
-            ))}
-          </div>
+              <div className="mt-1.5 flex gap-1 text-center text-[12px] text-ink3">
+                {chart.map((b, i) => (
+                  <span key={i} className="min-w-0 flex-1 truncate">
+                    {b.label ?? ""}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </Card>
       </section>
 
@@ -487,7 +544,11 @@ export default function ReportsScreen() {
             <div className="flex items-baseline justify-between gap-2 px-4 pb-1 pt-3.5">
               <h3 className="text-[15px] font-medium text-ink2">Commissions</h3>
               <span className="text-[14px] text-ink3">
-                {period === "today" ? "today" : `last ${periodInfo.days} days`}
+                {period === "today"
+                  ? "today"
+                  : period === "custom"
+                    ? "this period"
+                    : `last ${periodInfo.days} days`}
               </span>
             </div>
             {commissions.rows.length === 0 ? (

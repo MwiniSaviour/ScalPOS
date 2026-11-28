@@ -87,3 +87,16 @@ export function orderId(nextNo: number, now = Date.now()): string {
   return `ORD-${ymd}-${String(nextNo).padStart(4, "0")}`;
 }
 
+
+export function dateInputValue(t: number): string {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function dateInputTime(value: string): number | null {
+  const parts = value.split("-").map(Number);
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  const [year, month, day] = parts;
+  const t = new Date(year, month - 1, day).getTime();
+  return Number.isFinite(t) ? t : null;
+}

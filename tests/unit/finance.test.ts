@@ -12,6 +12,7 @@ import {
   spentInRange,
 } from "../../lib/finance.ts";
 import type { FinanceBudget, FinanceEntry } from "../../lib/types.ts";
+import { dateInputTime, dateInputValue } from "../../lib/format.ts";
 
 const now = new Date(2026, 0, 15, 12).getTime();
 
@@ -100,4 +101,12 @@ test("spentInRange counts only expenses in the window", () => {
     entry({ kind: "funds", amount: 100, t: now }),
   ];
   assert.equal(spentInRange(entries, new Date(2026, 0, 1).getTime(), new Date(2026, 1, 1).getTime(), "food"), 50);
+});
+
+test("date input helpers round-trip a local date", () => {
+  const local = new Date(2026, 10, 28, 15, 30).getTime();
+  const value = dateInputValue(local);
+  assert.equal(value, "2026-11-28");
+  assert.equal(dateInputValue(dateInputTime(value)!), value);
+  assert.equal(dateInputTime(""), null);
 });

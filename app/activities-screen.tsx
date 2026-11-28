@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -9,29 +9,44 @@ import {
   Plus,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/ui/emptystate";
 import { Segmented } from "@/components/ui/segmented";
 import { FinanceEntryRow } from "@/components/finance/finance-entry-row";
 import { DailyBarChart } from "@/components/finance/daily-bar-chart";
-import { addDays, dateLong, pctDelta, startOfDay } from "@/lib/format";
+import {
+  addDays,
+  dateInputTime,
+  dateInputValue,
+  dateLong,
+  dateShort,
+  pctDelta,
+  startOfDay,
+} from "@/lib/format";
 import { fmtMoney, fmtShort } from "@/lib/money";
 import { useNow } from "@/lib/now";
 import { usePos } from "@/lib/store";
 import { cn } from "@/lib/ui";
 
-type Period = "today" | "week" | "30d";
+type Period = "today" | "week" | "30d" | "custom";
 type Kind = "all" | "expense" | "funds";
 
-const PERIOD_DAYS: Record<Period, number> = { today: 1, week: 7, "30d": 30 };
+const PERIOD_DAYS: Record<Period, number> = { today: 1, week: 7, "30d": 30, custom: 1 };
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: "today", label: "Today" },
   { value: "week", label: "This week" },
   { value: "30d", label: "30 days" },
+  { value: "custom", label: "Custom" },
 ];
 
-function periodLabel(period: Period, days: number): string {
-  return period === "today" ? "Today" : period === "week" ? "This week" : `Last ${days} days`;
+function periodLabel(period: Period, days: number, from?: number, to?: number): string {
+  if (period === "today") return "Today";
+  if (period === "week") return "This week";
+  if (period === "custom") {
+    return `${from ? dateShort(from) : "Custom"} – ${to ? dateShort(to) : "Custom"}`;
+  }
+  return `Last ${days} days`;
 }
 
 const KIND_OPTIONS: { value: Kind; label: string }[] = [
@@ -46,33 +61,57 @@ export default function ActivitiesScreen() {
   const now = useNow();
   const [period, setPeriod] = useState<Period>("today");
   const [kind, setKind] = useState<Kind>("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  useEffect(() => {
+    if (now <= 0) return;
+    const timer = window.setTimeout(() => {
+      setFrom((current) => current || dateInputValue(now));
+      setTo((current) => current || dateInputValue(now));
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [now]);
 
   const info = useMemo(() => {
-    const days = PERIOD_DAYS[period];
-    let start = startOfDay(addDays(now, -(days - 1)));
-    if (period === "week") {
-      const day = (new Date(now).getDay() + 6) % 7;
-      start = startOfDay(addDays(now, -day));
+    let start: number;
+    let days: number;
+    let end: number;
+    if (period === "custom") {
+      const startValue = dateInputTime(from);
+      const endValue = dateInputTime(to);
+      start = startOfDay(startValue ?? now);
+      end = startOfDay(addDays(endValue ?? now, 1));
+      days = Math.max(1, Math.round((end - start) / 86400000));
+    } else {
+      days = PERIOD_DAYS[period];
+      start = startOfDay(addDays(now, -(days - 1)));
+      if (period === "week") {
+        const day = (new Date(now).getDay() + 6) % 7;
+        start = startOfDay(addDays(now, -day));
+      }
+      end = now;
     }
     return {
       days,
       curStart: start,
+      curEnd: end,
       prevStart: startOfDay(addDays(start, -days)),
+      prevEnd: start,
     };
-  }, [now, period]);
+  }, [now, period, from, to]);
 
   const ranges = useMemo(() => {
     const scoped = entries.filter((entry) => kind === "all" || entry.kind === kind);
-    const cur = scoped.filter((entry) => entry.t >= info.curStart && entry.t <= now);
+    const cur = scoped.filter((entry) => entry.t >= info.curStart && entry.t < info.curEnd);
     const prev = scoped.filter(
-      (entry) => entry.t >= info.prevStart && entry.t < info.curStart,
+      (entry) => entry.t >= info.prevStart && entry.t < info.prevEnd,
     );
     const totals = (rows: typeof cur) => ({
       funds: rows.reduce((sum, entry) => sum + (entry.kind === "funds" ? entry.amount : 0), 0),
       spent: rows.reduce((sum, entry) => sum + (entry.kind === "expense" ? entry.amount : 0), 0),
     });
     return { cur, prev, totals: totals(cur), prevTotals: totals(prev) };
-  }, [entries, info, kind, now]);
+  }, [entries, info, kind]);
 
   const net = ranges.totals.funds - ranges.totals.spent;
   const prevNet = ranges.prevTotals.funds - ranges.prevTotals.spent;
@@ -99,11 +138,11 @@ export default function ActivitiesScreen() {
         label,
         spent: rows.reduce((sum, entry) => sum + (entry.kind === "expense" ? entry.amount : 0), 0),
         funds: rows.reduce((sum, entry) => sum + (entry.kind === "funds" ? entry.amount : 0), 0),
-        today: i === info.days - 1,
+        today: period !== "custom" && i === info.days - 1,
       });
     }
     return daily;
-  }, [entries, info, kind]);
+  }, [entries, info, kind, period]);
 
   const maxBars = Math.max(1, ...chart.map((row) => Math.max(row.spent, row.funds)));
 
@@ -153,12 +192,28 @@ export default function ActivitiesScreen() {
 
       <div className="mt-5">
         <Segmented value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />
+        {period === "custom" && (
+          <div className="mt-2 grid grid-cols-2 gap-2.5">
+            <Input
+              label="From"
+              type="date"
+              value={from}
+              onChange={(event) => setFrom(event.target.value)}
+            />
+            <Input
+              label="To"
+              type="date"
+              value={to}
+              onChange={(event) => setTo(event.target.value)}
+            />
+          </div>
+        )}
       </div>
 
       <section className="mt-6">
         <Card className="p-4">
           <div className="text-[15px] font-medium text-ink2">
-            Net · {periodLabel(period, info.days)}
+            Net · {periodLabel(period, info.days, info.curStart, info.curEnd - 86400000)}
           </div>
           <div className="mt-1 flex items-end justify-between gap-2">
             <span
