@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type MouseEvent } from "react";
 import {
   ArrowDownLeft,
+  CalendarDays,
+  ChevronDown,
   ChevronRight,
+  Minus,
   PiggyBank,
   Plus,
   Settings2,
@@ -47,6 +50,61 @@ function fromDateInput(value: string): number | null {
 
 function daysBetween(from: number, to: number): number {
   return Math.round((startOfDay(to) - startOfDay(from)) / 86400000);
+}
+
+const AMOUNT_STEP = 10;
+
+function DateRangeFields({
+  start,
+  end,
+  onStart,
+  onEnd,
+}: {
+  start: string;
+  end: string;
+  onStart: (value: string) => void;
+  onEnd: (value: string) => void;
+}) {
+  function openPicker(event: MouseEvent<HTMLInputElement>) {
+    try {
+      event.currentTarget.showPicker?.();
+    } catch {
+      /* native picker unavailable */
+    }
+  }
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      <label className="block">
+        <span className="mb-1.5 block text-[13px] font-medium text-ink2">From</span>
+        <span className="flex h-12 items-center gap-2 rounded-xl border border-line2 bg-surface2 px-3.5">
+          <CalendarDays className="size-4 shrink-0 text-ink3" />
+          <input
+            type="date"
+            value={start}
+            onClick={openPicker}
+            onChange={(event) => onStart(event.target.value)}
+            className="tabnum h-full w-full min-w-0 bg-transparent text-[15px] text-ink outline-none [&::-webkit-calendar-picker-indicator]:hidden"
+          />
+          <ChevronDown className="size-4 shrink-0 text-ink3" />
+        </span>
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-[13px] font-medium text-ink2">To</span>
+        <span className="flex h-12 items-center gap-2 rounded-xl border border-line2 bg-surface2 px-3.5">
+          <CalendarDays className="size-4 shrink-0 text-ink3" />
+          <input
+            type="date"
+            value={end}
+            onClick={openPicker}
+            onChange={(event) => onEnd(event.target.value)}
+            className="tabnum h-full w-full min-w-0 bg-transparent text-[15px] text-ink outline-none [&::-webkit-calendar-picker-indicator]:hidden"
+          />
+          <ChevronDown className="size-4 shrink-0 text-ink3" />
+        </span>
+      </label>
+    </div>
+  );
 }
 
 function goalStatus(goal: FinanceGoal, now: number): { label: string; line: string; tone: GoalTone } {
@@ -135,6 +193,8 @@ export default function SavingsScreen() {
   const [amount, setAmount] = useState("");
   const [source, setSource] = useState("Allowance");
   const [contributionNote, setContributionNote] = useState("");
+  const [contributionStart, setContributionStart] = useState("");
+  const [contributionEnd, setContributionEnd] = useState("");
 
   const total = goals.reduce((sum, goal) => sum + goal.balance, 0);
   const targetTotal = goals.reduce((sum, goal) => sum + goal.target, 0);
@@ -222,13 +282,20 @@ export default function SavingsScreen() {
       color: payFor.color,
       balance: payFor.balance + value,
       note: payFor.note,
-      startDate: payFor.startDate,
-      endDate: payFor.endDate,
+      startDate: fromDateInput(contributionStart),
+      endDate: fromDateInput(contributionEnd),
     });
     toast(`${fmtMoney(value)} added to ${payFor.name}`, "ok");
     setAmount("");
     setContributionNote("");
     setPayFor(null);
+  }
+
+  function stepAmount(direction: 1 | -1) {
+    const current = Number(amount);
+    const base = Number.isFinite(current) ? current : 0;
+    const next = Math.max(0, Math.round((base + direction * AMOUNT_STEP) * 100) / 100);
+    setAmount(next === 0 ? "" : String(next));
   }
 
   const payStatus = payFor ? goalStatus(payFor, now) : null;
@@ -327,6 +394,8 @@ export default function SavingsScreen() {
                     setAmount("");
                     setSource(financeSources[0] ?? "Allowance");
                     setContributionNote("");
+                    setContributionStart(toDateInput(goal.startDate));
+                    setContributionEnd(toDateInput(goal.endDate));
                   }}
                   className="press w-full rounded-xl px-4 py-3 text-left hover:bg-surface2/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                 >
@@ -451,19 +520,15 @@ export default function SavingsScreen() {
             placeholder="0.00"
             money
           />
-          <Input
-            label="Start date (optional)"
-            type="date"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
+          <DateRangeFields
+            start={startDate}
+            end={endDate}
+            onStart={setStartDate}
+            onEnd={setEndDate}
           />
-          <Input
-            label="Projected end date (optional)"
-            type="date"
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-            hint="We'll warn you when this date is close, due or overdue."
-          />
+          <p className="-mt-2 text-[12px] text-ink3">
+            We&apos;ll warn you when the end date is close, due or overdue.
+          </p>
           <TextArea
             label="Note (optional)"
             value={goalNote}
@@ -574,6 +639,27 @@ export default function SavingsScreen() {
             onChange={(event) => setAmount(event.target.value)}
             placeholder="0.00"
             money
+            trailing={
+              <div className="flex shrink-0 items-center rounded-full border border-line2 bg-surface2 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => stepAmount(-1)}
+                  disabled={Number(amount) <= 0}
+                  aria-label={`Decrease amount by ${AMOUNT_STEP} cedis`}
+                  className="press flex size-9 items-center justify-center rounded-full text-ink2 disabled:opacity-40"
+                >
+                  <Minus className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => stepAmount(1)}
+                  aria-label={`Increase amount by ${AMOUNT_STEP} cedis`}
+                  className="press flex size-9 items-center justify-center rounded-full text-accent"
+                >
+                  <Plus className="size-4" />
+                </button>
+              </div>
+            }
           />
           <Select
             label="Source"
@@ -594,6 +680,15 @@ export default function SavingsScreen() {
               toast(`${name} removed`, "warn");
             }}
           />
+          <div>
+            <p className="mb-1.5 text-[13px] font-medium text-ink2">Duration</p>
+            <DateRangeFields
+              start={contributionStart}
+              end={contributionEnd}
+              onStart={setContributionStart}
+              onEnd={setContributionEnd}
+            />
+          </div>
           <TextArea
             label="Note (optional)"
             value={contributionNote}
