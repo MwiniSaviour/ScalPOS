@@ -1,32 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
-import { Search, ArrowRight, AlertTriangle } from "lucide-react"
+import { Search, ArrowRight, AlertTriangle, ChevronDown } from "lucide-react"
 import Link from "next/link"
 import { fetchSales, fetchRestaurantTables } from "@/lib/api/data"
-import { formatCurrency, formatDateTime, cn } from "@/lib/utils"
+import { formatCurrency, formatDateTime } from "@/lib/utils"
 import { orderTypeLabel } from "@/lib/restaurant"
 import type { Sale } from "@/lib/types"
 import { dueOf, OrderPayBadge, PERIODS, ordersWindow, type Bounds, type Period } from "@/lib/orders-ui"
 import { useRealtime } from "@/lib/api/realtime"
-
-type StatusFilter = "all" | "pending" | "completed" | "refunded" | "unpaid"
-
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "pending", label: "Pending" },
-  { value: "completed", label: "Completed" },
-  { value: "refunded", label: "Refunded" },
-  { value: "unpaid", label: "Unpaid" },
-]
-
-function statusMatches(s: { status: string; pay_status: string }, f: StatusFilter): boolean {
-  if (f === "pending") return s.status === "pending"
-  if (f === "completed") return s.status === "completed"
-  if (f === "refunded") return s.status === "refunded"
-  if (f === "unpaid") return s.pay_status === "unpaid" || s.pay_status === "partial"
-  return true
-}
 
 export default function OrdersPage() {
   const [sales, setSales] = useState<Sale[]>([])
@@ -35,7 +17,6 @@ export default function OrdersPage() {
   const [error, setError] = useState("")
   const [search, setSearch] = useState("")
   const [period, setPeriod] = useState<Period>("all")
-  const [filter, setFilter] = useState<StatusFilter>("all")
   const [from, setFrom] = useState("")
   const [to, setTo] = useState("")
   const [now, setNow] = useState(0)
@@ -47,16 +28,6 @@ export default function OrdersPage() {
       clearTimeout(t0)
       clearInterval(t)
     }
-  }, [])
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      const f = new URLSearchParams(window.location.search).get("filter")
-      if (f === "pending" || f === "completed" || f === "refunded" || f === "unpaid") {
-        setFilter(f)
-      }
-    }, 0)
-    return () => clearTimeout(t)
   }, [])
 
   const load = useCallback(async () => {
@@ -85,7 +56,6 @@ export default function OrdersPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return sales.filter((s) => {
-      if (!statusMatches(s, filter)) return false
       if (bounds.from !== null || bounds.to !== null) {
         const ts = new Date(s.sale_date).getTime()
         if (bounds.from !== null && ts < bounds.from) return false
@@ -97,7 +67,7 @@ export default function OrdersPage() {
         (s.customer?.name ?? "").toLowerCase().includes(q)
       )
     })
-  }, [sales, search, filter, bounds])
+  }, [sales, search, bounds])
 
   const totals = useMemo(() => {
     let revenue = 0
@@ -129,19 +99,25 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        {PERIODS.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => setPeriod(p.id)}
-            className={cn(
-              "rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors",
-              period === p.id ? "bg-primary text-white" : "bg-card border border-border text-muted hover:text-foreground",
-            )}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as Period)}
+            aria-label="Order period"
+            className="input-field w-auto appearance-none py-1.5 pr-9 text-sm font-semibold"
           >
-            {p.label}
-          </button>
-        ))}
+            {PERIODS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted"
+          />
+        </div>
       </div>
 
       {period === "custom" && (
@@ -163,18 +139,6 @@ export default function OrdersPage() {
             className="input-field pl-9"
           />
         </div>
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() => setFilter(f.value)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-              filter === f.value ? "bg-foreground text-background" : "bg-sidebar-hover text-muted hover:text-foreground",
-            )}
-          >
-            {f.label}
-          </button>
-        ))}
       </div>
 
       <div className="flex flex-wrap gap-3 text-sm">
